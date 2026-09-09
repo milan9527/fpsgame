@@ -31,6 +31,9 @@ timeout 20s ./tools/godot --headless --path client --script ../tests/protocol_cl
 rg -q PROTOCOL_CLIENT_PASS artifacts/protocol-client-test.log
 if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/protocol-client-test.log; then cat artifacts/protocol-client-test.log; exit 1; fi
 .venv/bin/python tools/test_protocol_server.py
+timeout 25s ./tools/godot --headless --path client --script ../tests/prediction_rules.gd > artifacts/prediction-rules.log 2>&1
+rg -q PREDICTION_RULES_PASS artifacts/prediction-rules.log
+if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/prediction-rules.log; then cat artifacts/prediction-rules.log; exit 1; fi
 .venv/bin/python tools/test_online.py
 
 .venv/bin/python tools/test_full_round.py

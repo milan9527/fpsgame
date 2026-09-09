@@ -255,6 +255,7 @@ func _physics_process(dt: float) -> void:
 		var actor = actors[local_id]
 		var cmd := local_command(actor)
 		if online:
+			actor.predict_movement(cmd, dt, phase == "live")
 			net_tick += dt
 			if net_tick >= 1.0 / 30:
 				net_tick = 0
@@ -285,8 +286,8 @@ func _physics_process(dt: float) -> void:
 				print("FULL_ROUND_CLIENT_PASS rank=" + str(actors[local_id].rank))
 				get_tree().quit()
 			if not round_client and bot_test_timer > 26:
-				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_grenade_seen and test_grenade_exploded:
-					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok grenade=ok explosion=ok" % [local_id, actors.size(), phase])
+				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_grenade_seen and test_grenade_exploded and actors[local_id].prediction_corrections > 20:
+					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok grenade=ok explosion=ok reconciliation=ok" % [local_id, actors.size(), phase])
 					get_tree().quit()
 				else:
 					push_error("Online smoke test failed to reach active match")

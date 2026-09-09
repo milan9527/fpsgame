@@ -3,6 +3,13 @@ extends CharacterBody3D
 const CharacterAnimation = preload("res://scripts/character_animation.gd")
 var character_animation := CharacterAnimation.new()
 var grounded := false
+const PREDICTION_LIMIT := 120
+var prediction_history: Array[Dictionary] = []
+var pending_correction: Dictionary = {}
+var prediction_ack := -1
+var prediction_jump_held := false
+var camera_error := Vector3.ZERO
+var prediction_corrections := 0
 
 var actor_id: int
 var display_name: String
@@ -156,6 +163,13 @@ func simulate(dt: float) -> void:
 		if heal_left <= 0:
 			health = minf(100, health + 65)
 			medkits -= 1
+	move_step(dt)
+
+# Shared by authority and prediction. Never changes inventory, damage or timers.
+func move_step(dt: float) -> void:
+	if not alive:
+		return
+	update_stance()
 	var direction := Basis(Vector3.UP, yaw) * Vector3(move_input.x, 0, move_input.y)
 	var speed := 2.8 if crouched else (9.0 if sprint and not shooting and not aiming else 5.5)
 	if aiming:
@@ -164,7 +178,7 @@ func simulate(dt: float) -> void:
 		speed = 2.0
 	velocity.x = direction.x * speed
 	velocity.z = direction.z * speed
-	if not is_on_floor():
+	if not grounded:
 		velocity.y -= 24 * dt
 	elif jump_requested and not crouched:
 		velocity.y = 7.5
@@ -175,6 +189,65 @@ func simulate(dt: float) -> void:
 	position.z = clampf(position.z, -115, 115)
 	if position.y < -10:
 		position.y = 4
+
+func predict_movement(cmd: Dictionary, dt: float, active: bool) -> void:
+	reconcile_movement()
+	if not active or not alive:
+		prediction_history.clear()
+		prediction_jump_held = false
+		return
+	var movement := cmd.duplicate()
+	# Network one-shot actions remain latched until transmission, but local
+	# prediction must not repeat the same jump during those frames.
+	movement.jump = cmd.jump and not prediction_jump_held
+	prediction_jump_held = cmd.jump
+	prediction_history.append({"cmd": movement, "dt": dt})
+	if prediction_history.size() > PREDICTION_LIMIT:
+		prediction_history.pop_front()
+	predict_step(movement, dt)
+
+func predict_step(cmd: Dictionary, dt: float) -> void:
+	move_input = Vector2(cmd.x, cmd.z).limit_length()
+	yaw = cmd.yaw
+	crouch = cmd.crouch
+	sprint = cmd.sprint
+	aiming = cmd.ads
+	shooting = cmd.fire
+	jump_requested = cmd.jump
+	move_step(dt)
+
+func reconcile_movement() -> void:
+	if pending_correction.is_empty():
+		return
+	var state := pending_correction
+	pending_correction = {}
+	var ack := int(state.ack)
+	if ack < prediction_ack:
+		return
+	prediction_ack = ack
+	var before := position
+	var view_yaw := yaw
+	var missing_history := not prediction_history.is_empty() and ack < int(prediction_history[0].cmd.seq) - 2
+	var teleport := position.distance_to(state.p) > 12
+	position = state.p
+	velocity = state.vel
+	grounded = state.ground
+	set_stance(state.crouched)
+	while not prediction_history.is_empty() and int(prediction_history[0].cmd.seq) <= ack:
+		prediction_history.pop_front()
+	if not alive or missing_history or teleport:
+		prediction_history.clear()
+	else:
+		for entry in prediction_history:
+			predict_step(entry.cmd, entry.dt)
+	yaw = view_yaw
+	# Smooth only the camera, never the collision body. Large discontinuities
+	# and death snap immediately rather than retaining a stale camera offset.
+	if teleport or not alive or missing_history:
+		camera_error = Vector3.ZERO
+	else:
+		camera_error = (camera_error + before - position).limit_length(0.5)
+	prediction_corrections += 1
 
 func reload_weapon() -> void:
 	if alive and throw_left <= 0 and reload_left <= 0 and heal_left <= 0 and ammo < CAPACITY[weapon] and reserve > 0:
@@ -211,11 +284,13 @@ func apply_damage(amount: float) -> void:
 		gun.visible = false
 
 func pack() -> Dictionary:
-	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "throw": throw_left}
+	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "throw": throw_left, "ack": last_sequence}
 
 func unpack(data: Dictionary, local: bool) -> void:
 	target_position = data.p
-	if position.distance_to(target_position) > 12:
+	if local:
+		pending_correction = data.duplicate()
+	elif position.distance_to(target_position) > 12:
 		position = target_position
 	if not local:
 		yaw = data.y
@@ -243,7 +318,7 @@ func unpack(data: Dictionary, local: bool) -> void:
 
 func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> void:
 	character_animation.update(self, dt)
-	if network_client:
+	if network_client and not local:
 		position = position.lerp(target_position, minf(1, dt * 20))
 	rotation.y = yaw
 	head.rotation.x = pitch
@@ -252,6 +327,18 @@ func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> vo
 	weapon_kick = move_toward(weapon_kick, 0, dt * 8)
 	gun.rotation.x = weapon_kick * 0.06
 	if local:
+		camera.position = Vector3.ZERO
+		if network_client:
+			camera_error = camera_error.lerp(Vector3.ZERO, minf(1, dt * 18))
+			var origin := camera.global_position
+			var desired := origin + camera_error
+			if camera_error.length_squared() > 0.000001:
+				var query := PhysicsRayQueryParameters3D.create(origin, desired, 1)
+				var hit := get_world_3d().direct_space_state.intersect_ray(query)
+				if not hit.is_empty():
+					var distance := maxf(0, origin.distance_to(hit.position) - 0.12)
+					desired = origin + camera_error.normalized() * distance
+			camera.global_position = desired
 		camera.rotation.x = clampf(pitch + recoil, -1.5, 1.5) - pitch
 		camera.fov = lerpf(camera.fov, 48.0 if ads else 85.0, dt * 12)
 		var bob := sin(Time.get_ticks_msec() * 0.012) * 0.012 if move_input.length() > 0.1 else 0.0

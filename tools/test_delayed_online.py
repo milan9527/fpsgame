@@ -1,8 +1,9 @@
 """Exercise real ENet clients through a local UDP latency/jitter proxy.
 
-Each direction adds 80 +/- 10ms. This is a bounded integration test, not
-a capacity, packet-loss, or long-duration certification.
+Each direction adds 80 +/- 10ms, with optional random packet loss. This is a
+bounded integration test, not a capacity or long-duration certification.
 """
+import argparse
 import heapq
 import os
 from pathlib import Path
@@ -18,6 +19,10 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--loss", type=float, default=0, help="Independent UDP packet drop probability per direction")
+    args = parser.parse_args()
+    assert 0 <= args.loss <= 0.3
     selector = selectors.DefaultSelector()
     frontend = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     frontend.bind(("127.0.0.1", 27017))
@@ -26,7 +31,7 @@ def main():
     peers = {}
     pending = []
     serial = 0
-    counters = {"up": 0, "down": 0}
+    counters = {"up": 0, "down": 0, "dropped_up": 0, "dropped_down": 0}
     rng = random.Random(771)
     stop = threading.Event()
     errors = []
@@ -46,9 +51,14 @@ def main():
                             selector.register(upstream, selectors.EVENT_READ, address)
                         sender, destination = peers[address], ("127.0.0.1", 27015)
                         counters["up"] += 1
+                        side = "up"
                     else:
                         sender, destination = frontend, key.data
                         counters["down"] += 1
+                        side = "down"
+                    if rng.random() < args.loss:
+                        counters["dropped_" + side] += 1
+                        continue
                     serial += 1
                     heapq.heappush(pending, (time.monotonic() + rng.uniform(0.07, 0.09), serial, sender, destination, data))
                 now = time.monotonic()
@@ -76,8 +86,10 @@ def main():
             assert match, f"Server never used historical hit detection for {peer_id}"
             ages.append(int(match.group(1)))
         assert len(ages) == 2 and all(100 <= age <= 200 for age in ages), ages
-        assert all(count > 100 for count in counters.values()), counters
-        print("DELAYED_ONLINE_PASS one_way_ms=70..90 rewind_ms=", ages, "packets=", counters)
+        assert counters["up"] > 100 and counters["down"] > 100, counters
+        if args.loss > 0:
+            assert counters["dropped_up"] > 0 and counters["dropped_down"] > 0, counters
+        print("DELAYED_ONLINE_PASS one_way_ms=70..90 loss=", args.loss, "rewind_ms=", ages, "packets=", counters)
     finally:
         stop.set()
         thread.join(timeout=2)

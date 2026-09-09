@@ -343,7 +343,9 @@ func _physics_process(dt: float) -> void:
 			net_tick += dt
 			if net_tick >= 1.0 / 30:
 				net_tick = 0
-				input_command.rpc_id(1, cmd)
+				if phase == "live" and has_actions(cmd):
+					action_command.rpc_id(1, network_round_id, cmd)
+				input_command.rpc_id(1, without_actions(cmd))
 				action_latch.clear()
 		else:
 			apply_command(actor, cmd)
@@ -374,8 +376,8 @@ func _physics_process(dt: float) -> void:
 				request_quit()
 			if not round_client and bot_test_timer > 26:
 				var audio_ok: bool = not audio_test or (sound.played_events.get("gun_ar", 0) > 0 and sound.played_events.get("step_hard", 0) + sound.played_events.get("step_grass", 0) > 0)
-				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_grenade_seen and test_grenade_exploded and actors[local_id].prediction_corrections > 20 and audio_ok:
-					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok grenade=ok explosion=ok reconciliation=ok audio=%s" % [local_id, actors.size(), phase, "ok" if audio_test else "muted"])
+				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_grenade_seen and test_grenade_exploded and actors[local_id].grenades == 1 and actors[local_id].prediction_corrections > 20 and audio_ok:
+					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok grenade=ok explosion=ok action_once=ok reconciliation=ok audio=%s" % [local_id, actors.size(), phase, "ok" if audio_test else "muted"])
 					request_quit()
 				else:
 					push_error("Online smoke test failed to reach active match")
@@ -491,7 +493,47 @@ func input_command(cmd: Dictionary) -> void:
 		return
 	actor.last_command_msec = Time.get_ticks_msec()
 	actor.last_sequence = int(cmd.seq)
-	apply_command(actor, cmd)
+	apply_command(actor, without_actions(cmd))
+
+func has_actions(cmd: Dictionary) -> bool:
+	return cmd.jump or cmd.reload or cmd.heal or cmd.loot or cmd.throw or cmd.weapon >= 0
+
+func without_actions(cmd: Dictionary) -> Dictionary:
+	var movement := cmd.duplicate()
+	for action in ["jump", "reload", "heal", "loot", "throw"]:
+		movement[action] = false
+	movement.weapon = -1
+	return movement
+
+@rpc("any_peer", "call_remote", "reliable", 4)
+func action_command(round_id: String, cmd: Dictionary) -> void:
+	if not dedicated:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if not sessions.has(id) or not actors.has(id):
+		return
+	receive_actions(actors[id], round_id, cmd)
+
+func receive_actions(actor, round_id: String, cmd: Dictionary) -> bool:
+	if round_id != match_id or phase != "live" or not actor.alive or not valid_command(cmd):
+		return false
+	if cmd.seq != floorf(cmd.seq) or cmd.seq < 0 or cmd.seq > 2147483647 or cmd.seq <= actor.last_action_sequence:
+		return false
+	actor.last_action_sequence = int(cmd.seq)
+	# Drop delayed backlog once newer movement has advanced over two seconds.
+	if cmd.seq < actor.last_sequence - 120 or not has_actions(cmd) or actor.action_tokens < 1:
+		return false
+	actor.action_tokens -= 1
+	# A reliable action may arrive before/after the movement packet carrying its
+	# view. Use the event's aim for throwing without changing held movement.
+	var saved_yaw: float = actor.yaw
+	var saved_pitch: float = actor.pitch
+	actor.yaw = cmd.yaw
+	actor.pitch = cmd.pitch
+	apply_actions(actor, cmd)
+	actor.yaw = saved_yaw
+	actor.pitch = saved_pitch
+	return true
 
 func valid_command(cmd: Dictionary) -> bool:
 	if cmd.size() != 15:
@@ -514,9 +556,12 @@ func apply_command(actor, cmd: Dictionary) -> void:
 	actor.sprint = cmd.sprint
 	actor.crouch = cmd.crouch
 	actor.aiming = cmd.ads
-	actor.jump_requested = actor.jump_requested or cmd.jump
-	if phase != "live":
+	apply_actions(actor, cmd)
+
+func apply_actions(actor, cmd: Dictionary) -> void:
+	if phase != "live" or not actor.alive:
 		return
+	actor.jump_requested = actor.jump_requested or cmd.jump
 	if cmd.reload:
 		actor.reload_weapon()
 	if cmd.heal:

@@ -15,7 +15,7 @@ secret = next(line.split('=', 1)[1] for line in (ROOT / '.env').read_text().spli
 server = {'X-Server-Key': secret}
 assert httpx.get(BASE + '/protocol').json() == build
 assert httpx.get(BASE + '/health').json()['protocol'] == build['protocol']
-for wrong in ({}, dict(build, protocol=build['protocol'] + 1), dict(build, content_revision='different-map')):
+for wrong in ({}, dict(build, protocol=build['protocol'] - 1), dict(build, protocol=build['protocol'] + 1), dict(build, content_revision='different-map')):
     reply = httpx.post(BASE + '/matchmaking/join', json=wrong, headers=auth)
     assert reply.status_code == 409, reply.text
     assert 'required' in reply.json()['detail']

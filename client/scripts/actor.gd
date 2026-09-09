@@ -56,6 +56,8 @@ var bot_memory_left := 0.0
 var bot_last_seen := Vector3.ZERO
 var target_position := Vector3.ZERO
 var last_sequence := -1
+var last_action_sequence := -1
+var action_tokens := 10.0
 var command_tokens := 60.0
 var last_command_msec := 0
 var head: Node3D
@@ -153,6 +155,7 @@ func set_local() -> void:
 	first_person.setup(gun, gun_model)
 
 func simulate(dt: float) -> void:
+	action_tokens = minf(10, action_tokens + dt * 10)
 	command_tokens = minf(60, command_tokens + dt * 40)
 	fire_left = maxf(0, fire_left - dt)
 	throw_left = maxf(0, throw_left - dt)

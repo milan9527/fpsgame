@@ -32,10 +32,12 @@ try:
     else:
         raise RuntimeError('Test server did not start')
     client_env = dict(os.environ, TEST_USERNAME=name, TEST_PASSWORD=password, TEST_GAME_PORT='27016', API_URL=base)
-    client = subprocess.Popen([str(root / 'tools/godot'), '--headless', '--path', str(root / 'client'), '--', '--bot-client', '--round-client'], env=client_env, stdout=client_log, stderr=subprocess.STDOUT)
+    debug_flags = ['--verbose'] if os.getenv('TEST_VERBOSE') == '1' else []
+    client = subprocess.Popen([str(root / 'tools/godot'), '--headless', *debug_flags, '--path', str(root / 'client'), '--', '--bot-client', '--round-client'], env=client_env, stdout=client_log, stderr=subprocess.STDOUT)
     assert client.wait(timeout=50) == 0
     client_output = (root / 'artifacts/full-round-client.log').read_text()
     assert 'FULL_ROUND_CLIENT_PASS' in client_output, client_output
+    assert 'ObjectDB instances leaked' not in client_output and 'SCRIPT ERROR' not in client_output, client_output
     headers = {'Authorization': 'Bearer ' + account['token']}
     for _ in range(60):
         profile = httpx.get(base + '/profile', headers=headers).json()
@@ -47,6 +49,7 @@ try:
     server_output = (root / 'artifacts/full-round-server.log').read_text()
     assert 'SCRIPT ERROR' not in server_output, server_output
     assert 'above the MTU' not in server_output, server_output
+    assert 'relay=false' in server_output, server_output
     print(client_output)
     print('FULL_ROUND_PERSISTENCE_PASS', {k: profile[k] for k in ('matches', 'kills', 'wins')})
 finally:

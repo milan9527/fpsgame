@@ -52,6 +52,8 @@ var rng := RandomNumberGenerator.new()
 var smoke := false
 var smoke_frames := 0
 var bot_client := false
+var audio_test := false
+var shutdown_requested := false
 var round_client := false
 var bot_test_timer := 0.0
 var test_start_position := Vector3.ZERO
@@ -71,7 +73,7 @@ func _ready() -> void:
 	var manifest = JSON.parse_string(FileAccess.get_file_as_string("res://protocol.json"))
 	if not manifest is Dictionary or not manifest.has("protocol") or not manifest.has("content_revision"):
 		push_error("Missing or invalid build manifest")
-		get_tree().quit(1)
+		request_quit(1)
 		return
 	build_info = manifest
 	build_info.protocol = int(build_info.protocol)
@@ -80,6 +82,7 @@ func _ready() -> void:
 	dedicated = "--server" in args
 	smoke = "--smoke" in args
 	bot_client = "--bot-client" in args
+	audio_test = bot_client and OS.get_environment("TEST_AUDIO") == "1"
 	round_client = "--round-client" in args
 	if OS.has_environment("API_URL"):
 		api_url = OS.get_environment("API_URL")
@@ -98,8 +101,12 @@ func _ready() -> void:
 	multiplayer.connection_failed.connect(func(): leave("Unable to reach game server"))
 	multiplayer.server_disconnected.connect(func(): leave("Connection to server lost"))
 	if dedicated:
+		# All gameplay is server-authoritative. Do not relay peer join/leave or
+		# client-to-client packets through SceneMultiplayer's internal channel.
+		multiplayer.server_relay = false
 		start_server()
 	else:
+		get_tree().auto_accept_quit = false
 		spectator = Spectator.new()
 		add_child(spectator)
 		sound = Sound.new()
@@ -107,11 +114,14 @@ func _ready() -> void:
 		ui = Interface.new()
 		add_child(ui)
 		sound.volume = 0.0 if smoke or bot_client else ui.volume
+		if audio_test:
+			sound.volume = 0.65
 		ui.volume_changed.connect(func(v): sound.volume = v)
 		ui.solo_requested.connect(start_solo)
 		ui.leaderboard_requested.connect(show_leaderboard)
 		ui.online_requested.connect(sign_in)
 		ui.leave_requested.connect(func(): leave())
+		ui.quit_requested.connect(request_quit)
 		if smoke:
 			call_deferred("start_solo")
 		elif "--capture-game" in args:
@@ -121,6 +131,26 @@ func _ready() -> void:
 			call_deferred("capture_frame")
 		elif bot_client:
 			call_deferred("sign_in", OS.get_environment("TEST_USERNAME"), OS.get_environment("TEST_PASSWORD"), false, api_url)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		request_quit()
+
+func request_quit(code := 0) -> void:
+	if shutdown_requested:
+		return
+	shutdown_requested = true
+	running = false
+	if sound != null:
+		sound.volume = 0
+		sound.reset_round()
+		if online and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+			multiplayer.multiplayer_peer.disconnect_peer(1)
+		# Stop requests and deferred frees need a mixer cycle before engine teardown.
+		await get_tree().process_frame
+		await get_tree().create_timer(0.15).timeout
+		multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	get_tree().quit(code)
 
 func setup_input() -> void:
 	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "scoreboard": KEY_TAB, "spectate_previous": KEY_Q, "spectate_next": KEY_E}
@@ -138,26 +168,26 @@ func setup_input() -> void:
 func start_server() -> void:
 	if server_key.length() < 32:
 		push_error("SERVER_SECRET must contain at least 32 characters")
-		get_tree().quit(1)
+		request_quit(1)
 		return
 	var response: Dictionary = await http_call("/internal/build/check", build_info, true)
 	if response.code != 200 or not compatible_build(response.body):
 		push_error("Server build is incompatible with operations service")
-		get_tree().quit(1)
+		request_quit(1)
 		return
 	var peer := ENetMultiplayerPeer.new()
 	var listen_port := int(OS.get_environment("GAME_PORT")) if OS.has_environment("GAME_PORT") else PORT
 	var error := peer.create_server(listen_port, MAX_PLAYERS + 8)
 	if error != OK:
 		push_error("Cannot bind game port: " + str(error))
-		get_tree().quit(1)
+		request_quit(1)
 		return
 	multiplayer.multiplayer_peer = peer
 	online = true
 	running = true
 	phase = "waiting"
 	load_outbox()
-	print("SERVER_READY udp=" + str(listen_port))
+	print("SERVER_READY udp=" + str(listen_port) + " relay=" + str(multiplayer.server_relay))
 
 func start_solo() -> void:
 	online = false
@@ -169,6 +199,8 @@ func start_solo() -> void:
 	ui.show_game()
 
 func clear_actors() -> void:
+	if sound != null:
+		sound.reset_round()
 	if spectator != null:
 		spectator.reset()
 		lobby_camera.current = true
@@ -312,14 +344,15 @@ func _physics_process(dt: float) -> void:
 				if not actors[local_id].alive:
 					assert(spectator.active and spectator.camera.current, "Network death enters spectator camera")
 				print("FULL_ROUND_CLIENT_PASS rank=%d spectator=%s" % [actors[local_id].rank, "ok" if spectator.active else "survived"])
-				get_tree().quit()
+				request_quit()
 			if not round_client and bot_test_timer > 26:
-				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_grenade_seen and test_grenade_exploded and actors[local_id].prediction_corrections > 20:
-					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok grenade=ok explosion=ok reconciliation=ok" % [local_id, actors.size(), phase])
-					get_tree().quit()
+				var audio_ok: bool = not audio_test or (sound.played_events.get("gun_ar", 0) > 0 and sound.played_events.get("step_hard", 0) + sound.played_events.get("step_grass", 0) > 0)
+				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_grenade_seen and test_grenade_exploded and actors[local_id].prediction_corrections > 20 and audio_ok:
+					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok grenade=ok explosion=ok reconciliation=ok audio=%s" % [local_id, actors.size(), phase, "ok" if audio_test else "muted"])
+					request_quit()
 				else:
 					push_error("Online smoke test failed to reach active match")
-					get_tree().quit(1)
+					request_quit(1)
 		return
 	for id in pending.keys():
 		if Time.get_ticks_msec() - pending[id].at > 8000:
@@ -663,6 +696,7 @@ func _process(dt: float) -> void:
 	for id in actors:
 		actors[id].render_frame(dt, online, id == local_id, Input.is_action_pressed("aim"))
 	spectator.update_view(actors, local_id, phase)
+	sound.update_actors(actors, world, get_viewport().get_camera_3d())
 	world.show_loot(loot)
 	world.set_zone(zone)
 	ui.update_scoreboard(actors.values(), Input.is_action_pressed("scoreboard") and not ui.pause_panel.visible)
@@ -800,7 +834,7 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 	if preflight.code != 200:
 		ui.show_menu("Server update required: build information unavailable." if preflight.code == 404 else "Operations service unavailable. Check the API address and retry.")
 		if bot_client:
-			get_tree().quit(1)
+			request_quit(1)
 		return
 	if not compatible_build(preflight.body):
 		var required_version := "updated client"
@@ -808,13 +842,13 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 			required_version = str(preflight.body.get("client_version", required_version))
 		ui.show_menu("Game version mismatch. Required build: " + required_version)
 		if bot_client:
-			get_tree().quit(1)
+			request_quit(1)
 		return
 	var response: Dictionary = await http_call("/auth/register" if register else "/auth/login", {"username": username, "password": password})
 	if response.code != 200 and response.code != 201:
 		ui.show_menu("Account request failed: " + error_message(response))
 		if bot_client:
-			get_tree().quit(1)
+			request_quit(1)
 		return
 	token = response.body.token
 	token_origin = api_url
@@ -865,7 +899,7 @@ func error_message(response: Dictionary) -> String:
 	return str(response.body.get("detail", "Connection failed"))
 
 func leave(message := "") -> void:
-	if dedicated:
+	if dedicated or shutdown_requested:
 		return
 	running = false
 	online = false
@@ -880,7 +914,7 @@ func leave(message := "") -> void:
 	ui.show_menu(message)
 	if bot_client:
 		push_error(message)
-		get_tree().quit(1)
+		request_quit(1)
 
 func uuid4() -> String:
 	var bytes := Crypto.new().generate_random_bytes(16)
@@ -972,7 +1006,7 @@ func run_smoke_checks() -> void:
 	assert(actor.rank == 1 and actor.kills == 15 and phase == "finished", "Victory and kills resolve")
 	await get_tree().create_timer(0.15).timeout
 	print("OFFLINE_SMOKE_PASS actors=16 reload=ok heal=ok damage=ok victory=ok raycast=ok cover=ok fire_interval=ok rig=ok")
-	get_tree().quit()
+	request_quit()
 
 func capture_frame() -> void:
 	await get_tree().create_timer(2).timeout
@@ -981,7 +1015,7 @@ func capture_frame() -> void:
 	var path := OS.get_environment("CAPTURE_PATH")
 	image.save_png(path)
 	print("CAPTURE_SAVED " + path)
-	get_tree().quit()
+	request_quit()
 
 func show_leaderboard(endpoint: String) -> void:
 	if ui.busy:
@@ -1011,12 +1045,13 @@ func deliver_feedback(id: int, kind: int, amount: float, headshot: bool, killed:
 func combat_feedback(kind: int, amount: float, headshot: bool, killed: bool, origin: Vector3) -> void:
 	if not dedicated and ui:
 		ui.combat_feedback(kind, amount, headshot, killed, origin)
+		sound.feedback(kind, killed)
 
 func peer_ready(id: int) -> bool:
 	if not dedicated or not multiplayer.get_peers().has(id):
 		return false
 	var peer: ENetPacketPeer = multiplayer.multiplayer_peer.get_peer(id)
-	return peer != null and peer.get_state() == ENetPacketPeer.STATE_CONNECTED
+	return peer != null and peer.get_state() == ENetPacketPeer.STATE_CONNECTED and peer.get_channels() > 0
 
 func clear_grenades() -> void:
 	for grenade in grenades.values():

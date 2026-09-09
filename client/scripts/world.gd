@@ -6,6 +6,14 @@ var zone_radius := 110.0
 var rng := RandomNumberGenerator.new()
 var materials: Dictionary = {}
 
+func footstep_surface(at: Vector3) -> String:
+	var query := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.3, at - Vector3.UP * 0.8, 1)
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty() or hit.collider.get_meta("surface", "hard") != "terrain":
+		return "step_hard"
+	var road := (absf(at.x) <= 8 and absf(at.z) <= 112.5) or (absf(at.z) <= 7 and absf(at.x) <= 112.5)
+	return "step_hard" if road else "step_grass"
+
 func mat(hex: String) -> StandardMaterial3D:
 	if materials.has(hex):
 		return materials[hex]
@@ -15,7 +23,7 @@ func mat(hex: String) -> StandardMaterial3D:
 	materials[hex] = m
 	return m
 
-func block(at: Vector3, size: Vector3, color: String, solid := true) -> MeshInstance3D:
+func block(at: Vector3, size: Vector3, color: String, solid := true, surface := "hard") -> MeshInstance3D:
 	var mesh := MeshInstance3D.new()
 	var box := BoxMesh.new()
 	box.size = size
@@ -25,6 +33,7 @@ func block(at: Vector3, size: Vector3, color: String, solid := true) -> MeshInst
 	add_child(mesh)
 	if solid:
 		var body := StaticBody3D.new()
+		body.set_meta("surface", surface)
 		var shape := CollisionShape3D.new()
 		var collision := BoxShape3D.new()
 		collision.size = size
@@ -55,7 +64,7 @@ func _ready() -> void:
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 110
 	add_child(sun)
-	block(Vector3(0, -0.5, 0), Vector3(240, 1, 240), "737b68")
+	block(Vector3(0, -0.5, 0), Vector3(240, 1, 240), "737b68", true, "terrain")
 	block(Vector3(0, 0.012, 0), Vector3(16, 0.02, 225), "3b484c", false)
 	block(Vector3(0, 0.025, 0), Vector3(225, 0.02, 14), "3b484c", false)
 	for i in range(-10, 11):

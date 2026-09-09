@@ -4,6 +4,7 @@ signal leaderboard_requested(endpoint: String)
 signal solo_requested
 signal online_requested(username: String, password: String, register: bool, endpoint: String)
 signal leave_requested
+signal quit_requested
 signal volume_changed(value: float)
 signal sensitivity_changed(value: float)
 var menu: Control
@@ -125,7 +126,7 @@ func _ready() -> void:
 	vol.value = volume
 	right.add_child(vol)
 	vol.value_changed.connect(func(v): volume = v; volume_changed.emit(v); save_settings())
-	button(right, "EXIT TO DESKTOP", func(): get_tree().quit())
+	button(right, "EXIT TO DESKTOP", func(): quit_requested.emit())
 	hud = Control.new()
 	hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE

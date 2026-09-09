@@ -25,6 +25,7 @@ try:
         output = path.read_text()
         print(output)
         assert code == 0 and 'ONLINE_CLIENT_PASS' in output, f'Client failed: {path}'
+        assert 'ObjectDB instances leaked' not in output and 'SCRIPT ERROR' not in output, output
         peer_ids.append(re.search(r'ONLINE_CLIENT_PASS id=(\d+)', output).group(1))
 finally:
     for proc, log, _ in processes:
@@ -42,4 +43,5 @@ else:
 (root / 'artifacts' / 'online-server.log').write_text(server_output)
 assert 'Unable to send packet' not in server_output, server_output
 assert 'SCRIPT ERROR' not in server_output, server_output
+assert 'relay=false' in server_output, 'Dedicated server must disable client-to-client relay'
 print('TWO_CLIENT_ONLINE_PASS disconnect=ok')

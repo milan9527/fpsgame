@@ -31,6 +31,12 @@ timeout 20s ./tools/godot --headless --path client --script ../tests/protocol_cl
 rg -q PROTOCOL_CLIENT_PASS artifacts/protocol-client-test.log
 if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/protocol-client-test.log; then cat artifacts/protocol-client-test.log; exit 1; fi
 .venv/bin/python tools/test_protocol_server.py
+timeout 25s env AUDIO_ARTIFACT_DIR="$PWD/artifacts" ./tools/godot --headless --path client --script ../tests/audio_rules.gd > artifacts/audio-rules.log 2>&1
+rg -q AUDIO_RULES_PASS artifacts/audio-rules.log
+if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/audio-rules.log; then cat artifacts/audio-rules.log; exit 1; fi
+timeout 15s ./tools/godot --headless --verbose --path client --script ../tests/audio_shutdown.gd > artifacts/audio-shutdown.log 2>&1
+rg -q AUDIO_SHUTDOWN_PENDING artifacts/audio-shutdown.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked|still in use' artifacts/audio-shutdown.log; then cat artifacts/audio-shutdown.log; exit 1; fi
 timeout 30s xvfb-run -a ./tools/godot --path client --audio-driver Dummy --script ../tests/viewmodel_rules.gd -- --capture-viewmodel > artifacts/viewmodel-rules.log 2>&1
 rg -q VIEWMODEL_RULES_PASS artifacts/viewmodel-rules.log
 if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/viewmodel-rules.log; then cat artifacts/viewmodel-rules.log; exit 1; fi
@@ -40,6 +46,6 @@ if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/spectator-rules.log; then cat
 timeout 25s ./tools/godot --headless --path client --script ../tests/prediction_rules.gd > artifacts/prediction-rules.log 2>&1
 rg -q PREDICTION_RULES_PASS artifacts/prediction-rules.log
 if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/prediction-rules.log; then cat artifacts/prediction-rules.log; exit 1; fi
-.venv/bin/python tools/test_online.py
+TEST_AUDIO=1 .venv/bin/python tools/test_online.py
 
-.venv/bin/python tools/test_full_round.py
+TEST_AUDIO=1 .venv/bin/python tools/test_full_round.py

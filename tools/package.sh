@@ -29,4 +29,10 @@ if rg -q "SCRIPT ERROR|Assertion failed" artifacts/packed-spectator.log; then ca
 timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/viewmodel_rules.gd" > artifacts/packed-viewmodel.log 2>&1
 rg -q VIEWMODEL_RULES_PASS artifacts/packed-viewmodel.log
 if rg -q "SCRIPT ERROR|Assertion failed" artifacts/packed-viewmodel.log; then cat artifacts/packed-viewmodel.log; exit 1; fi
+timeout 25s env AUDIO_ARTIFACT_DIR="$PWD/artifacts" artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/audio_rules.gd" > artifacts/packed-audio.log 2>&1
+rg -q AUDIO_RULES_PASS artifacts/packed-audio.log
+if rg -q "SCRIPT ERROR|Assertion failed" artifacts/packed-audio.log; then cat artifacts/packed-audio.log; exit 1; fi
+timeout 15s artifacts/IronMeridian-Linux/play.sh --headless --verbose --script "$PWD/tests/audio_shutdown.gd" > artifacts/packed-audio-shutdown.log 2>&1
+rg -q AUDIO_SHUTDOWN_PENDING artifacts/packed-audio-shutdown.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked|still in use' artifacts/packed-audio-shutdown.log; then cat artifacts/packed-audio-shutdown.log; exit 1; fi
 tar -czf artifacts/IronMeridian-Linux-x86_64.tar.gz -C artifacts IronMeridian-Linux

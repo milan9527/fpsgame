@@ -75,3 +75,5 @@ for part in weapon_parts:
 # The humanoid authoring script shares the material palette and mesh helpers.
 exec(compile((ROOT / 'tools' / 'build_operator.py').read_text(), 'build_operator.py', 'exec'))
 print('ASSETS_BUILT carbine.glb operator.glb')
+
+exec(compile((ROOT / 'tools' / 'build_grenade.py').read_text(), str(ROOT / 'tools' / 'build_grenade.py'), 'exec'))

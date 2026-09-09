@@ -1,5 +1,7 @@
 extends Node3D
 
+const BlastEffect = preload("res://scripts/blast_effect.gd")
+const Grenade = preload("res://scripts/grenade.gd")
 const Actor = preload("res://scripts/actor.gd")
 const World = preload("res://scripts/world.gd")
 const Interface = preload("res://scripts/interface.gd")
@@ -15,6 +17,9 @@ var sessions: Dictionary = {}
 var pending: Dictionary = {}
 var participants: Dictionary = {}
 var loot: Dictionary = {}
+var grenades: Dictionary = {}
+var next_grenade_id := 1
+var grenade_tombstones: Dictionary = {}
 var last_loot_hash := 0
 var events: Array = []
 var dedicated := false
@@ -53,6 +58,9 @@ var test_crouched := false
 var test_recoil := false
 var test_remote_crouch := false
 var test_remote_animation := false
+var test_grenade_seen := false
+var test_grenade_exploded := false
+var test_throw_sent := false
 var authenticated_at := 0
 
 func _ready() -> void:
@@ -102,7 +110,7 @@ func _ready() -> void:
 			call_deferred("sign_in", OS.get_environment("TEST_USERNAME"), OS.get_environment("TEST_PASSWORD"), false, api_url)
 
 func setup_input() -> void:
-	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "scoreboard": KEY_TAB}
+	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "scoreboard": KEY_TAB}
 	for action in keys:
 		InputMap.add_action(action)
 		var e := InputEventKey.new()
@@ -143,6 +151,7 @@ func start_solo() -> void:
 	ui.show_game()
 
 func clear_actors() -> void:
+	clear_grenades()
 	for actor in actors.values():
 		remove_child(actor)
 		actor.queue_free()
@@ -166,7 +175,7 @@ func reset_round() -> void:
 	for i in range(48):
 		# Supplies are placed along open approaches, outside building walls.
 		var p := Vector3([-18.0, 18.0, -90.0, 90.0][i % 4], 0.1, -88 + (i / 4) * 16)
-		loot[i] = {"p": p, "kind": i % 3}
+		loot[i] = {"p": p, "kind": i % 4}
 	world.show_loot(loot)
 	phase = "lobby"
 	phase_time = 18
@@ -243,6 +252,9 @@ func _physics_process(dt: float) -> void:
 	if online and not dedicated:
 		if bot_client:
 			bot_test_timer += dt
+			for grenade in grenades.values():
+				if grenade.owner_id == local_id:
+					test_grenade_seen = true
 			if actors.has(local_id):
 				var player = actors[local_id]
 				if test_start_position == Vector3.ZERO:
@@ -260,8 +272,8 @@ func _physics_process(dt: float) -> void:
 				print("FULL_ROUND_CLIENT_PASS rank=" + str(actors[local_id].rank))
 				get_tree().quit()
 			if not round_client and bot_test_timer > 26:
-				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation:
-					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok" % [local_id, actors.size(), phase])
+				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_grenade_seen and test_grenade_exploded:
+					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok grenade=ok explosion=ok" % [local_id, actors.size(), phase])
 					get_tree().quit()
 				else:
 					push_error("Online smoke test failed to reach active match")
@@ -302,6 +314,7 @@ func _physics_process(dt: float) -> void:
 			for actor in actors.values():
 				if Vector2(actor.position.x, actor.position.z).length() > zone:
 					damage(actor, 5 + elapsed / 24, 0)
+		advance_grenades(dt)
 		if alive_count() <= 1 or elapsed >= ROUND_SECONDS:
 			finish_round()
 	elif phase == "finished":
@@ -324,7 +337,7 @@ func _physics_process(dt: float) -> void:
 
 func local_command(actor) -> Dictionary:
 	sequence += 1
-	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "loot": false, "weapon": -1}
+	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "loot": false, "throw": false, "weapon": -1}
 	if ui.pause_panel.visible:
 		return cmd
 	var movement := Input.get_vector("left", "right", "forward", "back")
@@ -333,13 +346,13 @@ func local_command(actor) -> Dictionary:
 	cmd.ads = Input.is_action_pressed("aim")
 	for action in ["fire", "sprint", "crouch"]:
 		cmd[action] = Input.is_action_pressed(action)
-	for action in ["jump", "reload", "heal", "loot"]:
+	for action in ["jump", "reload", "heal", "loot", "throw"]:
 		cmd[action] = Input.is_action_just_pressed(action)
 	for i in range(3):
 		if Input.is_action_just_pressed("weapon" + str(i + 1)):
 			cmd.weapon = i
 	if online:
-		for action in ["jump", "reload", "heal", "loot"]:
+		for action in ["jump", "reload", "heal", "loot", "throw"]:
 			if cmd[action]:
 				action_latch[action] = true
 			cmd[action] = action_latch.get(action, false)
@@ -351,6 +364,10 @@ func local_command(actor) -> Dictionary:
 		cmd.fire = true
 		cmd.crouch = int(bot_test_timer) % 6 < 3
 		cmd.ads = true
+		if phase == "live" and bot_test_timer > 19 and not test_throw_sent:
+			cmd.throw = true
+			action_latch["throw"] = true
+			test_throw_sent = true
 	return cmd
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
@@ -371,14 +388,14 @@ func input_command(cmd: Dictionary) -> void:
 	apply_command(actor, cmd)
 
 func valid_command(cmd: Dictionary) -> bool:
-	if cmd.size() != 14:
+	if cmd.size() != 15:
 		return false
 	for key in ["seq", "x", "z", "yaw", "pitch", "weapon"]:
 		if not cmd.has(key) or not (cmd[key] is float or cmd[key] is int):
 			return false
 		if not is_finite(float(cmd[key])):
 			return false
-	for key in ["fire", "sprint", "crouch", "ads", "jump", "reload", "heal", "loot"]:
+	for key in ["fire", "sprint", "crouch", "ads", "jump", "reload", "heal", "loot", "throw"]:
 		if not cmd.has(key) or not cmd[key] is bool:
 			return false
 	return absf(cmd.x) <= 1 and absf(cmd.z) <= 1 and absf(cmd.yaw) <= PI + 0.01 and absf(cmd.pitch) <= 1.46 and cmd.weapon >= -1 and cmd.weapon <= 2
@@ -402,6 +419,8 @@ func apply_command(actor, cmd: Dictionary) -> void:
 		actor.switch_weapon(int(cmd.weapon))
 	if cmd.loot:
 		pickup(actor)
+	if cmd.throw:
+		throw_grenade(actor)
 
 func bot_input(actor, dt: float) -> void:
 	if not actor.alive:
@@ -436,6 +455,13 @@ func bot_input(actor, dt: float) -> void:
 	if actor.is_on_wall():
 		actor.move_input = Vector2(1, -0.2)
 		actor.jump_requested = true
+	if elapsed > 8 and actors.has(actor.target_id) and actor.grenades > 0:
+		var distance: float = actor.position.distance_to(actors[actor.target_id].position)
+		if distance > 23 and distance < 32 and actor.shooting and actor.throw_left <= 0:
+			var saved_pitch: float = actor.pitch
+			actor.pitch = 0.25
+			throw_grenade(actor)
+			actor.pitch = saved_pitch
 	actor.sprint = Vector2(actor.position.x, actor.position.z).length() > zone - 8
 	if actor.ammo == 0:
 		actor.reload_weapon()
@@ -449,7 +475,7 @@ func visible_target(actor, other) -> bool:
 	return not hit.is_empty() and hit.collider == other
 
 func shoot(actor) -> void:
-	if not actor.alive or actor.fire_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or actor.ammo <= 0 or phase != "live":
+	if not actor.alive or actor.fire_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or actor.ammo <= 0 or actor.throw_left > 0 or phase != "live":
 		return
 	actor.ammo -= 1
 	actor.fire_left = actor.INTERVAL[actor.weapon]
@@ -504,7 +530,7 @@ func shot_fx(id: int, origin: Vector3, end: Vector3, kind: int) -> void:
 	add_child(line)
 	get_tree().create_timer(0.065).timeout.connect(line.queue_free)
 
-func damage(target, amount: float, attacker_id: int, bypass_protection := false, headshot := false) -> void:
+func damage(target, amount: float, attacker_id: int, bypass_protection := false, headshot := false, cause := "THE ZONE", impact_origin = null) -> void:
 	if not target.alive or (not bypass_protection and phase == "live" and elapsed < 5):
 		return
 	var before: float = target.health + target.armor
@@ -513,18 +539,23 @@ func damage(target, amount: float, attacker_id: int, bypass_protection := false,
 	if actors.has(attacker_id) and attacker_id != target.actor_id:
 		deliver_feedback(attacker_id, 0, actual_damage, headshot, not target.alive, target.position)
 	var source_position: Vector3 = actors[attacker_id].position if actors.has(attacker_id) else target.position
+	if impact_origin is Vector3:
+		source_position = impact_origin
 	deliver_feedback(target.actor_id, 1, actual_damage, false, not target.alive, source_position)
 	if not target.alive:
 		target.rank = alive_count() + 1
 		if participants.has(target.actor_id):
 			participants[target.actor_id].rank = target.rank
-		var source := "THE ZONE"
+		var source: String = cause
 		if actors.has(attacker_id) and attacker_id != target.actor_id:
 			var attacker = actors[attacker_id]
 			attacker.kills += 1
 			source = attacker.display_name
 			if participants.has(attacker_id):
 				participants[attacker_id].kills = attacker.kills
+		elif participants.has(attacker_id) and attacker_id != target.actor_id:
+			participants[attacker_id].kills += 1
+			source = "DISCONNECTED OPERATOR"
 		add_event(source + "  >  " + target.display_name)
 		var loot_id := 1000 + absi(target.actor_id)
 		loot[loot_id] = {"p": target.position, "kind": 0}
@@ -538,6 +569,7 @@ func pickup(actor) -> void:
 				0: actor.reserve = mini(300, actor.reserve + 45)
 				1: actor.medkits = mini(5, actor.medkits + 1)
 				2: actor.armor = minf(100, actor.armor + 40)
+				3: actor.grenades = mini(4, actor.grenades + 1)
 			loot.erase(id)
 			break
 
@@ -557,6 +589,7 @@ func finish_round() -> void:
 		actor.rank = i + 1
 		if participants.has(actor.actor_id):
 			participants[actor.actor_id].rank = actor.rank
+	clear_grenades()
 	phase = "finished"
 	phase_time = 12
 	var winner: String = survivors[0].display_name if not survivors.is_empty() else "No survivors"
@@ -593,6 +626,9 @@ func _process(dt: float) -> void:
 			message += "\nNext operation in %ds" % maxi(0, int(phase_time)) if online else "\nESC  /  RETURN TO DEPLOYMENT"
 		if phase == "lobby":
 			message = "DEPLOYING IN %02d\nWaiting for operators…" % maxi(0, int(phase_time))
+		ui.grenade_warning_distance = INF
+		for grenade in grenades.values():
+			ui.grenade_warning_distance = minf(ui.grenade_warning_distance, actor.position.distance_to(grenade.position))
 		ui.update_hud(actor, alive_count(), phase, phase_time, zone, events, message)
 
 func peer_connected(id: int) -> void:
@@ -663,9 +699,15 @@ func broadcast_snapshot() -> void:
 		states.append(actor.pack())
 	var supplies_changed := loot.hash() != last_loot_hash
 	last_loot_hash = loot.hash()
+	var grenade_states: Array = []
+	for grenade in grenades.values():
+		grenade_states.append(grenade.pack())
 	for id in sessions:
 		if not peer_ready(id):
 			continue
+		for offset in range(0, maxi(1, grenade_states.size()), 6):
+			var data := {"round": match_id, "states": grenade_states.slice(offset, offset + 6), "ids": grenades.keys()}
+			grenade_snapshot.rpc_id(id, var_to_bytes(data).compress(FileAccess.COMPRESSION_DEFLATE))
 		if supplies_changed:
 			world_sync.rpc_id(id, match_id, loot)
 		# Four actors per compressed packet stay below the ENet MTU.
@@ -907,3 +949,121 @@ func peer_ready(id: int) -> bool:
 		return false
 	var peer: ENetPacketPeer = multiplayer.multiplayer_peer.get_peer(id)
 	return peer != null and peer.get_state() == ENetPacketPeer.STATE_CONNECTED
+
+func clear_grenades() -> void:
+	for grenade in grenades.values():
+		remove_child(grenade)
+		grenade.queue_free()
+	grenades.clear()
+	grenade_tombstones.clear()
+
+func throw_grenade(actor) -> bool:
+	if phase != "live" or not actor.alive or actor.grenades <= 0 or actor.throw_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or grenades.size() >= 32:
+		return false
+	var direction := Basis(Vector3.UP, actor.yaw) * Basis(Vector3.RIGHT, actor.pitch) * Vector3.FORWARD
+	var origin: Vector3 = actor.eye_position()
+	var destination: Vector3 = origin + direction * 0.55
+	# Sweep the grenade volume, not just its center, to avoid starting through a wall.
+	var shape := SphereShape3D.new()
+	shape.radius = 0.13
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.transform = Transform3D(Basis.IDENTITY, origin)
+	query.collision_mask = 1
+	if not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty():
+		return false
+	query.motion = destination - origin
+	var travel := get_world_3d().direct_space_state.cast_motion(query)
+	destination = origin + query.motion * maxf(0, travel[0] - 0.02)
+	var grenade = Grenade.new()
+	grenade.grenade_id = next_grenade_id
+	next_grenade_id += 1
+	grenade.owner_id = actor.actor_id
+	grenade.position = destination
+	add_child(grenade)
+	grenade.linear_velocity = direction * 17 + Vector3.UP * 3 + actor.velocity * 0.4
+	grenade.angular_velocity = Vector3(5, 3, 4)
+	grenades[grenade.grenade_id] = grenade
+	actor.grenades -= 1
+	actor.throw_left = 0.7
+	return true
+
+func advance_grenades(dt: float) -> void:
+	for id in grenades.keys():
+		var grenade = grenades[id]
+		grenade.fuse -= dt
+		if grenade.fuse <= 0:
+			detonate_grenade(id)
+
+func explosion_exposure(origin: Vector3, actor) -> float:
+	var visible := 0.0
+	for point in [actor.position + Vector3.UP * 0.25, actor.aim_position(), actor.eye_position()]:
+		var ray := PhysicsRayQueryParameters3D.create(origin, point, 1)
+		if get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
+			visible += 1
+	return visible / 3.0
+
+func detonate_grenade(id: int) -> void:
+	if not grenades.has(id):
+		return
+	var grenade = grenades[id]
+	var origin: Vector3 = grenade.position + Vector3.UP * 0.04
+	var attacker_id: int = grenade.owner_id
+	grenades.erase(id)
+	grenade.queue_free()
+	if phase == "live":
+		for actor in actors.values():
+			if not actor.alive:
+				continue
+			var distance: float = actor.aim_position().distance_to(origin)
+			if distance >= Grenade.RADIUS:
+				continue
+			var amount: float = Grenade.MAX_DAMAGE * (1 - distance / Grenade.RADIUS) * explosion_exposure(origin, actor)
+			if amount > 0:
+				damage(actor, amount, attacker_id, false, false, "FRAG", origin)
+	if dedicated:
+		for peer in sessions:
+			if peer_ready(peer):
+				grenade_exploded.rpc_id(peer, match_id, id, origin)
+	else:
+		grenade_exploded(match_id, id, origin)
+
+@rpc("authority", "call_remote", "unreliable_ordered", 4)
+func grenade_snapshot(packet: PackedByteArray) -> void:
+	if dedicated:
+		return
+	var data: Dictionary = bytes_to_var(packet.decompress_dynamic(32768, FileAccess.COMPRESSION_DEFLATE))
+	if data.round != network_round_id:
+		return
+	for state in data.states:
+		if grenade_tombstones.has(state.id):
+			continue
+		if not grenades.has(state.id):
+			var grenade = Grenade.new()
+			grenade.authoritative = false
+			grenade.grenade_id = state.id
+			grenade.position = state.p
+			add_child(grenade)
+			grenades[state.id] = grenade
+		grenades[state.id].target_position = state.p
+		grenades[state.id].fuse = state.f
+		grenades[state.id].owner_id = state.owner
+	for id in grenades.keys():
+		if not data.ids.has(id):
+			grenades[id].queue_free()
+			grenades.erase(id)
+
+@rpc("authority", "call_remote", "reliable")
+func grenade_exploded(round_id: String, id: int, origin: Vector3) -> void:
+	if dedicated or (online and round_id != network_round_id):
+		return
+	if bot_client:
+		test_grenade_exploded = true
+	grenade_tombstones[id] = true
+	if grenades.has(id):
+		grenades[id].queue_free()
+		grenades.erase(id)
+	var effect := BlastEffect.new()
+	effect.position = origin
+	add_child(effect)
+	sound.shot(origin, 3)

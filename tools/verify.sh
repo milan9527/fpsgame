@@ -11,6 +11,9 @@ fi
 timeout 25s ./tools/godot --headless --path client --script ../tests/combat_rules.gd > artifacts/combat-rules.log 2>&1
 rg -q COMBAT_RULES_PASS artifacts/combat-rules.log
 if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/combat-rules.log; then cat artifacts/combat-rules.log; exit 1; fi
+timeout 25s ./tools/godot --headless --path client --script ../tests/grenade_rules.gd > artifacts/grenade-rules.log 2>&1
+rg -q GRENADE_RULES_PASS artifacts/grenade-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed" artifacts/grenade-rules.log; then cat artifacts/grenade-rules.log; exit 1; fi
 timeout 30s xvfb-run -a ./tools/godot --path client --audio-driver Dummy --script ../tests/animation_rules.gd > artifacts/animation-rules.log 2>&1
 rg -q ANIMATION_RULES_PASS artifacts/animation-rules.log
 if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/animation-rules.log; then cat artifacts/animation-rules.log; exit 1; fi

@@ -16,6 +16,8 @@ var weapon := 0
 var ammo := 30
 var reserve := 120
 var medkits := 2
+var grenades := 2
+var throw_left := 0.0
 var alive := true
 var yaw := 0.0
 var pitch := 0.0
@@ -136,6 +138,7 @@ func set_local() -> void:
 func simulate(dt: float) -> void:
 	command_tokens = minf(60, command_tokens + dt * 40)
 	fire_left = maxf(0, fire_left - dt)
+	throw_left = maxf(0, throw_left - dt)
 	if not alive:
 		return
 	rotation.y = yaw
@@ -174,15 +177,15 @@ func simulate(dt: float) -> void:
 		position.y = 4
 
 func reload_weapon() -> void:
-	if alive and reload_left <= 0 and heal_left <= 0 and ammo < CAPACITY[weapon] and reserve > 0:
+	if alive and throw_left <= 0 and reload_left <= 0 and heal_left <= 0 and ammo < CAPACITY[weapon] and reserve > 0:
 		reload_left = RELOAD[weapon]
 
 func heal() -> void:
-	if alive and medkits > 0 and health < 100 and heal_left <= 0 and reload_left <= 0:
+	if alive and throw_left <= 0 and medkits > 0 and health < 100 and heal_left <= 0 and reload_left <= 0:
 		heal_left = 3.5
 
 func switch_weapon(index: int) -> void:
-	if not alive or index < 0 or index > 2 or index == weapon or reload_left > 0:
+	if not alive or throw_left > 0 or index < 0 or index > 2 or index == weapon or reload_left > 0:
 		return
 	# Shared ammunition pool; switching never manufactures rounds.
 	reserve += ammo
@@ -208,7 +211,7 @@ func apply_damage(amount: float) -> void:
 		gun.visible = false
 
 func pack() -> Dictionary:
-	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded}
+	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "throw": throw_left}
 
 func unpack(data: Dictionary, local: bool) -> void:
 	target_position = data.p
@@ -232,6 +235,8 @@ func unpack(data: Dictionary, local: bool) -> void:
 	recoil = data.recoil
 	velocity = data.vel
 	grounded = data.ground
+	grenades = data.frags
+	throw_left = data.throw
 	if alive and not data.live:
 		apply_damage(10000)
 	alive = data.live
@@ -250,7 +255,7 @@ func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> vo
 		camera.rotation.x = clampf(pitch + recoil, -1.5, 1.5) - pitch
 		camera.fov = lerpf(camera.fov, 48.0 if ads else 85.0, dt * 12)
 		var bob := sin(Time.get_ticks_msec() * 0.012) * 0.012 if move_input.length() > 0.1 else 0.0
-		gun.position.y = lerpf(gun.position.y, -0.4 if reload_left > 0 else -0.24 + bob, dt * 12)
+		gun.position.y = lerpf(gun.position.y, -0.4 if reload_left > 0 or throw_left > 0 else -0.24 + bob, dt * 12)
 
 func eye_height() -> float:
 	return 0.98 if crouched else 1.6

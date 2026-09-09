@@ -145,6 +145,6 @@ func show_loot(items: Dictionary) -> void:
 		if loot_nodes.has(id):
 			continue
 		var item: Dictionary = items[id]
-		var colors := ["e8c77b", "77d7ad", "7bbee8"]
+		var colors := ["e8c77b", "77d7ad", "7bbee8", "d9844e"]
 		var mesh := block(item.p + Vector3(0, 0.35, 0), Vector3(0.65, 0.5, 0.65), colors[item.kind], false)
 		loot_nodes[id] = mesh

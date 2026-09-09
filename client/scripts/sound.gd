@@ -5,15 +5,15 @@ var volume := 0.65
 func _ready() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 39
-	for kind in range(3):
+	for kind in range(4):
 		var sound := AudioStreamWAV.new()
 		sound.format = AudioStreamWAV.FORMAT_16_BITS
 		sound.mix_rate = 22050
 		var data := PackedByteArray()
-		var length := 0.15 + kind * 0.07
+		var length := 0.85 if kind == 3 else 0.15 + kind * 0.07
 		for i in range(int(length * 22050)):
 			var t := float(i) / 22050
-			var sample := (rng.randf_range(-1, 1) * 0.65 + sin(t * (90 - t * 170) * TAU) * 0.35) * exp(-t * 30)
+			var sample := (rng.randf_range(-1, 1) * 0.65 + sin(t * (90 - t * 170) * TAU) * 0.35) * exp(-t * (6 if kind == 3 else 30))
 			var n := int(clampf(sample, -1, 1) * 26000)
 			data.append(n & 255)
 			data.append((n >> 8) & 255)

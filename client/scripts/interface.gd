@@ -29,6 +29,7 @@ var sensitivity := 0.0022
 var volume := 0.65
 var settings := ConfigFile.new()
 var busy := false
+var grenade_warning_distance := INF
 var hit_until := 0
 var damage_until := 0
 var hit_color := Color.WHITE
@@ -286,13 +287,17 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 		weapon.text += "  [CROUCHED]"
 	health_bar.value = actor.health
 	armor_bar.value = actor.armor
-	prompt.text = "E  Pick up nearby supplies   |   H  Medkit ×%d" % actor.medkits
-	if actor.reload_left > 0:
+	prompt.text = "E  Pick up nearby supplies   |   H  Medkit ×%d   |   G  Frag ×%d" % [actor.medkits, actor.grenades]
+	if actor.throw_left > 0:
+		prompt.text = "THROWING FRAG"
+	elif actor.reload_left > 0:
 		prompt.text = "RELOADING   %.1fs" % actor.reload_left
 	elif actor.heal_left > 0:
 		prompt.text = "APPLYING MEDKIT   %.1fs" % actor.heal_left
 	elif Vector2(actor.position.x, actor.position.z).length() > zone:
 		prompt.text = "WARNING  /  RETURN TO THE SAFE ZONE"
+	if grenade_warning_distance < 9:
+		prompt.text = "FRAG NEARBY / %dm — MOVE TO COVER" % ceili(grenade_warning_distance)
 	feed.text = "\n".join(events)
 	result_label.text = message
 	local_position = actor.position

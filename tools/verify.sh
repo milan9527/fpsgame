@@ -20,8 +20,9 @@ for line in open('.env'):
     key, value = line.strip().split('=', 1)
     if key == 'SERVER_SECRET':
         os.environ[key] = value
-raise SystemExit(subprocess.call(['.venv/bin/pytest', '-q', 'backend/tests']))
+raise SystemExit(subprocess.call(['.venv/bin/pytest', '-q', 'backend/tests/test_integration.py']))
 PY
+docker compose run --rm --no-deps -v "$PWD/backend/tests:/app/tests:ro" api python -m pytest -q -p no:cacheprovider tests/test_migrations.py
 .venv/bin/python tools/test_online.py
 
 .venv/bin/python tools/test_full_round.py

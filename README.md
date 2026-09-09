@@ -54,7 +54,7 @@ tools/godot --headless --path client --editor --import
 ./tools/package.sh
 ```
 
-Blender 可以安装到其他位置再执行同一 Python 脚本。首个脚本会重建本项目的两份模型文件。更多操作见 [玩家指南](docs/PLAYER_GUIDE.md)、[架构](docs/ARCHITECTURE.md)、[运维](docs/OPERATIONS.md) 和 [真实开发状态](docs/STATUS.md)。
+Blender 可以安装到其他位置再执行同一 Python 脚本。首个脚本会重建本项目的两份模型文件。更多操作见 [玩家指南](docs/PLAYER_GUIDE.md)、[架构](docs/ARCHITECTURE.md)、[运维](docs/OPERATIONS.md)、[数据库迁移](docs/DATABASE_MIGRATIONS.md) 和 [真实开发状态](docs/STATUS.md)。
 
 ## 后台运行与持续开发边界
 

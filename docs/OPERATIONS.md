@@ -54,3 +54,5 @@ Linux 客户端以 OpenGL Compatibility 渲染。开发主机通过软件 OpenGL
 ## 测试资源
 
 骨骼蒙皮测试通过 Xvfb 使用实际 OpenGL 渲染，验证顶点变形与脚底位置；纯 headless 渲染器不能完成这项检查。联机测试账户凭据保存在忽略提交且权限为 0600 的 `artifacts/test-accounts.json`，不包含持久令牌。仅在重建测试数据库后删除此缓存以重新生成测试账户。
+
+数据库升级已改用 Alembic，API 启动前自动运行事务迁移；`/health` 返回实际版本。升级策略和真实数据保留验证见 [数据库迁移](DATABASE_MIGRATIONS.md)。

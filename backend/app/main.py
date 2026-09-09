@@ -12,49 +12,18 @@ from argon2.exceptions import VerificationError, InvalidHashError
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, create_engine, select, text
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+from sqlalchemy.orm import Session
+from .models import User, Match, Result
+from .database import engine
 
-DATABASE_URL = os.environ['DATABASE_URL']
 JWT_SECRET = os.environ['JWT_SECRET']
 SERVER_SECRET = os.environ['SERVER_SECRET']
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 cache = redis.Redis.from_url(os.environ['REDIS_URL'], decode_responses=True)
 passwords = PasswordHasher(time_cost=2, memory_cost=19456, parallelism=1)
 # One real verification for unknown accounts keeps timing comparable.
 DUMMY_HASH = passwords.hash(secrets.token_urlsafe(32))
-
-
-class Base(DeclarativeBase):
-    pass
-
-
-class User(Base):
-    __tablename__ = 'users'
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    username: Mapped[str] = mapped_column(String(24), unique=True, index=True)
-    password: Mapped[str] = mapped_column(String(256))
-    created: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    matches: Mapped[int] = mapped_column(Integer, default=0)
-    wins: Mapped[int] = mapped_column(Integer, default=0)
-    kills: Mapped[int] = mapped_column(Integer, default=0)
-
-
-class Match(Base):
-    __tablename__ = 'matches'
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    created: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-
-
-class Result(Base):
-    __tablename__ = 'results'
-    __table_args__ = (UniqueConstraint('match_id', 'user_id'),)
-    id: Mapped[int] = mapped_column(primary_key=True)
-    match_id: Mapped[str] = mapped_column(ForeignKey('matches.id'))
-    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'))
-    kills: Mapped[int] = mapped_column(Integer)
-    rank: Mapped[int] = mapped_column(Integer)
 
 
 app = FastAPI(title='Iron Meridian Services', version='0.1.0')
@@ -99,7 +68,7 @@ def token(user: User):
 def health(session: Session = Depends(db)):
     session.execute(text('SELECT 1'))
     cache.ping()
-    return {'status': 'ok', 'protocol': 1}
+    return {'status': 'ok', 'protocol': 1, 'schema_revision': session.scalar(text('SELECT version_num FROM alembic_version'))}
 
 
 @app.post('/auth/register', status_code=201)

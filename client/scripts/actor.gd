@@ -5,6 +5,11 @@ const FirstPerson = preload("res://scripts/first_person.gd")
 var character_animation := CharacterAnimation.new()
 var first_person := FirstPerson.new()
 var gun_model: Node3D
+var third_person_gun: Node3D
+var visual_weapon := -1
+var local_view := false
+const WEAPON_MODELS := ["res://assets/carbine.glb", "res://assets/shotgun.glb", "res://assets/marksman.glb"]
+const AIM_FOV := [48.0, 58.0, 24.0]
 var grounded := false
 const PREDICTION_LIMIT := 120
 var prediction_history: Array[Dictionary] = []
@@ -109,15 +114,6 @@ func _ready() -> void:
 	gun = Node3D.new()
 	gun.position = Vector3(0.26, -0.24, -0.48)
 	camera.add_child(gun)
-	if ResourceLoader.exists("res://assets/carbine.glb"):
-		var model = load("res://assets/carbine.glb").instantiate()
-		gun_model = model
-		model.scale = Vector3.ONE * 0.75
-		gun.add_child(model)
-	else:
-		add_gun_box(Vector3(0.11, 0.13, 0.42), Vector3.ZERO, Color("293f46"))
-		add_gun_box(Vector3(0.05, 0.05, 0.38), Vector3(0, 0.02, -0.32), Color("111d27"))
-		add_gun_box(Vector3(0.07, 0.22, 0.10), Vector3(0, -0.14, 0.03), Color("111d27"))
 	muzzle = MeshInstance3D.new()
 	var flare := CylinderMesh.new()
 	flare.top_radius = 0.0
@@ -134,6 +130,38 @@ func _ready() -> void:
 	muzzle.visible = false
 	gun.add_child(muzzle)
 	gun.visible = false
+	update_weapon_visuals()
+
+func update_weapon_visuals(force := false) -> void:
+	if visual_weapon == weapon and not force:
+		return
+	visual_weapon = weapon
+	if third_person_gun != null:
+		third_person_gun.get_parent().remove_child(third_person_gun)
+		third_person_gun.queue_free()
+	if character_animation.available:
+		third_person_gun = load(WEAPON_MODELS[weapon]).instantiate()
+		character_animation.skeleton.add_child(third_person_gun)
+		update_weapon_attachment()
+	if local_view:
+		if gun_model != null:
+			gun.remove_child(gun_model)
+			gun_model.queue_free()
+		gun_model = load(WEAPON_MODELS[weapon]).instantiate()
+		gun_model.scale = Vector3.ONE * 0.75
+		gun.add_child(gun_model)
+		first_person.bind_weapon(gun_model, gun, weapon)
+		var anchor = gun_model.find_child("MuzzleAnchor", true, false)
+		if anchor != null:
+			muzzle.position = gun.to_local(anchor.global_position)
+
+func update_weapon_attachment() -> void:
+	if third_person_gun == null:
+		return
+	var skeleton: Skeleton3D = character_animation.skeleton
+	var bone := skeleton.find_bone("Weapon")
+	var rest := skeleton.get_bone_global_rest(bone)
+	third_person_gun.transform = skeleton.get_bone_global_pose(bone) * rest.affine_inverse() * Transform3D(Basis.IDENTITY, rest.origin)
 
 func add_gun_box(size: Vector3, offset: Vector3, color: Color) -> void:
 	var m := MeshInstance3D.new()
@@ -149,10 +177,12 @@ func add_gun_box(size: Vector3, offset: Vector3, color: Color) -> void:
 	gun.add_child(m)
 
 func set_local() -> void:
+	local_view = true
 	camera.current = true
 	body_mesh.visible = false
 	gun.visible = true
 	first_person.setup(gun, gun_model)
+	update_weapon_visuals(true)
 
 func simulate(dt: float) -> void:
 	action_tokens = minf(10, action_tokens + dt * 10)
@@ -330,7 +360,9 @@ func unpack(data: Dictionary, local: bool) -> void:
 	alive = data.live
 
 func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> void:
+	update_weapon_visuals()
 	character_animation.update(self, dt)
+	update_weapon_attachment()
 	if network_client and not local:
 		position = position.lerp(target_position, minf(1, dt * 20))
 	rotation.y = yaw
@@ -355,7 +387,7 @@ func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> vo
 		camera.rotation.x = clampf(pitch + recoil, -1.5, 1.5) - pitch
 		first_person.update(self, dt, ads)
 		var can_aim := ads and reload_left <= 0 and heal_left <= 0 and throw_left <= 0
-		camera.fov = lerpf(camera.fov, 48.0 if can_aim else 85.0, minf(1, dt * 12))
+		camera.fov = lerpf(camera.fov, AIM_FOV[weapon] if can_aim else 85.0, minf(1, dt * 12))
 
 func eye_height() -> float:
 	return 0.98 if crouched else 1.6

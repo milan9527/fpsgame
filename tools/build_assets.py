@@ -64,17 +64,37 @@ box('Optic top', (0, -0.015, 0.162), (0.07, 0.065, 0.012), steel)
 for i in range(6):
     box('Rail_%02d' % i, (0, 0.10 + i * 0.032, 0.065), (0.09, 0.016, 0.012), steel, 0.003)
 box('Identification plate', (0.052, -0.025, 0.015), (0.005, 0.07, 0.025), brass, 0.001)
+def anchor(name, location):
+    obj = bpy.data.objects.new(name, None)
+    bpy.context.collection.objects.link(obj)
+    obj.location = location
+
+def merge_weapon():
+    parts = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH'
+             and not obj.name.startswith(('Magazine', 'Butt'))]
+    for obj in parts:
+        bpy.context.view_layer.objects.active = obj
+        for modifier in list(obj.modifiers):
+            bpy.ops.object.modifier_apply(modifier=modifier.name)
+    bpy.ops.object.select_all(action='DESELECT')
+    for obj in parts:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = parts[0]
+    bpy.ops.object.join()
+    bpy.context.object.name = 'WeaponBody'
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+anchor('SightAnchor', (0, -0.015, 0.13))
+anchor('MuzzleAnchor', (0, 0.585, 0.015))
+merge_weapon()
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.export_scene.gltf(filepath=str(OUT / 'carbine.glb'), export_format='GLB', use_selection=True)
 bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / 'carbine.blend'))
-weapon_parts = list(bpy.context.scene.objects)
-for part in weapon_parts:
-    for collection in list(part.users_collection):
-        collection.objects.unlink(part)
+exec(compile((ROOT / 'tools' / 'build_weapon_variants.py').read_text(), 'build_weapon_variants.py', 'exec'))
 
 # The humanoid authoring script shares the material palette and mesh helpers.
 exec(compile((ROOT / 'tools' / 'build_operator.py').read_text(), 'build_operator.py', 'exec'))
-print('ASSETS_BUILT carbine.glb operator.glb')
+print('ASSETS_BUILT carbine.glb shotgun.glb marksman.glb operator.glb')
 
 exec(compile((ROOT / 'tools' / 'build_grenade.py').read_text(), str(ROOT / 'tools' / 'build_grenade.py'), 'exec'))
 exec(compile((ROOT / 'tools' / 'build_viewmodel.py').read_text(), str(ROOT / 'tools' / 'build_viewmodel.py'), 'exec'))

@@ -74,6 +74,8 @@ var test_remote_animation := false
 var test_grenade_seen := false
 var test_grenade_exploded := false
 var test_throw_sent := false
+var test_switch_stage := 0
+var test_remote_weapons := {}
 var authenticated_at := 0
 var build_info: Dictionary = {}
 
@@ -364,6 +366,9 @@ func _physics_process(dt: float) -> void:
 				test_crouched = test_crouched or (player.crouched and player.head.position.y < 1.1)
 				test_recoil = test_recoil or player.recoil > 0
 				for other in actors.values():
+					if other.actor_id > 0 and other.actor_id != local_id and other.third_person_gun != null:
+						if other.third_person_gun.scene_file_path == other.WEAPON_MODELS[other.weapon]:
+							test_remote_weapons[other.weapon] = true
 					if other.actor_id > 0 and other.actor_id != local_id and other.crouched:
 						test_remote_crouch = true
 						if other.character_animation.available and other.character_animation.active_clip.begins_with("Crouch"):
@@ -376,8 +381,8 @@ func _physics_process(dt: float) -> void:
 				request_quit()
 			if not round_client and bot_test_timer > 26:
 				var audio_ok: bool = not audio_test or (sound.played_events.get("gun_ar", 0) > 0 and sound.played_events.get("step_hard", 0) + sound.played_events.get("step_grass", 0) > 0)
-				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_grenade_seen and test_grenade_exploded and actors[local_id].grenades == 1 and actors[local_id].prediction_corrections > 20 and audio_ok:
-					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok grenade=ok explosion=ok action_once=ok reconciliation=ok audio=%s" % [local_id, actors.size(), phase, "ok" if audio_test else "muted"])
+				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_remote_weapons.size() == 3 and test_grenade_seen and test_grenade_exploded and actors[local_id].grenades == 1 and actors[local_id].prediction_corrections > 20 and audio_ok:
+					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok grenade=ok explosion=ok action_once=ok weapon_models=ok reconciliation=ok audio=%s" % [local_id, actors.size(), phase, "ok" if audio_test else "muted"])
 					request_quit()
 				else:
 					push_error("Online smoke test failed to reach active match")
@@ -476,6 +481,10 @@ func local_command(actor) -> Dictionary:
 			cmd.throw = true
 			action_latch["throw"] = true
 			test_throw_sent = true
+		if phase == "live" and ((bot_test_timer > 21 and test_switch_stage == 0) or (bot_test_timer > 23 and test_switch_stage == 1)):
+			test_switch_stage += 1
+			cmd.weapon = test_switch_stage
+			action_latch.weapon = test_switch_stage
 	return cmd
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)

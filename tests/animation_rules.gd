@@ -31,10 +31,10 @@ func run() -> void:
 	var shin := skeleton.find_bone("Shin.L")
 	var foot := skeleton.find_bone("Foot.L")
 	assert(head >= 0 and shin >= 0 and foot >= 0)
-	var meshes: Array = actor.body_mesh.find_children("*", "MeshInstance3D", true, false)
+	var meshes: Array = actor.body_mesh.find_children("*", "MeshInstance3D", true, false).filter(func(mesh): return mesh.skin != null)
 	assert(meshes.size() == 1, "Character mesh is merged for bounded draw submissions")
 	var skin: MeshInstance3D = meshes[0]
-	assert(skin.skin != null and skin.mesh.get_surface_count() == 6)
+	assert(skin.skin != null and skin.mesh.get_surface_count() == 4)
 	skeleton.force_update_all_bone_transforms()
 	await RenderingServer.frame_post_draw
 	var standing_bounds := skin.bake_mesh_from_current_skeleton_pose().get_aabb()

@@ -119,13 +119,7 @@ for side, sign in [('L', -1), ('R', 1)]:
         obj.data.materials.append(armor)
         skin(obj, bone + side)
     panel('Pouch ' + side, (sign * 0.12, 0.17, 1.11), (0.12, 0.10, 0.17), cloth, 'Hips')
-# Use the project's original gun geometry as a skinned third-person weapon.
-for obj in weapon_parts:
-    if obj is None or obj.type != 'MESH':
-        continue
-    bpy.context.collection.objects.link(obj)
-    obj.location += rest['Weapon']
-    skin(obj, 'Weapon')
+# Weapon bone remains animated; Godot attaches the currently equipped model.
 
 # One skinned mesh with material surfaces avoids dozens of mesh submissions per actor.
 bpy.ops.object.select_all(action='DESELECT')

@@ -9,6 +9,7 @@ mkdir -p artifacts/IronMeridian-Linux/docs
 cp docs/LOCAL_RESULTS.md artifacts/IronMeridian-Linux/docs/LOCAL_RESULTS.md
 cp docs/LAG_COMPENSATION.md artifacts/IronMeridian-Linux/docs/LAG_COMPENSATION.md
 cp docs/PROTOCOL.md artifacts/IronMeridian-Linux/docs/PROTOCOL.md
+cp docs/WEAPON_VISUALS.md artifacts/IronMeridian-Linux/docs/WEAPON_VISUALS.md
 cp LICENSE artifacts/IronMeridian-Linux/LICENSE
 cat > artifacts/IronMeridian-Linux/play.sh <<'SH'
 #!/usr/bin/env bash
@@ -18,6 +19,9 @@ exec ./IronMeridian --main-pack IronMeridian.pck "$@"
 SH
 chmod +x artifacts/IronMeridian-Linux/play.sh
 # A packed-project smoke run checks imported GLB assets and resource paths.
+timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/weapon_visuals_rules.gd" > artifacts/packed-weapon-visuals.log 2>&1
+rg -q WEAPON_VISUALS_RULES_PASS artifacts/packed-weapon-visuals.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-weapon-visuals.log; then cat artifacts/packed-weapon-visuals.log; exit 1; fi
 timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/reliable_actions_rules.gd" > artifacts/packed-reliable-actions.log 2>&1
 rg -q RELIABLE_ACTIONS_RULES_PASS artifacts/packed-reliable-actions.log
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-reliable-actions.log; then cat artifacts/packed-reliable-actions.log; exit 1; fi

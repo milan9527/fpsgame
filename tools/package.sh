@@ -19,6 +19,9 @@ exec ./IronMeridian --main-pack IronMeridian.pck "$@"
 SH
 chmod +x artifacts/IronMeridian-Linux/play.sh
 # A packed-project smoke run checks imported GLB assets and resource paths.
+timeout 20s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/pause_rules.gd" > artifacts/packed-pause.log 2>&1
+rg -q PAUSE_RULES_PASS artifacts/packed-pause.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-pause.log; then cat artifacts/packed-pause.log; exit 1; fi
 timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/weapon_obstruction_rules.gd" > artifacts/packed-weapon-obstruction.log 2>&1
 rg -q WEAPON_OBSTRUCTION_RULES_PASS artifacts/packed-weapon-obstruction.log
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-weapon-obstruction.log; then cat artifacts/packed-weapon-obstruction.log; exit 1; fi

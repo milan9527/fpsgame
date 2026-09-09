@@ -31,6 +31,7 @@
 - Alembic 数据库版本、旧库基线校验、并发迁移锁、事务回滚、统计约束与战绩查询索引。
 - Docker 后台运行、健康检查、持久卷、日志轮转和备份脚本。
 - 单机本地战绩、完成/中止分类、历史查询、独立记录原子发布、校验与备用副本读取、并发去重、失败重试和未保存退出保护；不包含进行中的对局续存。
+- 单机 Esc/失去焦点真正暂停模拟、物理、计时、动画、音频和瞬态特效；菜单保持可操作，恢复/返回/退出安全清理。在线菜单不暂停服务器且明确提示风险。
 - 客户端/API/专服共享版本清单；登录前兼容提示、匹配票据版本绑定、专服监听前版本检查。详见 [协议部署说明](PROTOCOL.md)。
 
 ## 已验证的证据
@@ -106,6 +107,10 @@
 | 近墙枪管参数与 Blender 挂点一致 | 通过 | `artifacts/packed-weapon-visuals.log` |
 | 近墙版本枪战、联机、整局落库、内容兼容回归 | 通过 | `artifacts/obstruction-combat.log`、`artifacts/obstruction-online.log`、`artifacts/obstruction-full-round.log`、`artifacts/obstruction-protocol.log` |
 | 实际收枪与受阻提示画面 | 已检查 | `artifacts/weapon-obstruction.png` |
+| 单机暂停的模拟/刚体/手雷引信/换弹/动画/音频/特效寿命/反馈计时、Esc/焦点/恢复/离开/暂停中退出 | 通过（实际 OpenGL 及打包版） | `artifacts/pause-rules.log`、`artifacts/packed-pause.log` |
+| 两个真实客户端在线菜单期间对局快照继续推进、恢复操作与退出 | 通过 | `artifacts/pause-online.log` |
+| 暂停版本完整回合落库与版本兼容 | 通过 | `artifacts/pause-full-round.log`、`artifacts/pause-protocol.log` |
+| 单机暂停菜单和冻结特效画面 | 已检查 | `artifacts/solo-pause.png` |
 
 20 倍速测试用于验证完整流程，不代表实时性能、弱网适应性或长期稳定性。双客户端验证不等于 16 真人并发验证。
 

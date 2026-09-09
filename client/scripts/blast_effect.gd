@@ -66,4 +66,4 @@ func _ready() -> void:
 	light.light_energy = 3
 	add_child(light)
 	create_tween().tween_property(light, "light_energy", 0.0, 0.2)
-	get_tree().create_timer(1.8).timeout.connect(queue_free)
+	get_tree().create_timer(1.8, false).timeout.connect(queue_free)

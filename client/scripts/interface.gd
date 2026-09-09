@@ -9,6 +9,9 @@ signal quit_without_save_requested
 signal local_history_requested
 signal volume_changed(value: float)
 signal sensitivity_changed(value: float)
+signal pause_changed(enabled: bool)
+var pause_description: Label
+var feedback_pause_time := -1
 var menu: Control
 var hud: Control
 var pause_panel: Control
@@ -164,7 +167,7 @@ func _ready() -> void:
 	var pause_box := VBoxContainer.new()
 	pause_panel.add_child(pause_box)
 	label(pause_box, "FIELD MENU", 28, ACCENT)
-	label(pause_box, "The operation continues while this menu is open.", 16)
+	pause_description = label(pause_box, "Operation paused.", 16)
 	button(pause_box, "RESUME", func(): set_pause(false))
 	button(pause_box, "RETURN TO DEPLOYMENT", func(): leave_requested.emit())
 	pause_panel.visible = false
@@ -298,6 +301,8 @@ func show_menu(message := "") -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func show_game() -> void:
+	feedback_pause_time = -1
+	pause_panel.visible = false
 	hit_until = 0
 	damage_until = 0
 	hit_text.text = ""
@@ -311,6 +316,18 @@ func show_game() -> void:
 func set_pause(enabled: bool) -> void:
 	pause_panel.visible = enabled
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if enabled else Input.MOUSE_MODE_CAPTURED
+	pause_changed.emit(enabled)
+
+func pause_feedback(enabled: bool) -> void:
+	var now := Time.get_ticks_msec()
+	if enabled and feedback_pause_time < 0:
+		feedback_pause_time = now
+	elif not enabled and feedback_pause_time >= 0:
+		if hit_until > feedback_pause_time:
+			hit_until += now - feedback_pause_time
+		if damage_until > feedback_pause_time:
+			damage_until += now - feedback_pause_time
+		feedback_pause_time = -1
 
 func draw_hud() -> void:
 	var center := hud.size / 2
@@ -321,7 +338,7 @@ func draw_hud() -> void:
 	elif not spectating and not sight_aiming:
 		for direction in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 			hud.draw_line(center + direction * 5, center + direction * 12, white, 2)
-	var now := Time.get_ticks_msec()
+	var now := feedback_pause_time if feedback_pause_time >= 0 else Time.get_ticks_msec()
 	if now < hit_until:
 		for direction in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
 			hud.draw_line(center + direction * 10, center + direction * 17, hit_color, 2)

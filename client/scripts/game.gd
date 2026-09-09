@@ -76,6 +76,9 @@ var test_grenade_exploded := false
 var test_throw_sent := false
 var test_switch_stage := 0
 var test_remote_weapons := {}
+var test_menu_started := false
+var test_menu_done := false
+var test_menu_time := 0.0
 var authenticated_at := 0
 var build_info: Dictionary = {}
 
@@ -98,7 +101,9 @@ func _ready() -> void:
 		api_url = OS.get_environment("API_URL")
 	server_key = OS.get_environment("SERVER_SECRET")
 	setup_input()
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	world = World.new()
+	world.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(world)
 	lobby_camera = Camera3D.new()
 	add_child(lobby_camera)
@@ -122,6 +127,7 @@ func _ready() -> void:
 		spectator = Spectator.new()
 		add_child(spectator)
 		sound = Sound.new()
+		sound.process_mode = Node.PROCESS_MODE_PAUSABLE
 		add_child(sound)
 		ui = Interface.new()
 		add_child(ui)
@@ -129,6 +135,7 @@ func _ready() -> void:
 		if audio_test:
 			sound.volume = 0.65
 		ui.volume_changed.connect(func(v): sound.volume = v)
+		ui.pause_changed.connect(change_pause)
 		ui.solo_requested.connect(start_solo)
 		ui.leaderboard_requested.connect(show_leaderboard)
 		ui.online_requested.connect(sign_in)
@@ -149,6 +156,8 @@ func _ready() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		request_quit()
+	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT and running and not online and not dedicated and ui != null:
+		ui.set_pause(true)
 
 func request_quit(code := 0, discard_local := false) -> void:
 	if shutdown_requested:
@@ -161,6 +170,7 @@ func request_quit(code := 0, discard_local := false) -> void:
 		ui.local_exit_button.visible = true
 		return
 	shutdown_requested = true
+	get_tree().paused = false
 	running = false
 	if sound != null:
 		sound.volume = 0
@@ -212,6 +222,7 @@ func start_server() -> void:
 	print("SERVER_READY udp=" + str(listen_port) + " relay=" + str(multiplayer.server_relay))
 
 func start_solo() -> void:
+	get_tree().paused = false
 	save_local_operation()
 	flush_local_results()
 	world.prepare_navigation()
@@ -273,6 +284,7 @@ func spawn_position(index: int) -> Vector3:
 
 func spawn_actor(id: int, nickname: String, bot: bool, at: Vector3):
 	var actor = Actor.new()
+	actor.process_mode = Node.PROCESS_MODE_PAUSABLE
 	actor.actor_id = id
 	actor.display_name = nickname
 	actor.is_bot = bot
@@ -334,8 +346,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		actor.yaw = wrapf(actor.yaw - event.relative.x * ui.sensitivity * scale_aim, -PI, PI)
 		actor.pitch = clampf(actor.pitch - event.relative.y * ui.sensitivity * scale_aim, -1.45, 1.45)
 
+func change_pause(enabled: bool) -> void:
+	get_tree().paused = enabled and running and not online and not dedicated
+	ui.pause_feedback(get_tree().paused)
+	ui.pause_description.text = "Operation paused. Resume when ready." if not online else "Online operation continues. You remain vulnerable."
+	action_latch.clear()
+
 func _physics_process(dt: float) -> void:
-	if not running:
+	if not running or get_tree().paused:
 		return
 	if not dedicated and actors.has(local_id):
 		var actor = actors[local_id]
@@ -354,6 +372,14 @@ func _physics_process(dt: float) -> void:
 	if online and not dedicated:
 		if bot_client:
 			bot_test_timer += dt
+			if not round_client and bot_test_timer > 20 and not test_menu_started:
+				test_menu_started = true
+				test_menu_time = phase_time
+				ui.set_pause(true)
+			if test_menu_started and not test_menu_done and bot_test_timer > 20.6:
+				assert(not get_tree().paused and phase_time < test_menu_time - 0.2, "Online menu must continue receiving the advancing round")
+				ui.set_pause(false)
+				test_menu_done = true
 			for grenade in grenades.values():
 				if grenade.owner_id == local_id:
 					test_grenade_seen = true
@@ -381,8 +407,8 @@ func _physics_process(dt: float) -> void:
 				request_quit()
 			if not round_client and bot_test_timer > 26:
 				var audio_ok: bool = not audio_test or (sound.played_events.get("gun_ar", 0) > 0 and sound.played_events.get("step_hard", 0) + sound.played_events.get("step_grass", 0) > 0)
-				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_remote_weapons.size() == 3 and test_grenade_seen and test_grenade_exploded and actors[local_id].grenades == 1 and actors[local_id].prediction_corrections > 20 and audio_ok:
-					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok grenade=ok explosion=ok action_once=ok weapon_models=ok reconciliation=ok audio=%s" % [local_id, actors.size(), phase, "ok" if audio_test else "muted"])
+				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_menu_done and test_remote_weapons.size() == 3 and test_grenade_seen and test_grenade_exploded and actors[local_id].grenades == 1 and actors[local_id].prediction_corrections > 20 and audio_ok:
+					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok grenade=ok explosion=ok action_once=ok weapon_models=ok online_menu=ok reconciliation=ok audio=%s" % [local_id, actors.size(), phase, "ok" if audio_test else "muted"])
 					request_quit()
 				else:
 					push_error("Online smoke test failed to reach active match")
@@ -759,7 +785,7 @@ func shot_fx(id: int, origin: Vector3, end: Vector3, kind: int) -> void:
 	mesh.surface_end()
 	line.mesh = mesh
 	add_child(line)
-	get_tree().create_timer(0.065).timeout.connect(line.queue_free)
+	get_tree().create_timer(0.065, false).timeout.connect(line.queue_free)
 
 func damage(target, amount: float, attacker_id: int, bypass_protection := false, headshot := false, cause := "THE ZONE", impact_origin = null) -> void:
 	if phase == "finished" or not target.alive or (not bypass_protection and phase == "live" and elapsed < 5):
@@ -876,7 +902,7 @@ func add_event(message: String) -> void:
 		events.pop_front()
 
 func _process(dt: float) -> void:
-	if dedicated or not running:
+	if dedicated or not running or get_tree().paused:
 		return
 	for id in actors:
 		actors[id].render_frame(dt, online, id == local_id, Input.is_action_pressed("aim"))
@@ -1089,6 +1115,7 @@ func leave(message := "") -> void:
 	if dedicated or shutdown_requested:
 		return
 	save_local_operation()
+	get_tree().paused = false
 	running = false
 	online = false
 	network_round_id = ""
@@ -1267,6 +1294,7 @@ func throw_grenade(actor) -> bool:
 	var travel := get_world_3d().direct_space_state.cast_motion(query)
 	destination = origin + query.motion * maxf(0, travel[0] - 0.02)
 	var grenade = Grenade.new()
+	grenade.process_mode = Node.PROCESS_MODE_PAUSABLE
 	grenade.grenade_id = next_grenade_id
 	next_grenade_id += 1
 	grenade.owner_id = actor.actor_id
@@ -1331,6 +1359,7 @@ func grenade_snapshot(packet: PackedByteArray) -> void:
 			continue
 		if not grenades.has(state.id):
 			var grenade = Grenade.new()
+			grenade.process_mode = Node.PROCESS_MODE_PAUSABLE
 			grenade.authoritative = false
 			grenade.grenade_id = state.id
 			grenade.position = state.p
@@ -1355,6 +1384,7 @@ func grenade_exploded(round_id: String, id: int, origin: Vector3) -> void:
 		grenades[id].queue_free()
 		grenades.erase(id)
 	var effect := BlastEffect.new()
+	effect.process_mode = Node.PROCESS_MODE_PAUSABLE
 	effect.position = origin
 	add_child(effect)
 	sound.shot(origin, 3)

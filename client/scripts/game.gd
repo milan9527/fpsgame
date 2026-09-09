@@ -9,6 +9,9 @@ const Sound = preload("res://scripts/sound.gd")
 const Spectator = preload("res://scripts/spectator.gd")
 const LocalProfile = preload("res://scripts/local_profile.gd")
 const BotNavigator = preload("res://scripts/bot_navigator.gd")
+const HitHistory = preload("res://scripts/hit_history.gd")
+var hit_history := HitHistory.new()
+var rewind_peers := {}
 const PORT := 27015
 const MAX_PLAYERS := 16
 const ROUND_SECONDS := 300.0
@@ -219,6 +222,8 @@ func start_solo() -> void:
 	ui.show_game()
 
 func clear_actors() -> void:
+	hit_history.clear()
+	rewind_peers.clear()
 	if sound != null:
 		sound.reset_round()
 	if spectator != null:
@@ -404,6 +409,9 @@ func _physics_process(dt: float) -> void:
 				actor.move_input = Vector2.ZERO
 				actor.shooting = false
 			actor.simulate(dt)
+		# Capture all actors at the same simulation boundary before resolving fire.
+		hit_history.record(elapsed, actors)
+		for actor in actors.values():
 			if actor.shooting:
 				shoot(actor)
 		if zone_tick >= 1:
@@ -618,6 +626,25 @@ func visible_target(actor, other) -> bool:
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	return not hit.is_empty() and hit.collider == other
 
+func shot_rewind_age(actor) -> float:
+	if not dedicated or actor.is_bot or not peer_ready(actor.actor_id):
+		return 0
+	var peer: ENetPacketPeer = multiplayer.multiplayer_peer.get_peer(actor.actor_id)
+	return HitHistory.rewind_age(peer.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME))
+
+func trace_shot(actor, origin: Vector3, direction: Vector3, rewind: float) -> Dictionary:
+	rewind = clampf(rewind, 0, HitHistory.MAX_REWIND) if is_finite(rewind) else 0
+	if rewind <= 0 or hit_history.poses_at(elapsed - rewind).is_empty():
+		var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 3, [actor.get_rid()])
+		return get_world_3d().direct_space_state.intersect_ray(query)
+	# Static world cover is never rewound. Historical capsules are queried
+	# analytically, so no live physics body is moved or exposed to other systems.
+	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 1)
+	var wall := get_world_3d().direct_space_state.intersect_ray(query)
+	var limit: float = 180 if wall.is_empty() else origin.distance_to(wall.position)
+	var hit: Dictionary = hit_history.trace(elapsed - rewind, origin, direction, limit, actor.actor_id, actors)
+	return wall if hit.is_empty() else hit
+
 func shoot(actor) -> void:
 	if not actor.alive or actor.fire_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or actor.ammo <= 0 or actor.throw_left > 0 or phase != "live":
 		return
@@ -627,17 +654,20 @@ func shoot(actor) -> void:
 		actor.fire_left *= 3.0
 	var origin: Vector3 = actor.eye_position()
 	var last_end := origin
+	var rewind := shot_rewind_age(actor)
+	if dedicated and rewind > 0 and not rewind_peers.has(actor.actor_id) and not hit_history.poses_at(elapsed - rewind).is_empty():
+		rewind_peers[actor.actor_id] = true
+		print("REWIND_ACTIVE peer=%d age_ms=%d" % [actor.actor_id, int(rewind * 1000)])
 	for pellet in range(7 if actor.weapon == 1 else 1):
 		var spread: float = actor.shot_spread()
 		if actor.is_bot:
 			spread += 0.07
 		var direction := Basis(Vector3.UP, actor.yaw) * Basis(Vector3.RIGHT, clampf(actor.pitch + actor.recoil, -1.5, 1.5)) * Vector3(rng.randf_range(-spread, spread), rng.randf_range(-spread, spread), -1).normalized()
-		var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 3, [actor.get_rid()])
-		var hit := get_world_3d().direct_space_state.intersect_ray(query)
+		var hit := trace_shot(actor, origin, direction, rewind)
 		last_end = origin + direction * 100 if hit.is_empty() else hit.position
 		if not hit.is_empty() and hit.collider is CharacterBody3D:
 			var target = hit.collider
-			var headshot: bool = hit.position.y - target.position.y > target.headshot_height()
+			var headshot: bool = hit.get("headshot", hit.position.y - target.position.y > target.headshot_height())
 			var amount: float = actor.DAMAGE[actor.weapon] * (1.65 if headshot else 1.0)
 			if actor.weapon == 1:
 				amount *= clampf(1 - origin.distance_to(hit.position) / 60, 0.15, 1)

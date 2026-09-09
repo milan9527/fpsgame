@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+timeout 25s ./tools/godot --headless --path client --script ../tests/lag_compensation_rules.gd > artifacts/lag-compensation-rules.log 2>&1
+rg -q LAG_COMPENSATION_RULES_PASS artifacts/lag-compensation-rules.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/lag-compensation-rules.log; then cat artifacts/lag-compensation-rules.log; exit 1; fi
 timeout 35s ./tools/godot --headless --path client --script ../tests/navigation_rules.gd > artifacts/navigation-rules.log 2>&1
 rg -q NAVIGATION_RULES_PASS artifacts/navigation-rules.log
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/navigation-rules.log; then cat artifacts/navigation-rules.log; exit 1; fi
@@ -53,3 +56,6 @@ if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/prediction-rules.log; then ca
 TEST_AUDIO=1 .venv/bin/python tools/test_online.py
 
 TEST_AUDIO=1 .venv/bin/python tools/test_full_round.py
+# Restart the single-room server so the delayed clients enter a fresh lobby.
+docker compose restart game
+.venv/bin/python tools/test_delayed_online.py

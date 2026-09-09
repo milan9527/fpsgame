@@ -7,6 +7,7 @@ cp tools/godot artifacts/IronMeridian-Linux/IronMeridian
 cp docs/PLAYER_GUIDE.md artifacts/IronMeridian-Linux/PLAYER_GUIDE.md
 mkdir -p artifacts/IronMeridian-Linux/docs
 cp docs/LOCAL_RESULTS.md artifacts/IronMeridian-Linux/docs/LOCAL_RESULTS.md
+cp docs/LAG_COMPENSATION.md artifacts/IronMeridian-Linux/docs/LAG_COMPENSATION.md
 cp LICENSE artifacts/IronMeridian-Linux/LICENSE
 cat > artifacts/IronMeridian-Linux/play.sh <<'SH'
 #!/usr/bin/env bash
@@ -16,6 +17,9 @@ exec ./IronMeridian --main-pack IronMeridian.pck "$@"
 SH
 chmod +x artifacts/IronMeridian-Linux/play.sh
 # A packed-project smoke run checks imported GLB assets and resource paths.
+timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/lag_compensation_rules.gd" > artifacts/packed-lag-compensation.log 2>&1
+rg -q LAG_COMPENSATION_RULES_PASS artifacts/packed-lag-compensation.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-lag-compensation.log; then cat artifacts/packed-lag-compensation.log; exit 1; fi
 timeout 35s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/navigation_rules.gd" > artifacts/packed-navigation.log 2>&1
 rg -q NAVIGATION_RULES_PASS artifacts/packed-navigation.log
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-navigation.log; then cat artifacts/packed-navigation.log; exit 1; fi

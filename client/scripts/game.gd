@@ -702,6 +702,9 @@ func trace_shot(actor, origin: Vector3, direction: Vector3, rewind: float) -> Di
 func shoot(actor) -> void:
 	if not actor.alive or actor.fire_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or actor.ammo <= 0 or actor.throw_left > 0 or phase != "live":
 		return
+	actor.weapon_blocked = actor.weapon_obstructed(actor.aiming)
+	if actor.weapon_blocked:
+		return
 	actor.ammo -= 1
 	actor.fire_left = actor.INTERVAL[actor.weapon]
 	if actor.is_bot:

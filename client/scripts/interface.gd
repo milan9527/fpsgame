@@ -50,6 +50,7 @@ var local_history_grid: GridContainer
 var local_exit_button: Button
 var spectating := false
 var sight_aiming := false
+var weapon_blocked := false
 var spectator_label: Label
 const INK := Color("0c1721")
 const ACCENT := Color("e2b875")
@@ -314,7 +315,10 @@ func set_pause(enabled: bool) -> void:
 func draw_hud() -> void:
 	var center := hud.size / 2
 	var white := Color(0.9, 0.95, 0.92, 0.85)
-	if not spectating and not sight_aiming:
+	if not spectating and weapon_blocked:
+		hud.draw_arc(center, 12, 0, TAU, 24, ACCENT, 2)
+		hud.draw_line(center + Vector2(-8, 8), center + Vector2(8, -8), ACCENT, 2)
+	elif not spectating and not sight_aiming:
 		for direction in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 			hud.draw_line(center + direction * 5, center + direction * 12, white, 2)
 	var now := Time.get_ticks_msec()
@@ -340,6 +344,7 @@ func draw_hud() -> void:
 	hud.draw_line(p, p + Vector2(-sin(local_yaw), -cos(local_yaw)) * 13, ACCENT, 2)
 
 func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: float, events: Array, message: String) -> void:
+	weapon_blocked = actor.weapon_blocked
 	headline.text = "ASH VALLEY   /   " + phase.to_upper()
 	stats.text = "%02d ALIVE    •    %02d ELIMINATIONS    •    ZONE %dm    •    %02d:%02d" % [alive_count, actor.kills, zone, int(time_left) / 60, int(time_left) % 60]
 	weapon.text = "%s    %02d / %03d" % [actor.NAMES[actor.weapon], actor.ammo, actor.reserve]
@@ -356,6 +361,8 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 		prompt.text = "APPLYING MEDKIT   %.1fs" % actor.heal_left
 	elif Vector2(actor.position.x, actor.position.z).length() > zone:
 		prompt.text = "WARNING  /  RETURN TO THE SAFE ZONE"
+	elif actor.weapon_blocked and not spectating:
+		prompt.text = "MUZZLE BLOCKED / STEP BACK OR REPOSITION"
 	if grenade_warning_distance < 9:
 		prompt.text = "FRAG NEARBY / %dm — MOVE TO COVER" % ceili(grenade_warning_distance)
 	feed.text = "\n".join(events)

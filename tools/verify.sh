@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+timeout 30s xvfb-run -a ./tools/godot --path client --audio-driver Dummy --script ../tests/weapon_obstruction_rules.gd -- --capture-obstruction > artifacts/weapon-obstruction.log 2>&1
+rg -q WEAPON_OBSTRUCTION_RULES_PASS artifacts/weapon-obstruction.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/weapon-obstruction.log; then cat artifacts/weapon-obstruction.log; exit 1; fi
 timeout 35s xvfb-run -a ./tools/godot --path client --audio-driver Dummy --script ../tests/weapon_visuals_rules.gd -- --capture-weapons > artifacts/weapon-visuals.log 2>&1
 rg -q WEAPON_VISUALS_RULES_PASS artifacts/weapon-visuals.log
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/weapon-visuals.log; then cat artifacts/weapon-visuals.log; exit 1; fi

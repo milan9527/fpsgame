@@ -46,6 +46,8 @@ func run() -> void:
 			var muzzle = actor.gun_model.find_child("MuzzleAnchor", true, false)
 			assert(sight != null and muzzle != null)
 			assert(actor.muzzle.global_position.distance_to(muzzle.global_position) < 0.001)
+			assert(actor.muzzle.position.distance_to(actor.BARREL_ENDS[weapon]) < 0.001, "Authority barrel probe matches Blender anchor")
+			assert(is_equal_approx(actor.first_person.sight_position.y, actor.OPTIC_HEIGHTS[weapon]))
 			if ads:
 				var eye_sight: Vector3 = actor.camera.to_local(sight.global_position)
 				assert(absf(eye_sight.x) < 0.001 and absf(eye_sight.y) < 0.001, "Each weapon's own optic aligns")

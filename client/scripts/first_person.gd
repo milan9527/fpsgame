@@ -13,6 +13,7 @@ var magazine: Node3D
 var magazine_rest := Vector3.ZERO
 var sight_dot: MeshInstance3D
 var sight_position := SIGHT
+var wall_blend := 0.0
 const HIP := Vector3(0.26, -0.24, -0.48)
 const AIM := Vector3(0, -0.0975, -0.40)
 const SIGHT := Vector3(0, 0.0975, 0.01125)
@@ -83,7 +84,8 @@ func update(actor, dt: float, ads: bool) -> void:
 		player.advance(dt)
 	else:
 		player.seek(player.get_animation(clips[desired]).length * progress, true)
-	aim_blend = move_toward(aim_blend, 1.0 if ads and desired == "Hold" else 0.0, dt * 7)
+	wall_blend = move_toward(wall_blend, 1.0 if actor.weapon_blocked else 0.0, dt * 8)
+	aim_blend = move_toward(aim_blend, 1.0 if ads and not actor.weapon_blocked and desired == "Hold" else 0.0, dt * 7)
 	var speed := Vector2(actor.velocity.x, actor.velocity.z).length()
 	motion_time += dt * (12 if speed < 6 else 17)
 	var bob := sin(motion_time) * minf(speed / 9, 1) * 0.014 * (1 - aim_blend)
@@ -99,10 +101,13 @@ func update(actor, dt: float, ads: bool) -> void:
 	elif speed > 6 and not ads:
 		angles.z = 0.18
 		location.y -= 0.035
+	if desired == "Hold" or desired == "Reload":
+		location += Vector3(-0.03, 0.14, 0.28) * wall_blend
+		angles += Vector3(-1.35, 0, 0.1) * wall_blend
 	actor.gun.position = location
 	actor.gun.rotation = angles
 	if weapon_model != null:
 		weapon_model.visible = desired not in ["Throw", "Heal"]
-	sight_dot.visible = desired not in ["Throw", "Heal"]
+	sight_dot.visible = desired not in ["Throw", "Heal"] and not actor.weapon_blocked
 	if magazine != null:
 		magazine.position = magazine_rest + Vector3(0, -0.32 * sin(progress * PI) ** 2 if desired == "Reload" else 0.0, 0)

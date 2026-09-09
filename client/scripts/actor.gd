@@ -10,6 +10,10 @@ var visual_weapon := -1
 var local_view := false
 const WEAPON_MODELS := ["res://assets/carbine.glb", "res://assets/shotgun.glb", "res://assets/marksman.glb"]
 const AIM_FOV := [48.0, 58.0, 24.0]
+const BARREL_ENDS := [Vector3(0, 0.01125, -0.43875), Vector3(0, 0.01875, -0.46875), Vector3(0, 0.01125, -0.66)]
+const OPTIC_HEIGHTS := [0.0975, 0.07875, 0.10875]
+var weapon_blocked := false
+var weapon_probe := SphereShape3D.new()
 var grounded := false
 const PREDICTION_LIMIT := 120
 var prediction_history: Array[Dictionary] = []
@@ -79,6 +83,7 @@ const RELOAD := [2.0, 2.8, 3.0]
 const NAMES := ["AR-30 / CARBINE", "SG-8 / BREACHER", "SR-5 / MARKSMAN"]
 
 func _ready() -> void:
+	weapon_probe.radius = 0.055
 	collision_layer = 2
 	collision_mask = 1 | 2
 	var shape := CollisionShape3D.new()
@@ -385,12 +390,32 @@ func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> vo
 					desired = origin + camera_error.normalized() * distance
 			camera.global_position = desired
 		camera.rotation.x = clampf(pitch + recoil, -1.5, 1.5) - pitch
+		weapon_blocked = weapon_obstructed(ads)
 		first_person.update(self, dt, ads)
-		var can_aim := ads and reload_left <= 0 and heal_left <= 0 and throw_left <= 0
+		var can_aim := ads and not weapon_blocked and reload_left <= 0 and heal_left <= 0 and throw_left <= 0
 		camera.fov = lerpf(camera.fov, AIM_FOV[weapon] if can_aim else 85.0, minf(1, dt * 12))
 
 func eye_height() -> float:
 	return 0.98 if crouched else 1.6
+
+func weapon_obstructed(ads: bool) -> bool:
+	var facing := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, clampf(pitch + recoil, -1.5, 1.5))
+	var offset := Vector3(0, -OPTIC_HEIGHTS[weapon], -0.40) if ads else Vector3(0.26, -0.24, -0.48)
+	var eye := eye_position()
+	var mount := eye + facing * offset
+	var tip: Vector3 = mount + facing * BARREL_ENDS[weapon]
+	return weapon_segment_blocked(eye, mount) or weapon_segment_blocked(mount, tip)
+
+func weapon_segment_blocked(from: Vector3, to: Vector3) -> bool:
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = weapon_probe
+	query.transform = Transform3D(Basis.IDENTITY, from)
+	query.collision_mask = 1 # World cover, never the shooter or other actors.
+	var space := get_world_3d().direct_space_state
+	if not space.intersect_shape(query, 1).is_empty():
+		return true
+	query.motion = to - from
+	return space.cast_motion(query)[0] < 0.999
 
 func eye_position() -> Vector3:
 	return position + Vector3.UP * eye_height()

@@ -29,6 +29,7 @@
 | Blender 资源生成 | 通过 | `artifacts/blender-build.log` |
 | 独立 PCK 包内运行 | 通过 | `artifacts/packed-smoke.log` |
 | 软件 OpenGL 实际画面 | 已渲染并检查 | `artifacts/menu.png`、`artifacts/game.png` |
+| 排行榜、记分板、返回菜单实际 UI 流程 | 通过 | `artifacts/ui-tests.log` |
 | 数据库逻辑备份 | 已生成并检查目录 | `artifacts/backup-test.log`、`artifacts/backup-verify.log` |
 
 20 倍速测试用于验证完整流程，不代表实时性能、弱网适应性或长期稳定性。双客户端验证不等于 16 真人并发验证。

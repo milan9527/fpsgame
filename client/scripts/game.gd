@@ -171,7 +171,9 @@ func reset_round() -> void:
 	phase = "lobby"
 	phase_time = 18
 	if online:
-		new_round.rpc(match_id)
+		for id in sessions:
+			if peer_ready(id):
+				new_round.rpc_id(id, match_id)
 
 func spawn_position(index: int) -> Vector3:
 	var angle := float(index) * 2.39996
@@ -472,7 +474,9 @@ func shoot(actor) -> void:
 			damage(target, amount, actor.actor_id, false, headshot)
 	actor.add_recoil()
 	if online:
-		shot_fx.rpc(actor.actor_id, origin, last_end, actor.weapon)
+		for id in sessions:
+			if peer_ready(id):
+				shot_fx.rpc_id(id, actor.actor_id, origin, last_end, actor.weapon)
 	else:
 		shot_fx(actor.actor_id, origin, last_end, actor.weapon)
 
@@ -596,6 +600,8 @@ func peer_connected(id: int) -> void:
 		pending[id] = {"at": Time.get_ticks_msec(), "checking": false}
 
 func peer_disconnected(id: int) -> void:
+	if dedicated:
+		print("PEER_DISCONNECTED peer=" + str(id))
 	pending.erase(id)
 	sessions.erase(id)
 	if dedicated and actors.has(id):
@@ -620,6 +626,9 @@ func authenticate(value: String) -> void:
 	pending[id].checking = true
 	var response: Dictionary = await http_call("/internal/tickets/consume", {"ticket": value}, true)
 	if not pending.has(id):
+		return
+	if not peer_ready(id):
+		pending.erase(id)
 		return
 	if response.code != 200 or sessions.size() >= MAX_PLAYERS:
 		multiplayer.multiplayer_peer.disconnect_peer(id)
@@ -655,6 +664,8 @@ func broadcast_snapshot() -> void:
 	var supplies_changed := loot.hash() != last_loot_hash
 	last_loot_hash = loot.hash()
 	for id in sessions:
+		if not peer_ready(id):
+			continue
 		if supplies_changed:
 			world_sync.rpc_id(id, match_id, loot)
 		# Four actors per compressed packet stay below the ENet MTU.
@@ -881,7 +892,7 @@ func show_leaderboard(endpoint: String) -> void:
 
 func deliver_feedback(id: int, kind: int, amount: float, headshot: bool, killed: bool, origin: Vector3) -> void:
 	if dedicated:
-		if sessions.has(id):
+		if sessions.has(id) and peer_ready(id):
 			combat_feedback.rpc_id(id, kind, amount, headshot, killed, origin)
 	elif id == local_id:
 		combat_feedback(kind, amount, headshot, killed, origin)
@@ -890,3 +901,9 @@ func deliver_feedback(id: int, kind: int, amount: float, headshot: bool, killed:
 func combat_feedback(kind: int, amount: float, headshot: bool, killed: bool, origin: Vector3) -> void:
 	if not dedicated and ui:
 		ui.combat_feedback(kind, amount, headshot, killed, origin)
+
+func peer_ready(id: int) -> bool:
+	if not dedicated or not multiplayer.get_peers().has(id):
+		return false
+	var peer: ENetPacketPeer = multiplayer.multiplayer_peer.get_peer(id)
+	return peer != null and peer.get_state() == ENetPacketPeer.STATE_CONNECTED

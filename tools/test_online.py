@@ -2,10 +2,13 @@
 import os
 from pathlib import Path
 import subprocess
+import re
+import time
 from test_accounts import account
 
 root = Path(__file__).resolve().parent.parent
 processes = []
+peer_ids = []
 try:
     for i in range(2):
         credentials = account('network-' + str(i))
@@ -22,10 +25,21 @@ try:
         output = path.read_text()
         print(output)
         assert code == 0 and 'ONLINE_CLIENT_PASS' in output, f'Client failed: {path}'
+        peer_ids.append(re.search(r'ONLINE_CLIENT_PASS id=(\d+)', output).group(1))
 finally:
     for proc, log, _ in processes:
         if proc.poll() is None:
             proc.kill()
             proc.wait()
         log.close()
-print('TWO_CLIENT_ONLINE_PASS')
+for _ in range(40):
+    server_output = subprocess.check_output(['docker', 'compose', 'logs', '--no-color', '--since', '2m', 'game'], cwd=root, text=True)
+    if all('PEER_DISCONNECTED peer=' + peer in server_output for peer in peer_ids):
+        break
+    time.sleep(0.2)
+else:
+    raise AssertionError('Server did not confirm both disconnects')
+(root / 'artifacts' / 'online-server.log').write_text(server_output)
+assert 'Unable to send packet' not in server_output, server_output
+assert 'SCRIPT ERROR' not in server_output, server_output
+print('TWO_CLIENT_ONLINE_PASS disconnect=ok')

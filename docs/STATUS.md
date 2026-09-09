@@ -14,7 +14,7 @@
 - 缩圈、淘汰、排名、超时裁定和在线回合重启。
 - 图形菜单、设置保存、局内 HUD、小地图、Tab 记分板、账户登录与注册、在线排行榜。
 - 60Hz 服务器模拟、30Hz 输入、20Hz 分批压缩快照、可靠补给同步、回合隔离。
-- 输入验证、序列检查、速率控制、停发输入后的移动/射击停止、一次性联机票据。
+- 输入验证、序列检查、速率控制、停发输入后的移动/射击停止、一次性联机票据；向客户端发送前检查 ENet 连接是否仍可用。
 - PostgreSQL 账户与战绩；Redis 票据和限速；事务、幂等统计、战绩磁盘重试队列。
 - Alembic 数据库版本、旧库基线校验、并发迁移锁、事务回滚、统计约束与战绩查询索引。
 - Docker 后台运行、健康检查、持久卷、日志轮转和备份脚本。
@@ -37,6 +37,7 @@
 | 空库/旧库迁移、并发迁移、漂移拒绝、错误数据回滚、版本保护 | 6 项通过 | `artifacts/migration-tests.log` |
 | 运行库升级数据保留 | 全部应用行摘要一致，升级至 0002 | `artifacts/live-migration.log` |
 | 升级后 API 与完整回合 | 5 项 API 测试及整局落库通过 | `artifacts/post-migration-api-tests.log`、`artifacts/post-migration-full-round.log` |
+| 双客户端退出与关闭连接发送保护 | 通过 | `artifacts/disconnect-online.log`、`artifacts/online-server.log` |
 | HTTP + PostgreSQL + Redis | 5 项通过 | `artifacts/backend-tests.log` |
 | 两个独立 Godot 客户端认证、同局、移动、开火 | 通过 | `artifacts/online-tests.log` |
 | 独立 20 倍速服务器完整对局与结果落库 | 通过 | `artifacts/full-round-test.log` |

@@ -1,0 +1,853 @@
+extends Node3D
+
+const Actor = preload("res://scripts/actor.gd")
+const World = preload("res://scripts/world.gd")
+const Interface = preload("res://scripts/interface.gd")
+const Sound = preload("res://scripts/sound.gd")
+const PORT := 27015
+const MAX_PLAYERS := 16
+const ROUND_SECONDS := 300.0
+var world
+var ui
+var sound
+var actors: Dictionary = {}
+var sessions: Dictionary = {}
+var pending: Dictionary = {}
+var participants: Dictionary = {}
+var loot: Dictionary = {}
+var last_loot_hash := 0
+var events: Array = []
+var dedicated := false
+var online := false
+var running := false
+var phase := "standby"
+var phase_time := 0.0
+var elapsed := 0.0
+var zone := 110.0
+var zone_tick := 0.0
+var net_tick := 0.0
+var local_id := 1
+var sequence := 0
+var action_latch: Dictionary = {}
+var token := ""
+var token_origin := ""
+var ticket := ""
+var api_url := "http://127.0.0.1:8000"
+var server_key := ""
+var match_id := ""
+var network_round_id := ""
+var result_outbox: Array = []
+var submitting := false
+var retry_time := 0.0
+var lobby_camera: Camera3D
+var rng := RandomNumberGenerator.new()
+var smoke := false
+var smoke_frames := 0
+var bot_client := false
+var round_client := false
+var bot_test_timer := 0.0
+var test_start_position := Vector3.ZERO
+var test_moved := false
+var test_fired := false
+var authenticated_at := 0
+
+func _ready() -> void:
+	rng.randomize()
+	var args := OS.get_cmdline_user_args()
+	dedicated = "--server" in args
+	smoke = "--smoke" in args
+	bot_client = "--bot-client" in args
+	round_client = "--round-client" in args
+	if OS.has_environment("API_URL"):
+		api_url = OS.get_environment("API_URL")
+	server_key = OS.get_environment("SERVER_SECRET")
+	setup_input()
+	world = World.new()
+	add_child(world)
+	lobby_camera = Camera3D.new()
+	add_child(lobby_camera)
+	lobby_camera.position = Vector3(0, 60, 80)
+	lobby_camera.look_at(Vector3.ZERO)
+	lobby_camera.current = true
+	multiplayer.peer_connected.connect(peer_connected)
+	multiplayer.peer_disconnected.connect(peer_disconnected)
+	multiplayer.connected_to_server.connect(connected)
+	multiplayer.connection_failed.connect(func(): leave("Unable to reach game server"))
+	multiplayer.server_disconnected.connect(func(): leave("Connection to server lost"))
+	if dedicated:
+		start_server()
+	else:
+		sound = Sound.new()
+		add_child(sound)
+		ui = Interface.new()
+		add_child(ui)
+		sound.volume = 0.0 if smoke or bot_client else ui.volume
+		ui.volume_changed.connect(func(v): sound.volume = v)
+		ui.solo_requested.connect(start_solo)
+		ui.leaderboard_requested.connect(show_leaderboard)
+		ui.online_requested.connect(sign_in)
+		ui.leave_requested.connect(func(): leave())
+		if smoke:
+			call_deferred("start_solo")
+		elif "--capture-game" in args:
+			call_deferred("start_solo")
+			call_deferred("capture_frame")
+		elif "--capture-menu" in args:
+			call_deferred("capture_frame")
+		elif bot_client:
+			call_deferred("sign_in", OS.get_environment("TEST_USERNAME"), OS.get_environment("TEST_PASSWORD"), false, api_url)
+
+func setup_input() -> void:
+	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "scoreboard": KEY_TAB}
+	for action in keys:
+		InputMap.add_action(action)
+		var e := InputEventKey.new()
+		e.physical_keycode = keys[action]
+		InputMap.action_add_event(action, e)
+	for action in ["fire", "aim"]:
+		InputMap.add_action(action)
+		var e := InputEventMouseButton.new()
+		e.button_index = MOUSE_BUTTON_LEFT if action == "fire" else MOUSE_BUTTON_RIGHT
+		InputMap.action_add_event(action, e)
+
+func start_server() -> void:
+	if server_key.length() < 32:
+		push_error("SERVER_SECRET must contain at least 32 characters")
+		get_tree().quit(1)
+		return
+	var peer := ENetMultiplayerPeer.new()
+	var listen_port := int(OS.get_environment("GAME_PORT")) if OS.has_environment("GAME_PORT") else PORT
+	var error := peer.create_server(listen_port, MAX_PLAYERS + 8)
+	if error != OK:
+		push_error("Cannot bind game port: " + str(error))
+		get_tree().quit(1)
+		return
+	multiplayer.multiplayer_peer = peer
+	online = true
+	running = true
+	phase = "waiting"
+	load_outbox()
+	print("SERVER_READY udp=" + str(listen_port))
+
+func start_solo() -> void:
+	online = false
+	running = true
+	local_id = 1
+	sessions = {1: {"username": "YOU", "uid": ""}}
+	reset_round()
+	begin_round()
+	ui.show_game()
+
+func clear_actors() -> void:
+	for actor in actors.values():
+		remove_child(actor)
+		actor.queue_free()
+	actors.clear()
+
+func reset_round() -> void:
+	clear_actors()
+	participants.clear()
+	events.clear()
+	loot.clear()
+	elapsed = 0
+	zone = 110
+	zone_tick = 0
+	world.set_zone(zone)
+	match_id = uuid4()
+	var index := 0
+	for id in sessions:
+		var actor = spawn_actor(id, sessions[id].username, false, spawn_position(index))
+		actor.user_id = sessions[id].uid
+		index += 1
+	for i in range(48):
+		# Supplies are placed along open approaches, outside building walls.
+		var p := Vector3([-18.0, 18.0, -90.0, 90.0][i % 4], 0.1, -88 + (i / 4) * 16)
+		loot[i] = {"p": p, "kind": i % 3}
+	world.show_loot(loot)
+	phase = "lobby"
+	phase_time = 18
+	if online:
+		new_round.rpc(match_id)
+
+func spawn_position(index: int) -> Vector3:
+	var angle := float(index) * 2.39996
+	return Vector3(sin(angle) * 90, 1, cos(angle) * 90)
+
+func spawn_actor(id: int, nickname: String, bot: bool, at: Vector3):
+	var actor = Actor.new()
+	actor.actor_id = id
+	actor.display_name = nickname
+	actor.is_bot = bot
+	actor.position = at
+	actor.target_position = at
+	actor.name = "Operator_" + str(id).replace("-", "b")
+	add_child(actor)
+	actors[id] = actor
+	if not dedicated and id == local_id:
+		actor.set_local()
+	return actor
+
+func begin_round() -> void:
+	var human_count := actors.size()
+	for i in range(MAX_PLAYERS - human_count):
+		spawn_actor(-i - 1, "RANGER-%02d" % (i + 1), true, spawn_position(human_count + i))
+	for id in actors:
+		var actor = actors[id]
+		if not actor.is_bot:
+			participants[id] = {"user_id": actor.user_id, "kills": 0, "rank": 0}
+	phase = "live"
+	elapsed = 0
+	phase_time = ROUND_SECONDS
+	add_event("Operation live. Last operator standing wins.")
+
+@rpc("authority", "call_remote", "reliable")
+func new_round(id: String) -> void:
+	network_round_id = id
+	clear_actors()
+	ui.result_label.text = ""
+	ui.show_game()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if dedicated or not running:
+		return
+	if event.is_action_pressed("pause"):
+		ui.set_pause(not ui.pause_panel.visible)
+	if not actors.has(local_id):
+		return
+	var actor = actors[local_id]
+	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		var scale_aim := 0.55 if Input.is_action_pressed("aim") else 1.0
+		actor.yaw = wrapf(actor.yaw - event.relative.x * ui.sensitivity * scale_aim, -PI, PI)
+		actor.pitch = clampf(actor.pitch - event.relative.y * ui.sensitivity * scale_aim, -1.45, 1.45)
+
+func _physics_process(dt: float) -> void:
+	if not running:
+		return
+	if not dedicated and actors.has(local_id):
+		var actor = actors[local_id]
+		var cmd := local_command(actor)
+		if online:
+			net_tick += dt
+			if net_tick >= 1.0 / 30:
+				net_tick = 0
+				input_command.rpc_id(1, cmd)
+				action_latch.clear()
+		else:
+			apply_command(actor, cmd)
+	if online and not dedicated:
+		if bot_client:
+			bot_test_timer += dt
+			if actors.has(local_id):
+				var player = actors[local_id]
+				if test_start_position == Vector3.ZERO:
+					test_start_position = player.position
+				test_moved = test_moved or player.position.distance_to(test_start_position) > 1.0
+				test_fired = test_fired or player.ammo < 30
+			if round_client and phase == "finished" and actors.has(local_id) and actors[local_id].rank > 0:
+				print("FULL_ROUND_CLIENT_PASS rank=" + str(actors[local_id].rank))
+				get_tree().quit()
+			if not round_client and bot_test_timer > 26:
+				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired:
+					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s" % [local_id, actors.size(), phase])
+					get_tree().quit()
+				else:
+					push_error("Online smoke test failed to reach active match")
+					get_tree().quit(1)
+		return
+	for id in pending.keys():
+		if Time.get_ticks_msec() - pending[id].at > 8000:
+			multiplayer.multiplayer_peer.disconnect_peer(id)
+	if dedicated:
+		retry_time -= dt
+		if retry_time <= 0 and not submitting and not result_outbox.is_empty():
+			submit_result()
+	if phase == "waiting":
+		if not sessions.is_empty():
+			reset_round()
+	elif phase == "lobby":
+		phase_time -= dt
+		if phase_time <= 0:
+			begin_round()
+	elif phase == "live":
+		elapsed += dt
+		phase_time = maxf(0, ROUND_SECONDS - elapsed)
+		# Calm first 35 seconds; continuously closes to 4m by the final minute.
+		zone = lerpf(110, 4, clampf((elapsed - 35) / 220, 0, 1))
+		world.set_zone(zone)
+		zone_tick += dt
+		for actor in actors.values():
+			if actor.is_bot:
+				bot_input(actor, dt)
+			if dedicated and not actor.is_bot and Time.get_ticks_msec() - actor.last_command_msec > 350:
+				actor.move_input = Vector2.ZERO
+				actor.shooting = false
+			actor.simulate(dt)
+			if actor.shooting:
+				shoot(actor)
+		if zone_tick >= 1:
+			zone_tick = 0
+			for actor in actors.values():
+				if Vector2(actor.position.x, actor.position.z).length() > zone:
+					damage(actor, 5 + elapsed / 24, 0)
+		if alive_count() <= 1 or elapsed >= ROUND_SECONDS:
+			finish_round()
+	elif phase == "finished":
+		phase_time -= dt
+		if phase_time <= 0 and dedicated:
+			if sessions.is_empty():
+				clear_actors()
+				phase = "waiting"
+			else:
+				reset_round()
+	if dedicated:
+		net_tick += dt
+		if net_tick >= 0.05:
+			net_tick = 0
+			broadcast_snapshot()
+	if smoke:
+		smoke_frames += 1
+		if smoke_frames == 15:
+			run_smoke_checks()
+
+func local_command(actor) -> Dictionary:
+	sequence += 1
+	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "jump": false, "reload": false, "heal": false, "loot": false, "weapon": -1}
+	if ui.pause_panel.visible:
+		return cmd
+	var movement := Input.get_vector("left", "right", "forward", "back")
+	cmd.x = movement.x
+	cmd.z = movement.y
+	for action in ["fire", "sprint", "crouch"]:
+		cmd[action] = Input.is_action_pressed(action)
+	for action in ["jump", "reload", "heal", "loot"]:
+		cmd[action] = Input.is_action_just_pressed(action)
+	for i in range(3):
+		if Input.is_action_just_pressed("weapon" + str(i + 1)):
+			cmd.weapon = i
+	if online:
+		for action in ["jump", "reload", "heal", "loot"]:
+			if cmd[action]:
+				action_latch[action] = true
+			cmd[action] = action_latch.get(action, false)
+		if cmd.weapon >= 0:
+			action_latch.weapon = cmd.weapon
+		cmd.weapon = action_latch.get("weapon", -1)
+	if bot_client:
+		cmd.z = -1.0 if int(bot_test_timer) % 4 < 2 else 1.0
+		cmd.fire = true
+	return cmd
+
+@rpc("any_peer", "call_remote", "unreliable_ordered", 1)
+func input_command(cmd: Dictionary) -> void:
+	if not dedicated:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if not sessions.has(id) or not actors.has(id):
+		return
+	var actor = actors[id]
+	if actor.command_tokens < 1:
+		return
+	actor.command_tokens -= 1
+	if not valid_command(cmd) or int(cmd.seq) <= actor.last_sequence:
+		return
+	actor.last_command_msec = Time.get_ticks_msec()
+	actor.last_sequence = int(cmd.seq)
+	apply_command(actor, cmd)
+
+func valid_command(cmd: Dictionary) -> bool:
+	if cmd.size() != 13:
+		return false
+	for key in ["seq", "x", "z", "yaw", "pitch", "weapon"]:
+		if not cmd.has(key) or not (cmd[key] is float or cmd[key] is int):
+			return false
+		if not is_finite(float(cmd[key])):
+			return false
+	for key in ["fire", "sprint", "crouch", "jump", "reload", "heal", "loot"]:
+		if not cmd.has(key) or not cmd[key] is bool:
+			return false
+	return absf(cmd.x) <= 1 and absf(cmd.z) <= 1 and absf(cmd.yaw) <= PI + 0.01 and absf(cmd.pitch) <= 1.46 and cmd.weapon >= -1 and cmd.weapon <= 2
+
+func apply_command(actor, cmd: Dictionary) -> void:
+	actor.move_input = Vector2(cmd.x, cmd.z).limit_length()
+	actor.yaw = cmd.yaw
+	actor.pitch = cmd.pitch
+	actor.shooting = cmd.fire and phase == "live"
+	actor.sprint = cmd.sprint
+	actor.crouch = cmd.crouch
+	actor.jump_requested = actor.jump_requested or cmd.jump
+	if phase != "live":
+		return
+	if cmd.reload:
+		actor.reload_weapon()
+	if cmd.heal:
+		actor.heal()
+	if cmd.weapon >= 0:
+		actor.switch_weapon(int(cmd.weapon))
+	if cmd.loot:
+		pickup(actor)
+
+func bot_input(actor, dt: float) -> void:
+	if not actor.alive:
+		return
+	actor.bot_think -= dt
+	if actor.bot_think <= 0:
+		actor.bot_think = rng.randf_range(0.3, 0.65)
+		var best := 70.0
+		actor.target_id = 0
+		for other in actors.values():
+			if other == actor or not other.alive:
+				continue
+			var distance: float = actor.position.distance_to(other.position)
+			if distance < best and visible_target(actor, other):
+				best = distance
+				actor.target_id = other.actor_id
+	var destination := Vector3.ZERO
+	actor.shooting = false
+	if actors.has(actor.target_id):
+		var target = actors[actor.target_id]
+		destination = target.position
+		var aim: Vector3 = target.position + Vector3(0, 1.1, 0) - (actor.position + Vector3(0, 1.6, 0))
+		actor.yaw = atan2(-aim.x, -aim.z)
+		actor.pitch = atan2(aim.y, Vector2(aim.x, aim.z).length())
+		actor.shooting = visible_target(actor, target)
+		actor.move_input = Vector2(0.45 * sin(elapsed + actor.actor_id), -0.6 if aim.length() > 24 else 0.15)
+	else:
+		var direction: Vector3 = destination - actor.position
+		actor.yaw = atan2(-direction.x, -direction.z) + sin(elapsed * 0.35 + actor.actor_id) * 0.5
+		actor.move_input = Vector2(0, -1)
+		actor.pitch = 0
+	if actor.is_on_wall():
+		actor.move_input = Vector2(1, -0.2)
+		actor.jump_requested = true
+	actor.sprint = Vector2(actor.position.x, actor.position.z).length() > zone - 8
+	if actor.ammo == 0:
+		actor.reload_weapon()
+	if actor.health < 40 and actor.target_id == 0:
+		actor.heal()
+	pickup(actor)
+
+func visible_target(actor, other) -> bool:
+	var query := PhysicsRayQueryParameters3D.create(actor.position + Vector3(0, 1.55, 0), other.position + Vector3(0, 1.1, 0), 3, [actor.get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	return not hit.is_empty() and hit.collider == other
+
+func shoot(actor) -> void:
+	if not actor.alive or actor.fire_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or actor.ammo <= 0 or phase != "live":
+		return
+	actor.ammo -= 1
+	actor.fire_left = actor.INTERVAL[actor.weapon]
+	if actor.is_bot:
+		actor.fire_left *= 3.0
+	var origin: Vector3 = actor.position + Vector3(0, 1.6, 0)
+	var last_end := origin
+	for pellet in range(7 if actor.weapon == 1 else 1):
+		var spread := 0.045 if actor.weapon == 1 else 0.003
+		if actor.is_bot:
+			spread += 0.07
+		var direction := Basis(Vector3.UP, actor.yaw) * Basis(Vector3.RIGHT, actor.pitch) * Vector3(rng.randf_range(-spread, spread), rng.randf_range(-spread, spread), -1).normalized()
+		var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 3, [actor.get_rid()])
+		var hit := get_world_3d().direct_space_state.intersect_ray(query)
+		last_end = origin + direction * 100 if hit.is_empty() else hit.position
+		if not hit.is_empty() and hit.collider is CharacterBody3D:
+			var target = hit.collider
+			var headshot: bool = hit.position.y - target.position.y > 1.42
+			var amount: float = actor.DAMAGE[actor.weapon] * (1.65 if headshot else 1.0)
+			if actor.weapon == 1:
+				amount *= clampf(1 - origin.distance_to(hit.position) / 60, 0.15, 1)
+			damage(target, amount, actor.actor_id)
+	if online:
+		shot_fx.rpc(actor.actor_id, origin, last_end, actor.weapon)
+	else:
+		shot_fx(actor.actor_id, origin, last_end, actor.weapon)
+
+@rpc("authority", "call_remote", "unreliable", 2)
+func shot_fx(id: int, origin: Vector3, end: Vector3, kind: int) -> void:
+	if dedicated:
+		return
+	if actors.has(id):
+		actors[id].flash_left = 0.05
+	sound.shot(origin, kind)
+	var line := MeshInstance3D.new()
+	var mesh := ImmediateMesh.new()
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = Color("ffe3a0")
+	mesh.surface_begin(Mesh.PRIMITIVE_LINES, m)
+	mesh.surface_add_vertex(origin)
+	mesh.surface_add_vertex(end)
+	mesh.surface_end()
+	line.mesh = mesh
+	add_child(line)
+	get_tree().create_timer(0.065).timeout.connect(line.queue_free)
+
+func damage(target, amount: float, attacker_id: int, bypass_protection := false) -> void:
+	if not target.alive or (not bypass_protection and phase == "live" and elapsed < 5):
+		return
+	target.apply_damage(amount)
+	if not target.alive:
+		target.rank = alive_count() + 1
+		if participants.has(target.actor_id):
+			participants[target.actor_id].rank = target.rank
+		var source := "THE ZONE"
+		if actors.has(attacker_id) and attacker_id != target.actor_id:
+			var attacker = actors[attacker_id]
+			attacker.kills += 1
+			source = attacker.display_name
+			if participants.has(attacker_id):
+				participants[attacker_id].kills = attacker.kills
+		add_event(source + "  >  " + target.display_name)
+		var loot_id := 1000 + absi(target.actor_id)
+		loot[loot_id] = {"p": target.position, "kind": 0}
+
+func pickup(actor) -> void:
+	if not actor.alive:
+		return
+	for id in loot.keys():
+		if actor.position.distance_to(loot[id].p) < 2.8:
+			match int(loot[id].kind):
+				0: actor.reserve = mini(300, actor.reserve + 45)
+				1: actor.medkits = mini(5, actor.medkits + 1)
+				2: actor.armor = minf(100, actor.armor + 40)
+			loot.erase(id)
+			break
+
+func alive_count() -> int:
+	var count := 0
+	for actor in actors.values():
+		if actor.alive:
+			count += 1
+	return count
+
+func finish_round() -> void:
+	# Time limit ties are resolved by health, then kills, then stable actor id.
+	var survivors: Array = actors.values().filter(func(a): return a.alive)
+	survivors.sort_custom(func(a, b): return a.health > b.health if a.health != b.health else (a.kills > b.kills if a.kills != b.kills else a.actor_id < b.actor_id))
+	for i in range(survivors.size()):
+		var actor = survivors[i]
+		actor.rank = i + 1
+		if participants.has(actor.actor_id):
+			participants[actor.actor_id].rank = actor.rank
+	phase = "finished"
+	phase_time = 12
+	var winner: String = survivors[0].display_name if not survivors.is_empty() else "No survivors"
+	add_event("Operation complete / " + winner)
+	if dedicated:
+		var players: Array = []
+		for entry in participants.values():
+			if entry.user_id != "" and entry.rank > 0:
+				players.append(entry)
+		if not players.is_empty():
+			result_outbox.append({"match_id": match_id, "players": players})
+			save_outbox()
+
+func add_event(message: String) -> void:
+	events.append(message)
+	if events.size() > 5:
+		events.pop_front()
+
+func _process(dt: float) -> void:
+	if dedicated or not running:
+		return
+	for id in actors:
+		actors[id].render_frame(dt, online, id == local_id, Input.is_action_pressed("aim"))
+	world.show_loot(loot)
+	world.set_zone(zone)
+	ui.update_scoreboard(actors.values(), Input.is_action_pressed("scoreboard") and not ui.pause_panel.visible)
+	if actors.has(local_id):
+		var actor = actors[local_id]
+		var message := ""
+		if not actor.alive:
+			message = "OPERATOR DOWN\nPLACEMENT  #%d\n\nESC  /  RETURN TO DEPLOYMENT" % actor.rank
+		if phase == "finished":
+			message = ("VICTORY" if actor.rank == 1 else "OPERATION COMPLETE") + "\nPLACEMENT  #%d  /  %d ELIMINATIONS" % [actor.rank, actor.kills]
+			message += "\nNext operation in %ds" % maxi(0, int(phase_time)) if online else "\nESC  /  RETURN TO DEPLOYMENT"
+		if phase == "lobby":
+			message = "DEPLOYING IN %02d\nWaiting for operators…" % maxi(0, int(phase_time))
+		ui.update_hud(actor, alive_count(), phase, phase_time, zone, events, message)
+
+func peer_connected(id: int) -> void:
+	if dedicated:
+		pending[id] = {"at": Time.get_ticks_msec(), "checking": false}
+
+func peer_disconnected(id: int) -> void:
+	pending.erase(id)
+	sessions.erase(id)
+	if dedicated and actors.has(id):
+		if phase == "live":
+			damage(actors[id], 10000, 0, true)
+		remove_child(actors[id])
+		actors[id].queue_free()
+		actors.erase(id)
+
+func connected() -> void:
+	local_id = multiplayer.get_unique_id()
+	authenticate.rpc_id(1, ticket)
+	ticket = ""
+
+@rpc("any_peer", "call_remote", "reliable")
+func authenticate(value: String) -> void:
+	if not dedicated:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if not pending.has(id) or pending[id].checking or value.length() > 128 or value.length() < 20:
+		return
+	pending[id].checking = true
+	var response: Dictionary = await http_call("/internal/tickets/consume", {"ticket": value}, true)
+	if not pending.has(id):
+		return
+	if response.code != 200 or sessions.size() >= MAX_PLAYERS:
+		multiplayer.multiplayer_peer.disconnect_peer(id)
+		return
+	for session in sessions.values():
+		if session.uid == response.body.uid:
+			multiplayer.multiplayer_peer.disconnect_peer(id)
+			return
+	sessions[id] = response.body
+	pending.erase(id)
+	last_loot_hash = -1
+	if phase == "waiting":
+		reset_round()
+	else:
+		var actor = spawn_actor(id, response.body.username, false, spawn_position(sessions.size() - 1))
+		actor.user_id = response.body.uid
+		if phase == "live" or phase == "finished":
+			actor.apply_damage(10000)
+	accepted.rpc_id(id, match_id)
+	print("AUTHENTICATED peer=" + str(id))
+
+@rpc("authority", "call_remote", "reliable")
+func accepted(id: String) -> void:
+	network_round_id = id
+	running = true
+	authenticated_at = Time.get_ticks_msec()
+	ui.show_game()
+
+func broadcast_snapshot() -> void:
+	var states: Array = []
+	for actor in actors.values():
+		states.append(actor.pack())
+	var supplies_changed := loot.hash() != last_loot_hash
+	last_loot_hash = loot.hash()
+	for id in sessions:
+		if supplies_changed:
+			world_sync.rpc_id(id, match_id, loot)
+		# Four actors per compressed packet stay below the ENet MTU.
+		for offset in range(0, states.size(), 4):
+			var payload := {"round_id": match_id, "actors": states.slice(offset, offset + 4), "roster": actors.keys(), "phase": phase, "time": phase_time, "zone": zone, "events": events}
+			var packet := var_to_bytes(payload).compress(FileAccess.COMPRESSION_DEFLATE)
+			if packet.size() > 1150:
+				push_warning("Snapshot exceeds target packet size: " + str(packet.size()))
+			snapshot.rpc_id(id, packet)
+
+@rpc("authority", "call_remote", "reliable")
+func world_sync(id: String, supplies: Dictionary) -> void:
+	if not dedicated and (network_round_id == "" or network_round_id == id):
+		loot = supplies
+
+@rpc("authority", "call_remote", "unreliable_ordered", 3)
+func snapshot(packet: PackedByteArray) -> void:
+	if dedicated:
+		return
+	var payload: Dictionary = bytes_to_var(packet.decompress_dynamic(65536, FileAccess.COMPRESSION_DEFLATE))
+	if network_round_id != "" and payload.round_id != network_round_id:
+		return
+	for data in payload.actors:
+		if not actors.has(data.id):
+			spawn_actor(data.id, data.n, data.b, data.p)
+		actors[data.id].unpack(data, data.id == local_id)
+	for id in actors.keys():
+		if not payload.roster.has(id):
+			actors[id].queue_free()
+			actors.erase(id)
+	phase = payload.phase
+	phase_time = payload.time
+	zone = payload.zone
+	events = payload.events
+
+func sign_in(username: String, password: String, register: bool, endpoint: String) -> void:
+	api_url = endpoint
+	var response: Dictionary = await http_call("/auth/register" if register else "/auth/login", {"username": username, "password": password})
+	if response.code != 200 and response.code != 201:
+		ui.show_menu("Account request failed: " + error_message(response))
+		if bot_client:
+			get_tree().quit(1)
+		return
+	token = response.body.token
+	token_origin = api_url
+	response = await http_call("/matchmaking/join", {})
+	if response.code != 200:
+		ui.show_menu("Matchmaking failed: " + error_message(response))
+		return
+	ticket = response.body.ticket
+	var peer := ENetMultiplayerPeer.new()
+	var target_port: int = int(response.body.port)
+	if bot_client and OS.has_environment("TEST_GAME_PORT"):
+		target_port = int(OS.get_environment("TEST_GAME_PORT"))
+	var error := peer.create_client(response.body.host, target_port)
+	if error != OK:
+		ui.show_menu("Network error: " + str(error))
+		return
+	online = true
+	multiplayer.multiplayer_peer = peer
+	ui.status.text = "Authenticating game connection…"
+	# A stalled handshake must return control to the user.
+	get_tree().create_timer(12).timeout.connect(func():
+		if online and not running:
+			leave("Game connection timed out; please retry")
+	)
+
+func http_call(path: String, body: Dictionary, internal := false, method := HTTPClient.METHOD_POST) -> Dictionary:
+	var request := HTTPRequest.new()
+	request.timeout = 7
+	add_child(request)
+	var headers := PackedStringArray(["Content-Type: application/json"])
+	if internal:
+		headers.append("X-Server-Key: " + server_key)
+	elif token != "" and token_origin == api_url:
+		headers.append("Authorization: Bearer " + token)
+	var error := request.request(api_url + path, headers, method, "" if method == HTTPClient.METHOD_GET else JSON.stringify(body))
+	if error != OK:
+		request.queue_free()
+		return {"code": 0, "body": {"detail": "Cannot start HTTP request"}}
+	var response: Array = await request.request_completed
+	request.queue_free()
+	var parsed = JSON.parse_string(response[3].get_string_from_utf8())
+	return {"code": response[1], "body": parsed if parsed is Dictionary or parsed is Array else {"detail": "Service unavailable"}}
+
+func error_message(response: Dictionary) -> String:
+	return str(response.body.get("detail", "Connection failed"))
+
+func leave(message := "") -> void:
+	if dedicated:
+		return
+	running = false
+	online = false
+	network_round_id = ""
+	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	clear_actors()
+	sessions.clear()
+	loot.clear()
+	world.show_loot(loot)
+	phase = "standby"
+	lobby_camera.current = true
+	ui.show_menu(message)
+	if bot_client:
+		push_error(message)
+		get_tree().quit(1)
+
+func uuid4() -> String:
+	var bytes := Crypto.new().generate_random_bytes(16)
+	bytes[6] = (bytes[6] & 15) | 64
+	bytes[8] = (bytes[8] & 63) | 128
+	var h := bytes.hex_encode()
+	return "%s-%s-%s-%s-%s" % [h.substr(0, 8), h.substr(8, 4), h.substr(12, 4), h.substr(16, 4), h.substr(20, 12)]
+
+func save_outbox() -> void:
+	var file := FileAccess.open("user://results.tmp", FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(result_outbox))
+		file.close()
+		DirAccess.rename_absolute("user://results.tmp", "user://results.json")
+
+func load_outbox() -> void:
+	if FileAccess.file_exists("user://results.json"):
+		var parsed = JSON.parse_string(FileAccess.get_file_as_string("user://results.json"))
+		if parsed is Array:
+			result_outbox = parsed
+
+func submit_result() -> void:
+	submitting = true
+	var response: Dictionary = await http_call("/internal/results", result_outbox[0], true)
+	if response.code == 200:
+		result_outbox.pop_front()
+		save_outbox()
+		print("RESULT_PERSISTED")
+	else:
+		push_warning("Result delivery pending; HTTP " + str(response.code))
+	retry_time = 10
+	submitting = false
+
+func run_smoke_checks() -> void:
+	var actor = actors[local_id]
+	assert(actors.size() == MAX_PLAYERS, "Full offline roster")
+	assert(loot.size() > 20, "Loot exists")
+	var health_before: float = actor.health
+	actor.apply_damage(20)
+	assert(actor.health < health_before and actor.armor < 50, "Armor absorbs damage")
+	actor.ammo = 0
+	actor.reload_weapon()
+	actor.simulate(3)
+	assert(actor.ammo == 30 and actor.reserve == 90, "Reload conserves ammunition")
+	actor.health = 30
+	actor.heal()
+	actor.simulate(4)
+	assert(actor.health == 95 and actor.medkits == 1, "Healing consumes medkit")
+	var rounds: int = actor.ammo + actor.reserve
+	actor.switch_weapon(2)
+	assert(actor.ammo + actor.reserve == rounds, "Weapon switching conserves ammo")
+	var cmd := local_command(actor)
+	assert(valid_command(cmd), "Valid client command accepted")
+	cmd.x = NAN
+	assert(not valid_command(cmd), "Non-finite input rejected")
+	elapsed = 10
+	running = false
+	# Isolate two actors and wait for physics broadphase to register their transforms.
+	var victim = actors[-1]
+	actor.position = Vector3(0, 1, 20)
+	actor.yaw = 0
+	actor.pitch = 0
+	actor.weapon = 0
+	actor.ammo = 30
+	actor.fire_left = 0
+	victim.position = Vector3(0, 1, 10)
+	victim.health = 100
+	victim.armor = 0
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	shoot(actor)
+	assert(victim.health < 100, "Authoritative ray damages visible target")
+	var after_shot: int = actor.ammo
+	shoot(actor)
+	assert(actor.ammo == after_shot, "Fire interval prevents rapid-fire bypass")
+	var wall = world.block(Vector3(0, 2, 15), Vector3(5, 5, 1), "465a61")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var victim_health: float = victim.health
+	actor.fire_left = 0
+	shoot(actor)
+	assert(victim.health == victim_health, "Solid cover blocks bullets")
+	wall.queue_free()
+	for other in actors.values():
+		if other != actor:
+			damage(other, 10000, local_id)
+	finish_round()
+	assert(actor.rank == 1 and actor.kills == 15 and phase == "finished", "Victory and kills resolve")
+	await get_tree().create_timer(0.15).timeout
+	print("OFFLINE_SMOKE_PASS actors=16 reload=ok heal=ok damage=ok victory=ok raycast=ok cover=ok fire_interval=ok")
+	get_tree().quit()
+
+func capture_frame() -> void:
+	await get_tree().create_timer(2).timeout
+	await RenderingServer.frame_post_draw
+	var image := get_viewport().get_texture().get_image()
+	var path := OS.get_environment("CAPTURE_PATH")
+	image.save_png(path)
+	print("CAPTURE_SAVED " + path)
+	get_tree().quit()
+
+func show_leaderboard(endpoint: String) -> void:
+	if ui.busy:
+		return
+	api_url = endpoint
+	ui.status.text = "Loading leaderboard…"
+	var response: Dictionary = await http_call("/leaderboard", {}, false, HTTPClient.METHOD_GET)
+	if response.code != 200 or not response.body is Array:
+		ui.status.text = "Leaderboard unavailable; start the services and retry."
+		return
+	var profile: Dictionary = {}
+	if token != "":
+		var own: Dictionary = await http_call("/profile", {}, false, HTTPClient.METHOD_GET)
+		if own.code == 200:
+			profile = own.body
+	ui.show_leaderboard(response.body, profile)
+	ui.status.text = "Leaderboard loaded."

@@ -1,0 +1,7 @@
+.git
+.env
+.venv
+artifacts
+client/.godot
+**/__pycache__
+tools/blender*

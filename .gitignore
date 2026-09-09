@@ -1,0 +1,10 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+client/.godot/
+tools/godot
+tools/blender*/
+artifacts/*
+!artifacts/.gitkeep
+*.log

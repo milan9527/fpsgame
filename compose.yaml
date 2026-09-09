@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: iron
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run tools/setup.sh}
+      POSTGRES_DB: iron
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iron"]
+      interval: 5s
+      retries: 12
+    logging: &logging
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    volumes: ["redis_data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 12
+    logging: *logging
+  api:
+    build: backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://iron:${POSTGRES_PASSWORD}@postgres/iron
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET}
+      SERVER_SECRET: ${SERVER_SECRET}
+      GAME_PUBLIC_HOST: ${GAME_PUBLIC_HOST:-127.0.0.1}
+    networks:
+      default:
+        aliases: [api.internal]
+    ports: ["127.0.0.1:8000:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    logging: *logging
+  game:
+    build:
+      context: .
+      dockerfile: infra/game.Dockerfile
+    restart: unless-stopped
+    environment:
+      API_URL: http://api.internal:8000
+      SERVER_SECRET: ${SERVER_SECRET}
+    ports: ["27015:27015/udp"]
+    volumes: ["game_data:/home/game/.local/share/godot/app_userdata"]
+    depends_on:
+      api: {condition: service_healthy}
+    logging: *logging
+volumes:
+  postgres_data:
+  redis_data:
+  game_data:

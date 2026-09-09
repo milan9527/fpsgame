@@ -49,6 +49,11 @@ var heal_left := 0.0
 var fire_left := 0.0
 var bot_think := 0.0
 var target_id := 0
+var navigator
+var bot_destination := Vector3.ZERO
+var bot_patrol_left := 0.0
+var bot_memory_left := 0.0
+var bot_last_seen := Vector3.ZERO
 var target_position := Vector3.ZERO
 var last_sequence := -1
 var command_tokens := 60.0

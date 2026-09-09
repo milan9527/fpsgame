@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+timeout 35s ./tools/godot --headless --path client --script ../tests/navigation_rules.gd > artifacts/navigation-rules.log 2>&1
+rg -q NAVIGATION_RULES_PASS artifacts/navigation-rules.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/navigation-rules.log; then cat artifacts/navigation-rules.log; exit 1; fi
 .venv/bin/python tools/test_local_profile.py --capture-ui > artifacts/local-profile-storage.log 2>&1
 timeout 25s ./tools/godot --headless --path client -- --smoke > artifacts/offline-smoke.log 2>&1
 # Godot assertion failures need a log check as well as exit-code checking.

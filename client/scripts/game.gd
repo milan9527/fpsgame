@@ -8,6 +8,7 @@ const Interface = preload("res://scripts/interface.gd")
 const Sound = preload("res://scripts/sound.gd")
 const Spectator = preload("res://scripts/spectator.gd")
 const LocalProfile = preload("res://scripts/local_profile.gd")
+const BotNavigator = preload("res://scripts/bot_navigator.gd")
 const PORT := 27015
 const MAX_PLAYERS := 16
 const ROUND_SECONDS := 300.0
@@ -190,6 +191,7 @@ func start_server() -> void:
 		push_error("Server build is incompatible with operations service")
 		request_quit(1)
 		return
+	world.prepare_navigation()
 	var peer := ENetMultiplayerPeer.new()
 	var listen_port := int(OS.get_environment("GAME_PORT")) if OS.has_environment("GAME_PORT") else PORT
 	var error := peer.create_server(listen_port, MAX_PLAYERS + 8)
@@ -207,6 +209,7 @@ func start_server() -> void:
 func start_solo() -> void:
 	save_local_operation()
 	flush_local_results()
+	world.prepare_navigation()
 	online = false
 	running = true
 	local_id = 1
@@ -266,6 +269,8 @@ func spawn_actor(id: int, nickname: String, bot: bool, at: Vector3):
 	actor.actor_id = id
 	actor.display_name = nickname
 	actor.is_bot = bot
+	if bot and (not online or dedicated):
+		actor.navigator = BotNavigator.new()
 	actor.position = at
 	actor.target_position = at
 	actor.name = "Operator_" + str(id).replace("-", "b")
@@ -519,6 +524,8 @@ func bot_input(actor, dt: float) -> void:
 	if not actor.alive:
 		return
 	actor.bot_think -= dt
+	actor.bot_patrol_left -= dt
+	actor.bot_memory_left = maxf(0, actor.bot_memory_left - dt)
 	if actor.bot_think <= 0:
 		actor.bot_think = rng.randf_range(0.3, 0.65)
 		var best := 70.0
@@ -530,24 +537,69 @@ func bot_input(actor, dt: float) -> void:
 			if distance < best and visible_target(actor, other):
 				best = distance
 				actor.target_id = other.actor_id
-	var destination := Vector3.ZERO
 	actor.shooting = false
-	if actors.has(actor.target_id):
+	var destination: Vector3 = actor.bot_destination
+	if actors.has(actor.target_id) and actors[actor.target_id].alive:
 		var target = actors[actor.target_id]
-		destination = target.position
 		var aim: Vector3 = target.aim_position() - actor.eye_position()
 		actor.yaw = atan2(-aim.x, -aim.z)
 		actor.pitch = atan2(aim.y, Vector2(aim.x, aim.z).length())
 		actor.shooting = visible_target(actor, target)
-		actor.move_input = Vector2(0.45 * sin(elapsed + actor.actor_id), -0.6 if aim.length() > 24 else 0.15)
+		if actor.shooting:
+			actor.bot_last_seen = target.position
+			actor.bot_memory_left = 3.0
+		destination = actor.bot_last_seen
+		if actor.shooting and aim.length() < 24:
+			var outward: Vector3 = actor.position - target.position
+			outward.y = 0
+			outward = outward.normalized()
+			if aim.length() < 12:
+				destination = actor.position + outward * 8
+			else:
+				var side := 1.0 if sin(elapsed * 0.35 + actor.actor_id) > 0 else -1.0
+				destination = actor.position + Vector3(-outward.z, 0, outward.x) * side * 5
+	elif actor.bot_memory_left > 0:
+		destination = actor.bot_last_seen
 	else:
-		var direction: Vector3 = destination - actor.position
-		actor.yaw = atan2(-direction.x, -direction.z) + sin(elapsed * 0.35 + actor.actor_id) * 0.5
-		actor.move_input = Vector2(0, -1)
+		if actor.bot_patrol_left <= 0 or actor.navigator.finished:
+			actor.bot_patrol_left = rng.randf_range(4, 8)
+			var angle := rng.randf() * TAU
+			var radius := sqrt(rng.randf()) * maxf(4, zone - 12)
+			actor.bot_destination = Vector3(cos(angle) * radius, 0, sin(angle) * radius)
+			var nearest := 35.0
+			for supply in loot.values():
+				if Vector2(supply.p.x, supply.p.z).length() > maxf(4, zone - 7):
+					continue
+				var wanted: bool = (supply.kind == 0 and actor.reserve < 45) or (supply.kind == 1 and actor.medkits == 0) or (supply.kind == 2 and actor.armor < 25)
+				var distance: float = actor.position.distance_to(supply.p)
+				if wanted and distance < nearest:
+					nearest = distance
+					actor.bot_destination = supply.p
+		destination = actor.bot_destination
+	var radial := Vector2(actor.position.x, actor.position.z)
+	actor.sprint = radial.length() > maxf(4, zone - 7)
+	if actor.sprint:
+		var safe := radial.normalized() * maxf(0, zone - 14)
+		destination = Vector3(safe.x, 0, safe.y)
+	var direction: Vector3 = actor.navigator.steer(actor, world, destination, dt)
+	# Short-range separation supplements global paths around static geometry.
+	if direction.length_squared() > 0:
+		for other in actors.values():
+			if other == actor or not other.alive:
+				continue
+			var away: Vector3 = actor.position - other.position
+			away.y = 0
+			var gap := away.length()
+			if gap > 0.01 and gap < 1.2:
+				direction += away / gap * (1.2 - gap)
+		direction = direction.normalized()
+	if not actor.shooting:
+		if direction.length_squared() > 0:
+			actor.yaw = atan2(-direction.x, -direction.z)
 		actor.pitch = 0
-	if actor.is_on_wall():
-		actor.move_input = Vector2(1, -0.2)
-		actor.jump_requested = true
+	var local_direction: Vector3 = Basis(Vector3.UP, -actor.yaw) * direction
+	actor.move_input = Vector2(local_direction.x, local_direction.z).limit_length()
+
 	if elapsed > 8 and actors.has(actor.target_id) and actor.grenades > 0:
 		var distance: float = actor.position.distance_to(actors[actor.target_id].position)
 		if distance > 23 and distance < 32 and actor.shooting and actor.throw_left <= 0:
@@ -555,7 +607,6 @@ func bot_input(actor, dt: float) -> void:
 			actor.pitch = 0.25
 			throw_grenade(actor)
 			actor.pitch = saved_pitch
-	actor.sprint = Vector2(actor.position.x, actor.position.z).length() > zone - 8
 	if actor.ammo == 0:
 		actor.reload_weapon()
 	if actor.health < 40 and actor.target_id == 0:

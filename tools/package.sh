@@ -16,6 +16,9 @@ exec ./IronMeridian --main-pack IronMeridian.pck "$@"
 SH
 chmod +x artifacts/IronMeridian-Linux/play.sh
 # A packed-project smoke run checks imported GLB assets and resource paths.
+timeout 35s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/navigation_rules.gd" > artifacts/packed-navigation.log 2>&1
+rg -q NAVIGATION_RULES_PASS artifacts/packed-navigation.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-navigation.log; then cat artifacts/packed-navigation.log; exit 1; fi
 timeout 25s artifacts/IronMeridian-Linux/play.sh --headless -- --smoke > artifacts/packed-smoke.log 2>&1
 rg -q OFFLINE_SMOKE_PASS artifacts/packed-smoke.log
 if rg -q "SCRIPT ERROR|Assertion failed" artifacts/packed-smoke.log; then cat artifacts/packed-smoke.log; exit 1; fi

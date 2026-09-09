@@ -5,6 +5,36 @@ var zone_mesh: MeshInstance3D
 var zone_radius := 110.0
 var rng := RandomNumberGenerator.new()
 var materials: Dictionary = {}
+var navigation_region: NavigationRegion3D
+var navigation_bake_ms := 0
+
+func prepare_navigation() -> void:
+	if navigation_region != null:
+		return
+	var started := Time.get_ticks_msec()
+	var mesh := NavigationMesh.new()
+	mesh.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
+	mesh.geometry_collision_mask = 1
+	mesh.cell_size = 0.5
+	mesh.cell_height = 0.25
+	mesh.agent_radius = 0.5
+	mesh.agent_height = 2.0
+	mesh.agent_max_climb = 0.25
+	mesh.filter_baking_aabb = AABB(Vector3(-114, -2, -114), Vector3(228, 12, 228))
+	var source := NavigationMeshSourceGeometryData3D.new()
+	NavigationServer3D.parse_source_geometry_data(mesh, source, self)
+	NavigationServer3D.bake_from_source_geometry_data(mesh, source)
+	NavigationServer3D.map_set_cell_size(get_world_3d().navigation_map, mesh.cell_size)
+	navigation_region = NavigationRegion3D.new()
+	navigation_region.navigation_mesh = mesh
+	add_child(navigation_region)
+	navigation_bake_ms = Time.get_ticks_msec() - started
+
+func navigation_ready() -> bool:
+	return navigation_region != null and NavigationServer3D.map_get_iteration_id(get_world_3d().navigation_map) > 0
+
+func navigation_point(at: Vector3) -> Vector3:
+	return NavigationServer3D.map_get_closest_point(get_world_3d().navigation_map, at) if navigation_ready() else at
 
 func footstep_surface(at: Vector3) -> String:
 	var query := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.3, at - Vector3.UP * 0.8, 1)

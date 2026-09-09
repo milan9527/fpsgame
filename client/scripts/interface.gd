@@ -29,6 +29,11 @@ var sensitivity := 0.0022
 var volume := 0.65
 var settings := ConfigFile.new()
 var busy := false
+var hit_until := 0
+var damage_until := 0
+var hit_color := Color.WHITE
+var damage_source := Vector3.ZERO
+var hit_text: Label
 var leaderboard_panel: Control
 var leaderboard_label: Label
 var scoreboard_panel: Control
@@ -130,6 +135,7 @@ func _ready() -> void:
 	armor_bar = bar(Vector2(40, 829), Color("7ebce4"))
 	prompt = placed_label(hud, Vector2(480, 735), 18, ACCENT)
 	feed = placed_label(hud, Vector2(40, 118), 16)
+	hit_text = placed_label(hud, Vector2(610, 505), 16, ACCENT)
 	result_label = placed_label(hud, Vector2(430, 290), 38, ACCENT)
 	hud.visible = false
 	pause_panel = PanelContainer.new()
@@ -232,6 +238,9 @@ func show_menu(message := "") -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func show_game() -> void:
+	hit_until = 0
+	damage_until = 0
+	hit_text.text = ""
 	menu.visible = false
 	hud.visible = true
 	busy = false
@@ -247,6 +256,19 @@ func draw_hud() -> void:
 	var white := Color(0.9, 0.95, 0.92, 0.85)
 	for direction in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 		hud.draw_line(center + direction * 5, center + direction * 12, white, 2)
+	var now := Time.get_ticks_msec()
+	if now < hit_until:
+		for direction in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+			hud.draw_line(center + direction * 10, center + direction * 17, hit_color, 2)
+	else:
+		hit_text.text = ""
+	if now < damage_until:
+		var opacity := float(damage_until - now) / 600.0
+		hud.draw_rect(Rect2(Vector2.ZERO, hud.size), Color(0.85, 0.1, 0.05, opacity * 0.5), false, 12)
+		var direction := damage_source - local_position
+		if direction.length() > 0.5:
+			var angle := -PI / 2 - (atan2(-direction.x, -direction.z) - local_yaw)
+			hud.draw_arc(center, 62, angle - 0.25, angle + 0.25, 12, Color(1, 0.2, 0.1, opacity), 5)
 	var radar_center := Vector2(hud.size.x - 120, 120)
 	hud.draw_circle(radar_center, 88, Color(0.03, 0.08, 0.11, 0.85))
 	hud.draw_arc(radar_center, radius * 0.72, 0, TAU, 64, Color("72bbd9"), 2)
@@ -260,6 +282,8 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 	headline.text = "ASH VALLEY   /   " + phase.to_upper()
 	stats.text = "%02d ALIVE    •    %02d ELIMINATIONS    •    ZONE %dm    •    %02d:%02d" % [alive_count, actor.kills, zone, int(time_left) / 60, int(time_left) % 60]
 	weapon.text = "%s    %02d / %03d" % [actor.NAMES[actor.weapon], actor.ammo, actor.reserve]
+	if actor.crouched:
+		weapon.text += "  [CROUCHED]"
 	health_bar.value = actor.health
 	armor_bar.value = actor.armor
 	prompt.text = "E  Pick up nearby supplies   |   H  Medkit ×%d" % actor.medkits
@@ -298,3 +322,13 @@ func update_scoreboard(roster: Array, enabled: bool) -> void:
 	for actor in roster:
 		lines.append("%-24s      %02d        %s" % [actor.display_name, actor.kills, "LIVE" if actor.alive else "OUT"])
 	scoreboard_label.text = "\n".join(lines)
+
+func combat_feedback(kind: int, amount: float, headshot: bool, killed: bool, origin: Vector3) -> void:
+	if kind == 0:
+		hit_until = Time.get_ticks_msec() + (650 if killed else 300)
+		hit_color = Color("ef7959") if killed else (ACCENT if headshot else Color.WHITE)
+		hit_text.text = "ELIMINATED" if killed else ("HEADSHOT" if headshot else "HIT %d" % roundi(amount))
+	else:
+		damage_until = Time.get_ticks_msec() + 600
+		damage_source = origin
+	hud.queue_redraw()

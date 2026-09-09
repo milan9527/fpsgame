@@ -8,6 +8,9 @@ if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/offline-smoke.log; then
   cat artifacts/offline-smoke.log
   exit 1
 fi
+timeout 25s ./tools/godot --headless --path client --script ../tests/combat_rules.gd > artifacts/combat-rules.log 2>&1
+rg -q COMBAT_RULES_PASS artifacts/combat-rules.log
+if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/combat-rules.log; then cat artifacts/combat-rules.log; exit 1; fi
 .venv/bin/python - <<'PY'
 import os, subprocess
 for line in open('.env'):

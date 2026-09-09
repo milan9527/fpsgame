@@ -49,6 +49,9 @@ var bot_test_timer := 0.0
 var test_start_position := Vector3.ZERO
 var test_moved := false
 var test_fired := false
+var test_crouched := false
+var test_recoil := false
+var test_remote_crouch := false
 var authenticated_at := 0
 
 func _ready() -> void:
@@ -243,12 +246,17 @@ func _physics_process(dt: float) -> void:
 					test_start_position = player.position
 				test_moved = test_moved or player.position.distance_to(test_start_position) > 1.0
 				test_fired = test_fired or player.ammo < 30
+				test_crouched = test_crouched or (player.crouched and player.head.position.y < 1.1)
+				test_recoil = test_recoil or player.recoil > 0
+				for other in actors.values():
+					if other.actor_id > 0 and other.actor_id != local_id and other.crouched:
+						test_remote_crouch = true
 			if round_client and phase == "finished" and actors.has(local_id) and actors[local_id].rank > 0:
 				print("FULL_ROUND_CLIENT_PASS rank=" + str(actors[local_id].rank))
 				get_tree().quit()
 			if not round_client and bot_test_timer > 26:
-				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired:
-					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s" % [local_id, actors.size(), phase])
+				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch:
+					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok" % [local_id, actors.size(), phase])
 					get_tree().quit()
 				else:
 					push_error("Online smoke test failed to reach active match")
@@ -311,12 +319,13 @@ func _physics_process(dt: float) -> void:
 
 func local_command(actor) -> Dictionary:
 	sequence += 1
-	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "jump": false, "reload": false, "heal": false, "loot": false, "weapon": -1}
+	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "loot": false, "weapon": -1}
 	if ui.pause_panel.visible:
 		return cmd
 	var movement := Input.get_vector("left", "right", "forward", "back")
 	cmd.x = movement.x
 	cmd.z = movement.y
+	cmd.ads = Input.is_action_pressed("aim")
 	for action in ["fire", "sprint", "crouch"]:
 		cmd[action] = Input.is_action_pressed(action)
 	for action in ["jump", "reload", "heal", "loot"]:
@@ -335,6 +344,8 @@ func local_command(actor) -> Dictionary:
 	if bot_client:
 		cmd.z = -1.0 if int(bot_test_timer) % 4 < 2 else 1.0
 		cmd.fire = true
+		cmd.crouch = int(bot_test_timer) % 6 < 3
+		cmd.ads = true
 	return cmd
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
@@ -355,14 +366,14 @@ func input_command(cmd: Dictionary) -> void:
 	apply_command(actor, cmd)
 
 func valid_command(cmd: Dictionary) -> bool:
-	if cmd.size() != 13:
+	if cmd.size() != 14:
 		return false
 	for key in ["seq", "x", "z", "yaw", "pitch", "weapon"]:
 		if not cmd.has(key) or not (cmd[key] is float or cmd[key] is int):
 			return false
 		if not is_finite(float(cmd[key])):
 			return false
-	for key in ["fire", "sprint", "crouch", "jump", "reload", "heal", "loot"]:
+	for key in ["fire", "sprint", "crouch", "ads", "jump", "reload", "heal", "loot"]:
 		if not cmd.has(key) or not cmd[key] is bool:
 			return false
 	return absf(cmd.x) <= 1 and absf(cmd.z) <= 1 and absf(cmd.yaw) <= PI + 0.01 and absf(cmd.pitch) <= 1.46 and cmd.weapon >= -1 and cmd.weapon <= 2
@@ -374,6 +385,7 @@ func apply_command(actor, cmd: Dictionary) -> void:
 	actor.shooting = cmd.fire and phase == "live"
 	actor.sprint = cmd.sprint
 	actor.crouch = cmd.crouch
+	actor.aiming = cmd.ads
 	actor.jump_requested = actor.jump_requested or cmd.jump
 	if phase != "live":
 		return
@@ -406,7 +418,7 @@ func bot_input(actor, dt: float) -> void:
 	if actors.has(actor.target_id):
 		var target = actors[actor.target_id]
 		destination = target.position
-		var aim: Vector3 = target.position + Vector3(0, 1.1, 0) - (actor.position + Vector3(0, 1.6, 0))
+		var aim: Vector3 = target.aim_position() - actor.eye_position()
 		actor.yaw = atan2(-aim.x, -aim.z)
 		actor.pitch = atan2(aim.y, Vector2(aim.x, aim.z).length())
 		actor.shooting = visible_target(actor, target)
@@ -427,7 +439,7 @@ func bot_input(actor, dt: float) -> void:
 	pickup(actor)
 
 func visible_target(actor, other) -> bool:
-	var query := PhysicsRayQueryParameters3D.create(actor.position + Vector3(0, 1.55, 0), other.position + Vector3(0, 1.1, 0), 3, [actor.get_rid()])
+	var query := PhysicsRayQueryParameters3D.create(actor.eye_position(), other.aim_position(), 3, [actor.get_rid()])
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	return not hit.is_empty() and hit.collider == other
 
@@ -438,23 +450,24 @@ func shoot(actor) -> void:
 	actor.fire_left = actor.INTERVAL[actor.weapon]
 	if actor.is_bot:
 		actor.fire_left *= 3.0
-	var origin: Vector3 = actor.position + Vector3(0, 1.6, 0)
+	var origin: Vector3 = actor.eye_position()
 	var last_end := origin
 	for pellet in range(7 if actor.weapon == 1 else 1):
-		var spread := 0.045 if actor.weapon == 1 else 0.003
+		var spread: float = actor.shot_spread()
 		if actor.is_bot:
 			spread += 0.07
-		var direction := Basis(Vector3.UP, actor.yaw) * Basis(Vector3.RIGHT, actor.pitch) * Vector3(rng.randf_range(-spread, spread), rng.randf_range(-spread, spread), -1).normalized()
+		var direction := Basis(Vector3.UP, actor.yaw) * Basis(Vector3.RIGHT, clampf(actor.pitch + actor.recoil, -1.5, 1.5)) * Vector3(rng.randf_range(-spread, spread), rng.randf_range(-spread, spread), -1).normalized()
 		var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 3, [actor.get_rid()])
 		var hit := get_world_3d().direct_space_state.intersect_ray(query)
 		last_end = origin + direction * 100 if hit.is_empty() else hit.position
 		if not hit.is_empty() and hit.collider is CharacterBody3D:
 			var target = hit.collider
-			var headshot: bool = hit.position.y - target.position.y > 1.42
+			var headshot: bool = hit.position.y - target.position.y > target.headshot_height()
 			var amount: float = actor.DAMAGE[actor.weapon] * (1.65 if headshot else 1.0)
 			if actor.weapon == 1:
 				amount *= clampf(1 - origin.distance_to(hit.position) / 60, 0.15, 1)
-			damage(target, amount, actor.actor_id)
+			damage(target, amount, actor.actor_id, false, headshot)
+	actor.add_recoil()
 	if online:
 		shot_fx.rpc(actor.actor_id, origin, last_end, actor.weapon)
 	else:
@@ -466,6 +479,7 @@ func shot_fx(id: int, origin: Vector3, end: Vector3, kind: int) -> void:
 		return
 	if actors.has(id):
 		actors[id].flash_left = 0.05
+		actors[id].weapon_kick = 1.0
 	sound.shot(origin, kind)
 	var line := MeshInstance3D.new()
 	var mesh := ImmediateMesh.new()
@@ -473,17 +487,26 @@ func shot_fx(id: int, origin: Vector3, end: Vector3, kind: int) -> void:
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.albedo_color = Color("ffe3a0")
 	mesh.surface_begin(Mesh.PRIMITIVE_LINES, m)
-	mesh.surface_add_vertex(origin)
+	var visual_origin := origin
+	if id == local_id and actors.has(id):
+		visual_origin = actors[id].muzzle.global_position
+	mesh.surface_add_vertex(visual_origin)
 	mesh.surface_add_vertex(end)
 	mesh.surface_end()
 	line.mesh = mesh
 	add_child(line)
 	get_tree().create_timer(0.065).timeout.connect(line.queue_free)
 
-func damage(target, amount: float, attacker_id: int, bypass_protection := false) -> void:
+func damage(target, amount: float, attacker_id: int, bypass_protection := false, headshot := false) -> void:
 	if not target.alive or (not bypass_protection and phase == "live" and elapsed < 5):
 		return
+	var before: float = target.health + target.armor
 	target.apply_damage(amount)
+	var actual_damage: float = before - target.health - target.armor
+	if actors.has(attacker_id) and attacker_id != target.actor_id:
+		deliver_feedback(attacker_id, 0, actual_damage, headshot, not target.alive, target.position)
+	var source_position: Vector3 = actors[attacker_id].position if actors.has(attacker_id) else target.position
+	deliver_feedback(target.actor_id, 1, actual_damage, false, not target.alive, source_position)
 	if not target.alive:
 		target.rank = alive_count() + 1
 		if participants.has(target.actor_id):
@@ -851,3 +874,15 @@ func show_leaderboard(endpoint: String) -> void:
 			profile = own.body
 	ui.show_leaderboard(response.body, profile)
 	ui.status.text = "Leaderboard loaded."
+
+func deliver_feedback(id: int, kind: int, amount: float, headshot: bool, killed: bool, origin: Vector3) -> void:
+	if dedicated:
+		if sessions.has(id):
+			combat_feedback.rpc_id(id, kind, amount, headshot, killed, origin)
+	elif id == local_id:
+		combat_feedback(kind, amount, headshot, killed, origin)
+
+@rpc("authority", "call_remote", "reliable")
+func combat_feedback(kind: int, amount: float, headshot: bool, killed: bool, origin: Vector3) -> void:
+	if not dedicated and ui:
+		ui.combat_feedback(kind, amount, headshot, killed, origin)

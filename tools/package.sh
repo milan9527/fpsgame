@@ -26,4 +26,7 @@ if rg -q "SCRIPT ERROR|Assertion failed" artifacts/packed-prediction.log; then c
 timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/spectator_rules.gd" > artifacts/packed-spectator.log 2>&1
 rg -q SPECTATOR_RULES_PASS artifacts/packed-spectator.log
 if rg -q "SCRIPT ERROR|Assertion failed" artifacts/packed-spectator.log; then cat artifacts/packed-spectator.log; exit 1; fi
+timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/viewmodel_rules.gd" > artifacts/packed-viewmodel.log 2>&1
+rg -q VIEWMODEL_RULES_PASS artifacts/packed-viewmodel.log
+if rg -q "SCRIPT ERROR|Assertion failed" artifacts/packed-viewmodel.log; then cat artifacts/packed-viewmodel.log; exit 1; fi
 tar -czf artifacts/IronMeridian-Linux-x86_64.tar.gz -C artifacts IronMeridian-Linux

@@ -31,6 +31,9 @@ timeout 20s ./tools/godot --headless --path client --script ../tests/protocol_cl
 rg -q PROTOCOL_CLIENT_PASS artifacts/protocol-client-test.log
 if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/protocol-client-test.log; then cat artifacts/protocol-client-test.log; exit 1; fi
 .venv/bin/python tools/test_protocol_server.py
+timeout 30s xvfb-run -a ./tools/godot --path client --audio-driver Dummy --script ../tests/viewmodel_rules.gd -- --capture-viewmodel > artifacts/viewmodel-rules.log 2>&1
+rg -q VIEWMODEL_RULES_PASS artifacts/viewmodel-rules.log
+if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/viewmodel-rules.log; then cat artifacts/viewmodel-rules.log; exit 1; fi
 timeout 25s ./tools/godot --headless --path client --script ../tests/spectator_rules.gd > artifacts/spectator-rules.log 2>&1
 rg -q SPECTATOR_RULES_PASS artifacts/spectator-rules.log
 if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/spectator-rules.log; then cat artifacts/spectator-rules.log; exit 1; fi

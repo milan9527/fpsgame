@@ -40,6 +40,7 @@ var leaderboard_label: Label
 var scoreboard_panel: Control
 var scoreboard_label: Label
 var spectating := false
+var sight_aiming := false
 var spectator_label: Label
 const INK := Color("0c1721")
 const ACCENT := Color("e2b875")
@@ -258,7 +259,7 @@ func set_pause(enabled: bool) -> void:
 func draw_hud() -> void:
 	var center := hud.size / 2
 	var white := Color(0.9, 0.95, 0.92, 0.85)
-	if not spectating:
+	if not spectating and not sight_aiming:
 		for direction in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 			hud.draw_line(center + direction * 5, center + direction * 12, white, 2)
 	var now := Time.get_ticks_msec()

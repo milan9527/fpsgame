@@ -1,7 +1,10 @@
 extends CharacterBody3D
 
 const CharacterAnimation = preload("res://scripts/character_animation.gd")
+const FirstPerson = preload("res://scripts/first_person.gd")
 var character_animation := CharacterAnimation.new()
+var first_person := FirstPerson.new()
+var gun_model: Node3D
 var grounded := false
 const PREDICTION_LIMIT := 120
 var prediction_history: Array[Dictionary] = []
@@ -101,6 +104,7 @@ func _ready() -> void:
 	camera.add_child(gun)
 	if ResourceLoader.exists("res://assets/carbine.glb"):
 		var model = load("res://assets/carbine.glb").instantiate()
+		gun_model = model
 		model.scale = Vector3.ONE * 0.75
 		gun.add_child(model)
 	else:
@@ -141,6 +145,7 @@ func set_local() -> void:
 	camera.current = true
 	body_mesh.visible = false
 	gun.visible = true
+	first_person.setup(gun, gun_model)
 
 func simulate(dt: float) -> void:
 	command_tokens = minf(60, command_tokens + dt * 40)
@@ -340,9 +345,9 @@ func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> vo
 					desired = origin + camera_error.normalized() * distance
 			camera.global_position = desired
 		camera.rotation.x = clampf(pitch + recoil, -1.5, 1.5) - pitch
-		camera.fov = lerpf(camera.fov, 48.0 if ads else 85.0, dt * 12)
-		var bob := sin(Time.get_ticks_msec() * 0.012) * 0.012 if move_input.length() > 0.1 else 0.0
-		gun.position.y = lerpf(gun.position.y, -0.4 if reload_left > 0 or throw_left > 0 else -0.24 + bob, dt * 12)
+		first_person.update(self, dt, ads)
+		var can_aim := ads and reload_left <= 0 and heal_left <= 0 and throw_left <= 0
+		camera.fov = lerpf(camera.fov, 48.0 if can_aim else 85.0, minf(1, dt * 12))
 
 func eye_height() -> float:
 	return 0.98 if crouched else 1.6

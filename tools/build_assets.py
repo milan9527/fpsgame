@@ -77,3 +77,4 @@ exec(compile((ROOT / 'tools' / 'build_operator.py').read_text(), 'build_operator
 print('ASSETS_BUILT carbine.glb operator.glb')
 
 exec(compile((ROOT / 'tools' / 'build_grenade.py').read_text(), str(ROOT / 'tools' / 'build_grenade.py'), 'exec'))
+exec(compile((ROOT / 'tools' / 'build_viewmodel.py').read_text(), str(ROOT / 'tools' / 'build_viewmodel.py'), 'exec'))

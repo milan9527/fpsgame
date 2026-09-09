@@ -675,6 +675,7 @@ func _process(dt: float) -> void:
 		if phase == "lobby":
 			message = "DEPLOYING IN %02d\nWaiting for operators…" % maxi(0, int(phase_time))
 		var viewed_actor = actors.get(spectator.target_id, actor) if spectator.active else actor
+		ui.sight_aiming = not spectator.active and actor.first_person.aim_blend > 0.5
 		ui.grenade_warning_distance = INF
 		for grenade in grenades.values():
 			ui.grenade_warning_distance = minf(ui.grenade_warning_distance, viewed_actor.position.distance_to(grenade.position))

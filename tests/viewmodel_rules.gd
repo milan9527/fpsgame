@@ -21,6 +21,7 @@ func run() -> void:
 	capture = "--capture-viewmodel" in OS.get_cmdline_user_args()
 	game = load("res://scripts/game.gd").new()
 	root.add_child(game)
+	game.local_profile = null # This fixture must not modify the player's local results.
 	await process_frame
 	game.start_solo()
 	game.set_physics_process(false)

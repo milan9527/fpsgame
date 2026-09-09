@@ -7,6 +7,7 @@ const World = preload("res://scripts/world.gd")
 const Interface = preload("res://scripts/interface.gd")
 const Sound = preload("res://scripts/sound.gd")
 const Spectator = preload("res://scripts/spectator.gd")
+const LocalProfile = preload("res://scripts/local_profile.gd")
 const PORT := 27015
 const MAX_PLAYERS := 16
 const ROUND_SECONDS := 300.0
@@ -14,6 +15,9 @@ var world
 var ui
 var sound
 var spectator
+var local_profile
+var local_outbox: Array[Dictionary] = []
+var local_recorded_id := ""
 var actors: Dictionary = {}
 var sessions: Dictionary = {}
 var pending: Dictionary = {}
@@ -107,6 +111,8 @@ func _ready() -> void:
 		start_server()
 	else:
 		get_tree().auto_accept_quit = false
+		if not smoke and not "--capture-game" in args and not "--capture-menu" in args:
+			local_profile = LocalProfile.new()
 		spectator = Spectator.new()
 		add_child(spectator)
 		sound = Sound.new()
@@ -122,6 +128,8 @@ func _ready() -> void:
 		ui.online_requested.connect(sign_in)
 		ui.leave_requested.connect(func(): leave())
 		ui.quit_requested.connect(request_quit)
+		ui.quit_without_save_requested.connect(func(): request_quit(0, true))
+		ui.local_history_requested.connect(show_local_history)
 		if smoke:
 			call_deferred("start_solo")
 		elif "--capture-game" in args:
@@ -136,8 +144,15 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		request_quit()
 
-func request_quit(code := 0) -> void:
+func request_quit(code := 0, discard_local := false) -> void:
 	if shutdown_requested:
+		return
+	save_local_operation()
+	flush_local_results()
+	if not discard_local and not local_outbox.is_empty() and ui != null:
+		leave("Local results could not be saved. Retry before exiting.")
+		show_local_history()
+		ui.local_exit_button.visible = true
 		return
 	shutdown_requested = true
 	running = false
@@ -190,6 +205,8 @@ func start_server() -> void:
 	print("SERVER_READY udp=" + str(listen_port) + " relay=" + str(multiplayer.server_relay))
 
 func start_solo() -> void:
+	save_local_operation()
+	flush_local_results()
 	online = false
 	running = true
 	local_id = 1
@@ -684,6 +701,36 @@ func finish_round() -> void:
 		if not players.is_empty():
 			result_outbox.append({"match_id": match_id, "players": players})
 			save_outbox()
+	elif not online:
+		save_local_operation()
+
+func save_local_operation() -> void:
+	if local_profile == null or online or phase not in ["live", "finished"] or not actors.has(local_id) or match_id == local_recorded_id:
+		return
+	var actor = actors[local_id]
+	var completed: bool = phase == "finished" or not actor.alive
+	var record := {"id": match_id, "finished_at": int(Time.get_unix_time_from_system()), "status": "completed" if completed else "abandoned", "rank": actor.rank if completed else 0, "kills": actor.kills, "seconds": int(clampf(elapsed, 0, ROUND_SECONDS)), "map": "ash_valley"}
+	local_outbox.append(record)
+	local_recorded_id = match_id
+	flush_local_results()
+
+func flush_local_results() -> void:
+	if local_profile == null:
+		return
+	for record in local_outbox.duplicate():
+		if local_profile.store(record):
+			local_outbox.erase(record)
+
+func show_local_history() -> void:
+	if local_profile == null or ui == null:
+		return
+	flush_local_results()
+	var summary: Dictionary = local_profile.summary()
+	summary["pending"] = local_outbox.size()
+	summary["save_error"] = local_profile.last_error if not local_outbox.is_empty() else ""
+	ui.show_local_history(summary)
+	if local_outbox.is_empty():
+		ui.status.text = "Local history loaded."
 
 func add_event(message: String) -> void:
 	events.append(message)
@@ -706,6 +753,8 @@ func _process(dt: float) -> void:
 		if phase == "finished":
 			message = ("VICTORY" if actor.rank == 1 else "OPERATION COMPLETE") + "\nPLACEMENT  #%d  /  %d ELIMINATIONS" % [actor.rank, actor.kills]
 			message += "\nNext operation in %ds" % maxi(0, int(phase_time)) if online else "\nESC  /  RETURN TO DEPLOYMENT"
+			if not online and local_profile != null:
+				message += "\nLOCAL RESULT SAVED" if local_outbox.is_empty() else "\nLOCAL SAVE PENDING / RETRY IN MENU"
 		if phase == "lobby":
 			message = "DEPLOYING IN %02d\nWaiting for operators…" % maxi(0, int(phase_time))
 		var viewed_actor = actors.get(spectator.target_id, actor) if spectator.active else actor
@@ -901,6 +950,7 @@ func error_message(response: Dictionary) -> String:
 func leave(message := "") -> void:
 	if dedicated or shutdown_requested:
 		return
+	save_local_operation()
 	running = false
 	online = false
 	network_round_id = ""

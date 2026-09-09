@@ -6,6 +6,7 @@ func _initialize() -> void:
 func run() -> void:
 	var game = load("res://scripts/game.gd").new()
 	root.add_child(game)
+	game.local_profile = null # This fixture must not modify the player's local results.
 	await process_frame
 	assert(game.build_info.protocol >= 3)
 	assert(game.compatible_build(game.build_info))

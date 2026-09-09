@@ -5,6 +5,8 @@ signal solo_requested
 signal online_requested(username: String, password: String, register: bool, endpoint: String)
 signal leave_requested
 signal quit_requested
+signal quit_without_save_requested
+signal local_history_requested
 signal volume_changed(value: float)
 signal sensitivity_changed(value: float)
 var menu: Control
@@ -40,6 +42,12 @@ var leaderboard_panel: Control
 var leaderboard_label: Label
 var scoreboard_panel: Control
 var scoreboard_label: Label
+var local_history_panel: PanelContainer
+var local_history_backdrop: ColorRect
+var local_summary_label: Label
+var local_warning_label: Label
+var local_history_grid: GridContainer
+var local_exit_button: Button
 var spectating := false
 var sight_aiming := false
 var spectator_label: Label
@@ -88,7 +96,10 @@ func _ready() -> void:
 	label(left, "THE LAST SIGNAL", 25, ACCENT)
 	label(left, "Enter the exclusion zone.\nScavenge. Adapt. Be the last operator standing.", 20)
 	label(left, "01  /  ASH VALLEY\n16 operators · shrinking combat zone\nOriginal tactical survival FPS", 16, Color("8ca6ad"))
-	button(left, "SERVICE LEADERBOARD", func(): leaderboard_requested.emit(endpoint.text.trim_suffix("/")))
+	var history_buttons := HBoxContainer.new()
+	left.add_child(history_buttons)
+	button(history_buttons, "SERVICE LEADERBOARD", func(): leaderboard_requested.emit(endpoint.text.trim_suffix("/")))
+	button(history_buttons, "LOCAL OPERATIONS", func(): local_history_requested.emit())
 	var bottom := Control.new()
 	bottom.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left.add_child(bottom)
@@ -176,6 +187,47 @@ func _ready() -> void:
 	add_child(scoreboard_panel)
 	scoreboard_label = label(scoreboard_panel, "", 21)
 	scoreboard_panel.visible = false
+	local_history_backdrop = ColorRect.new()
+	local_history_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	local_history_backdrop.color = Color(0, 0, 0, 0.6)
+	add_child(local_history_backdrop)
+	local_history_backdrop.visible = false
+	local_history_panel = PanelContainer.new()
+	local_history_panel.position = Vector2(300, 90)
+	local_history_panel.size = Vector2(840, 710)
+	local_history_panel.theme = theme
+	var local_style := StyleBoxFlat.new()
+	local_style.bg_color = Color("0c1721")
+	local_style.border_color = Color("49616a")
+	local_style.set_border_width_all(1)
+	local_style.set_content_margin_all(20)
+	local_history_panel.add_theme_stylebox_override("panel", local_style)
+	add_child(local_history_panel)
+	var local_box := VBoxContainer.new()
+	local_box.add_theme_constant_override("separation", 14)
+	local_history_panel.add_child(local_box)
+	label(local_box, "LOCAL OPERATIONS", 30, ACCENT)
+	label(local_box, "Results on this device. Separate from the online leaderboard.", 16)
+	label(local_box, "Latest 100 operations. Totals include all readable local results.", 14)
+	local_summary_label = label(local_box, "", 20)
+	local_warning_label = label(local_box, "", 16, Color("efad75"))
+	local_warning_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	local_box.add_child(scroll)
+	local_history_grid = GridContainer.new()
+	local_history_grid.columns = 4
+	local_history_grid.add_theme_constant_override("h_separation", 30)
+	local_history_grid.add_theme_constant_override("v_separation", 10)
+	scroll.add_child(local_history_grid)
+	button(local_box, "REFRESH / RETRY SAVE", func(): local_history_requested.emit())
+	local_exit_button = Button.new()
+	local_exit_button.text = "EXIT WITHOUT SAVING PENDING RESULTS"
+	local_exit_button.pressed.connect(func(): quit_without_save_requested.emit())
+	local_box.add_child(local_exit_button)
+	local_exit_button.visible = false
+	button(local_box, "BACK", hide_local_history)
+	local_history_panel.visible = false
 
 func label(parent: Node, text: String, font_size: int, color := Color("e0e9e8")) -> Label:
 	var l := Label.new()
@@ -234,6 +286,7 @@ func save_settings() -> void:
 func show_menu(message := "") -> void:
 	menu.visible = true
 	leaderboard_panel.visible = false
+	hide_local_history()
 	scoreboard_panel.visible = false
 	hud.visible = false
 	pause_panel.visible = false
@@ -248,6 +301,7 @@ func show_game() -> void:
 	damage_until = 0
 	hit_text.text = ""
 	menu.visible = false
+	hide_local_history()
 	hud.visible = true
 	busy = false
 	password.text = ""
@@ -344,6 +398,46 @@ func update_scoreboard(roster: Array, enabled: bool) -> void:
 	for actor in roster:
 		lines.append("%-24s      %02d        %s" % [actor.display_name, actor.kills, "LIVE" if actor.alive else "OUT"])
 	scoreboard_label.text = "\n".join(lines)
+
+func show_local_history(summary: Dictionary) -> void:
+	local_history_panel.visible = true
+	local_history_backdrop.visible = true
+	local_summary_label.text = "%d COMPLETED   /   %d ABANDONED   /   %d WINS\n%d ELIMINATIONS   /   %d MINUTES PLAYED" % [summary.completed, summary.abandoned, summary.wins, summary.kills, int(summary.seconds) / 60]
+	var warnings := PackedStringArray()
+	if summary.get("read_error", "") != "":
+		warnings.append(summary.read_error)
+	if summary.get("pending", 0) > 0:
+		warnings.append("%d result(s) not saved. %s Use Retry Save before exiting." % [summary.pending, summary.get("save_error", "")])
+	if summary.recovered > 0:
+		warnings.append("%d result(s) recovered from a backup copy." % summary.recovered)
+	if summary.unreadable > 0:
+		warnings.append("%d unreadable result(s) preserved on disk; totals exclude them." % summary.unreadable)
+	if summary.newer > 0:
+		warnings.append("%d result(s) require a newer game version; totals exclude them." % summary.newer)
+	local_warning_label.text = "\n".join(warnings)
+	if summary.get("pending", 0) == 0:
+		local_exit_button.visible = false
+	for child in local_history_grid.get_children():
+		local_history_grid.remove_child(child)
+		child.queue_free()
+	for heading in ["DATE (UTC)", "PLACEMENT", "ELIMINATIONS", "DURATION"]:
+		label(local_history_grid, heading, 16, ACCENT)
+	for record in summary.records.slice(0, 100):
+		label(local_history_grid, Time.get_datetime_string_from_unix_time(int(record.finished_at), true).left(16), 16)
+		label(local_history_grid, "#%d" % record.rank if record.status == "completed" else "ABANDONED", 16)
+		label(local_history_grid, str(int(record.kills)), 16)
+		label(local_history_grid, "%02d:%02d" % [int(record.seconds) / 60, int(record.seconds) % 60], 16)
+	if summary.records.is_empty():
+		label(local_history_grid, "No local operations recorded yet.", 16)
+
+func hide_local_history() -> void:
+	local_history_panel.visible = false
+	local_history_backdrop.visible = false
+
+func _unhandled_input(event: InputEvent) -> void:
+	if local_history_panel.visible and event.is_action_pressed("pause"):
+		hide_local_history()
+		get_viewport().set_input_as_handled()
 
 func combat_feedback(kind: int, amount: float, headshot: bool, killed: bool, origin: Vector3) -> void:
 	if kind == 0:

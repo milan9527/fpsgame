@@ -6,6 +6,7 @@ func _initialize() -> void:
 func run() -> void:
 	var game = load("res://scripts/game.gd").new()
 	root.add_child(game)
+	game.local_profile = null # This fixture must not modify the player's local results.
 	await process_frame
 	await game.show_leaderboard("http://127.0.0.1:8000")
 	assert(game.ui.leaderboard_panel.visible, "Leaderboard opens from the real service")

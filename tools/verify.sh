@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+.venv/bin/python tools/test_local_profile.py --capture-ui > artifacts/local-profile-storage.log 2>&1
 timeout 25s ./tools/godot --headless --path client -- --smoke > artifacts/offline-smoke.log 2>&1
 # Godot assertion failures need a log check as well as exit-code checking.
 rg -q OFFLINE_SMOKE_PASS artifacts/offline-smoke.log

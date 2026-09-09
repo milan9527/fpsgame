@@ -21,6 +21,7 @@ func run() -> void:
 	assert(ResourceLoader.exists("res://assets/grenade.glb"), "Blender grenade asset must be packaged")
 	var game = load("res://scripts/game.gd").new()
 	root.add_child(game)
+	game.local_profile = null # This fixture must not modify the player's local results.
 	await process_frame
 	game.start_solo()
 	game.running = false

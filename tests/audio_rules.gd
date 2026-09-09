@@ -30,6 +30,7 @@ func run() -> void:
 	assert(DirAccess.make_dir_recursive_absolute(output_root) == OK)
 	var game = load("res://scripts/game.gd").new()
 	root.add_child(game)
+	game.local_profile = null # This fixture must not modify the player's local results.
 	await process_frame
 	game.start_solo()
 	game.set_physics_process(false)

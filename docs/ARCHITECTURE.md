@@ -45,6 +45,8 @@ flowchart LR
 
 ## 数据与权限
 
+离线结果由 `local_profile.gd` 保存为独立、不可覆盖的版本化记录，临时目录原子发布，主/备用副本校验后汇总。UI 区分完成和中止，写入失败保留进程内待保存队列并提供退出保护。它与 PostgreSQL 在线战绩没有同步通道。详见 [本地战绩](LOCAL_RESULTS.md)。
+
 - PostgreSQL：`users`、`matches`、`results`。用户密码 Argon2 哈希；昵称标准化；用户 ID 为 UUID。
 - JWT：12 小时过期，限定 HS256 与 audience；只在客户端进程内保存。
 - Redis：45 秒一次性联机票据；Lua 原子消费；原子限速计数。Redis 仅容器内网可达。

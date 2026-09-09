@@ -5,6 +5,8 @@ mkdir -p artifacts/IronMeridian-Linux
 ./tools/godot --headless --path client --export-pack Linux ../artifacts/IronMeridian-Linux/IronMeridian.pck
 cp tools/godot artifacts/IronMeridian-Linux/IronMeridian
 cp docs/PLAYER_GUIDE.md artifacts/IronMeridian-Linux/PLAYER_GUIDE.md
+mkdir -p artifacts/IronMeridian-Linux/docs
+cp docs/LOCAL_RESULTS.md artifacts/IronMeridian-Linux/docs/LOCAL_RESULTS.md
 cp LICENSE artifacts/IronMeridian-Linux/LICENSE
 cat > artifacts/IronMeridian-Linux/play.sh <<'SH'
 #!/usr/bin/env bash
@@ -35,4 +37,5 @@ if rg -q "SCRIPT ERROR|Assertion failed" artifacts/packed-audio.log; then cat ar
 timeout 15s artifacts/IronMeridian-Linux/play.sh --headless --verbose --script "$PWD/tests/audio_shutdown.gd" > artifacts/packed-audio-shutdown.log 2>&1
 rg -q AUDIO_SHUTDOWN_PENDING artifacts/packed-audio-shutdown.log
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked|still in use' artifacts/packed-audio-shutdown.log; then cat artifacts/packed-audio-shutdown.log; exit 1; fi
+.venv/bin/python tools/test_local_profile.py --packed > artifacts/packed-local-profile.log 2>&1
 tar -czf artifacts/IronMeridian-Linux-x86_64.tar.gz -C artifacts IronMeridian-Linux

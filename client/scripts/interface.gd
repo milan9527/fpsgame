@@ -39,6 +39,8 @@ var leaderboard_panel: Control
 var leaderboard_label: Label
 var scoreboard_panel: Control
 var scoreboard_label: Label
+var spectating := false
+var spectator_label: Label
 const INK := Color("0c1721")
 const ACCENT := Color("e2b875")
 
@@ -138,6 +140,7 @@ func _ready() -> void:
 	feed = placed_label(hud, Vector2(40, 118), 16)
 	hit_text = placed_label(hud, Vector2(610, 505), 16, ACCENT)
 	result_label = placed_label(hud, Vector2(430, 290), 38, ACCENT)
+	spectator_label = placed_label(hud, Vector2(430, 140), 22, ACCENT)
 	hud.visible = false
 	pause_panel = PanelContainer.new()
 	pause_panel.position = Vector2(480, 290)
@@ -255,8 +258,9 @@ func set_pause(enabled: bool) -> void:
 func draw_hud() -> void:
 	var center := hud.size / 2
 	var white := Color(0.9, 0.95, 0.92, 0.85)
-	for direction in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
-		hud.draw_line(center + direction * 5, center + direction * 12, white, 2)
+	if not spectating:
+		for direction in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
+			hud.draw_line(center + direction * 5, center + direction * 12, white, 2)
 	var now := Time.get_ticks_msec()
 	if now < hit_until:
 		for direction in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
@@ -304,6 +308,17 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 	local_yaw = actor.yaw
 	radius = zone
 	hud.queue_redraw()
+
+func set_spectator(enabled: bool, nickname: String, placement: int) -> void:
+	spectating = enabled
+	spectator_label.visible = enabled
+	if enabled:
+		spectator_label.text = "SPECTATING  /  " + (nickname if nickname != "" else "AWAITING RESULT")
+		spectator_label.text += "\nYOUR PLACEMENT  #%d" % placement
+		prompt.text = "Q / E  Switch operator   |   Mouse  Orbit   |   Wheel  Zoom   |   ESC  Menu"
+		hit_until = 0
+		damage_until = 0
+		hit_text.text = ""
 
 func show_leaderboard(rows: Array, profile: Dictionary = {}) -> void:
 	leaderboard_panel.visible = true

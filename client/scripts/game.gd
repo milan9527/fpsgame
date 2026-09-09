@@ -6,12 +6,14 @@ const Actor = preload("res://scripts/actor.gd")
 const World = preload("res://scripts/world.gd")
 const Interface = preload("res://scripts/interface.gd")
 const Sound = preload("res://scripts/sound.gd")
+const Spectator = preload("res://scripts/spectator.gd")
 const PORT := 27015
 const MAX_PLAYERS := 16
 const ROUND_SECONDS := 300.0
 var world
 var ui
 var sound
+var spectator
 var actors: Dictionary = {}
 var sessions: Dictionary = {}
 var pending: Dictionary = {}
@@ -22,6 +24,7 @@ var next_grenade_id := 1
 var grenade_tombstones: Dictionary = {}
 var last_loot_hash := 0
 var events: Array = []
+var last_eliminated_name := ""
 var dedicated := false
 var online := false
 var running := false
@@ -97,6 +100,8 @@ func _ready() -> void:
 	if dedicated:
 		start_server()
 	else:
+		spectator = Spectator.new()
+		add_child(spectator)
 		sound = Sound.new()
 		add_child(sound)
 		ui = Interface.new()
@@ -118,7 +123,7 @@ func _ready() -> void:
 			call_deferred("sign_in", OS.get_environment("TEST_USERNAME"), OS.get_environment("TEST_PASSWORD"), false, api_url)
 
 func setup_input() -> void:
-	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "scoreboard": KEY_TAB}
+	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "scoreboard": KEY_TAB, "spectate_previous": KEY_Q, "spectate_next": KEY_E}
 	for action in keys:
 		InputMap.add_action(action)
 		var e := InputEventKey.new()
@@ -164,6 +169,11 @@ func start_solo() -> void:
 	ui.show_game()
 
 func clear_actors() -> void:
+	if spectator != null:
+		spectator.reset()
+		lobby_camera.current = true
+		if ui != null:
+			ui.set_spectator(false, "", 0)
 	clear_grenades()
 	for actor in actors.values():
 		remove_child(actor)
@@ -174,6 +184,7 @@ func reset_round() -> void:
 	clear_actors()
 	participants.clear()
 	events.clear()
+	last_eliminated_name = ""
 	loot.clear()
 	elapsed = 0
 	zone = 110
@@ -243,6 +254,20 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not actors.has(local_id):
 		return
 	var actor = actors[local_id]
+	if not actor.alive:
+		if not ui.pause_panel.visible:
+			if event.is_action_pressed("spectate_next"):
+				spectator.cycle(actors, 1)
+			elif event.is_action_pressed("spectate_previous"):
+				spectator.cycle(actors, -1)
+			elif event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+				spectator.orbit(event.relative, ui.sensitivity)
+			elif event is InputEventMouseButton and event.pressed:
+				if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+					spectator.zoom(-0.5)
+				elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+					spectator.zoom(0.5)
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var scale_aim := 0.55 if Input.is_action_pressed("aim") else 1.0
 		actor.yaw = wrapf(actor.yaw - event.relative.x * ui.sensitivity * scale_aim, -PI, PI)
@@ -283,7 +308,10 @@ func _physics_process(dt: float) -> void:
 						if other.character_animation.available and other.character_animation.active_clip.begins_with("Crouch"):
 							test_remote_animation = true
 			if round_client and phase == "finished" and actors.has(local_id) and actors[local_id].rank > 0:
-				print("FULL_ROUND_CLIENT_PASS rank=" + str(actors[local_id].rank))
+				spectator.update_view(actors, local_id, phase)
+				if not actors[local_id].alive:
+					assert(spectator.active and spectator.camera.current, "Network death enters spectator camera")
+				print("FULL_ROUND_CLIENT_PASS rank=%d spectator=%s" % [actors[local_id].rank, "ok" if spectator.active else "survived"])
 				get_tree().quit()
 			if not round_client and bot_test_timer > 26:
 				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_grenade_seen and test_grenade_exploded and actors[local_id].prediction_corrections > 20:
@@ -352,7 +380,8 @@ func _physics_process(dt: float) -> void:
 func local_command(actor) -> Dictionary:
 	sequence += 1
 	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "loot": false, "throw": false, "weapon": -1}
-	if ui.pause_panel.visible:
+	if ui.pause_panel.visible or not actor.alive:
+		action_latch.clear()
 		return cmd
 	var movement := Input.get_vector("left", "right", "forward", "back")
 	cmd.x = movement.x
@@ -545,7 +574,7 @@ func shot_fx(id: int, origin: Vector3, end: Vector3, kind: int) -> void:
 	get_tree().create_timer(0.065).timeout.connect(line.queue_free)
 
 func damage(target, amount: float, attacker_id: int, bypass_protection := false, headshot := false, cause := "THE ZONE", impact_origin = null) -> void:
-	if not target.alive or (not bypass_protection and phase == "live" and elapsed < 5):
+	if phase == "finished" or not target.alive or (not bypass_protection and phase == "live" and elapsed < 5):
 		return
 	var before: float = target.health + target.armor
 	target.apply_damage(amount)
@@ -558,6 +587,8 @@ func damage(target, amount: float, attacker_id: int, bypass_protection := false,
 	deliver_feedback(target.actor_id, 1, actual_damage, false, not target.alive, source_position)
 	if not target.alive:
 		target.rank = alive_count() + 1
+		if target.rank == 1:
+			last_eliminated_name = target.display_name
 		if participants.has(target.actor_id):
 			participants[target.actor_id].rank = target.rank
 		var source: String = cause
@@ -595,6 +626,8 @@ func alive_count() -> int:
 	return count
 
 func finish_round() -> void:
+	if phase == "finished":
+		return
 	# Time limit ties are resolved by health, then kills, then stable actor id.
 	var survivors: Array = actors.values().filter(func(a): return a.alive)
 	survivors.sort_custom(func(a, b): return a.health > b.health if a.health != b.health else (a.kills > b.kills if a.kills != b.kills else a.actor_id < b.actor_id))
@@ -606,7 +639,9 @@ func finish_round() -> void:
 	clear_grenades()
 	phase = "finished"
 	phase_time = 12
-	var winner: String = survivors[0].display_name if not survivors.is_empty() else "No survivors"
+	# Damage resolves in simulation order. The last eliminated operator retains
+	# rank 1 even if another effect kills them before this tick completes.
+	var winner: String = survivors[0].display_name if not survivors.is_empty() else (last_eliminated_name if last_eliminated_name != "" else "No winner")
 	add_event("Operation complete / " + winner)
 	if dedicated:
 		var players: Array = []
@@ -627,23 +662,24 @@ func _process(dt: float) -> void:
 		return
 	for id in actors:
 		actors[id].render_frame(dt, online, id == local_id, Input.is_action_pressed("aim"))
+	spectator.update_view(actors, local_id, phase)
 	world.show_loot(loot)
 	world.set_zone(zone)
 	ui.update_scoreboard(actors.values(), Input.is_action_pressed("scoreboard") and not ui.pause_panel.visible)
 	if actors.has(local_id):
 		var actor = actors[local_id]
 		var message := ""
-		if not actor.alive:
-			message = "OPERATOR DOWN\nPLACEMENT  #%d\n\nESC  /  RETURN TO DEPLOYMENT" % actor.rank
 		if phase == "finished":
 			message = ("VICTORY" if actor.rank == 1 else "OPERATION COMPLETE") + "\nPLACEMENT  #%d  /  %d ELIMINATIONS" % [actor.rank, actor.kills]
 			message += "\nNext operation in %ds" % maxi(0, int(phase_time)) if online else "\nESC  /  RETURN TO DEPLOYMENT"
 		if phase == "lobby":
 			message = "DEPLOYING IN %02d\nWaiting for operators…" % maxi(0, int(phase_time))
+		var viewed_actor = actors.get(spectator.target_id, actor) if spectator.active else actor
 		ui.grenade_warning_distance = INF
 		for grenade in grenades.values():
-			ui.grenade_warning_distance = minf(ui.grenade_warning_distance, actor.position.distance_to(grenade.position))
-		ui.update_hud(actor, alive_count(), phase, phase_time, zone, events, message)
+			ui.grenade_warning_distance = minf(ui.grenade_warning_distance, viewed_actor.position.distance_to(grenade.position))
+		ui.update_hud(viewed_actor, alive_count(), phase, phase_time, zone, events, message)
+		ui.set_spectator(spectator.active, spectator.target_name, actor.rank)
 
 func peer_connected(id: int) -> void:
 	if dedicated:

@@ -50,7 +50,7 @@ func run() -> void:
 	var optic: Vector3 = actor.camera.to_local(actor.gun.to_global(arms.SIGHT))
 	assert(absf(optic.x) < 0.001 and absf(optic.y) < 0.001, "Optic center aligns with camera sight line")
 	assert(arms.aim_blend == 1 and actor.camera.fov < 49)
-	var ammunition: int = actor.ammo + actor.reserve
+	var ammunition: int = actor.total_ammunition()
 	for weapon in range(3):
 		actor.weapon = weapon
 		actor.reload_left = actor.RELOAD[weapon] * 0.5
@@ -58,7 +58,7 @@ func run() -> void:
 		assert(arms.active_clip == "Reload" and arms.aim_blend == 0)
 		assert(arms.skeleton.get_bone_global_pose(left).origin.distance_to(left_rest) > 0.2)
 		assert(arms.magazine.position.y < arms.magazine_rest.y - 0.25)
-		assert(actor.ammo + actor.reserve == ammunition, "Animation cannot transfer ammunition")
+		assert(actor.total_ammunition() == ammunition, "Animation cannot transfer ammunition")
 		if capture:
 			var animated_vertices: PackedVector3Array = skin.bake_mesh_from_current_skeleton_pose().surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 			var displacement := 0.0

@@ -43,5 +43,10 @@ else:
 (root / 'artifacts' / 'online-server.log').write_text(server_output)
 assert 'Unable to send packet' not in server_output, server_output
 assert 'SCRIPT ERROR' not in server_output, server_output
-assert 'relay=false' in server_output, 'Dedicated server must disable client-to-client relay'
+# Readiness is emitted once at startup, which may precede the two-minute
+# disconnect/error window when testing an already-running service.
+startup_output = subprocess.check_output(
+    ['docker', 'compose', 'logs', '--no-color', 'game'], cwd=root, text=True)
+ready_lines = [line for line in startup_output.splitlines() if 'SERVER_READY ' in line]
+assert ready_lines and 'relay=false' in ready_lines[-1], 'Dedicated server must disable client-to-client relay'
 print('TWO_CLIENT_ONLINE_PASS disconnect=ok')

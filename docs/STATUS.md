@@ -4,6 +4,8 @@
 
 ## 已实际实现
 
+- 三枪独立弹匣与共享储备，切枪保留装弹量；计时换弹、空弹匣提示与三枪 HUD，协议 6 同步。详见 [弹药规则](AMMUNITION.md)。
+
 - Godot 4.4.1 原生 FPS 客户端，Linux 可启动包。
 - Blender 4.3.2 原创枪械、角色模型和可重复生成脚本；保留 `.blend` 源文件。
 - 17 骨骼蒙皮角色、9 个动作片段（待机、走、跑、蹲伏待机/行走/换弹、跳跃、站立换弹、死亡），一张网格、4 个材质面。动作按服务器同步的速度、落地、姿态、换弹与生命状态驱动。
@@ -115,6 +117,9 @@
 | 补给满库存/部分取用/多人先后取用守恒、护甲小数、遮挡/距离/编号/重放/回合、提示与实体更新 | 通过（实际 OpenGL 及打包版） | `artifacts/supply-rules.log`、`artifacts/packed-supplies.log` |
 | 真实登录客户端的部分余量、库存、重复目标拒绝、实体位置/移除同步 | 通过 | `artifacts/supply-network.log` |
 | 补给版本双客户端操作、整局落库和协议 5 兼容 | 通过 | `artifacts/supply-online.log`、`artifacts/supply-full-round.log`、`artifacts/supply-protocol.log` |
+| 独立弹匣、切枪防自动装弹、计时/不足储备换弹、快照复制、HUD 与死亡保护 | 通过（实际 OpenGL 及打包版） | `artifacts/magazine-rules.log`、`artifacts/packed-magazines.log` |
+| 弹匣版本完整回合落库及协议 6 兼容 | 通过 | `artifacts/magazine-full-round.log`、`artifacts/magazine-protocol.log` |
+| 双客户端三枪开火/切回保留弹量、储备守恒及断开确认 | 通过 | `artifacts/magazine-online.log` |
 | 补给目标提示与高亮画面 | 已检查 | `artifacts/supply-prompt.png` |
 
 20 倍速测试用于验证完整流程，不代表实时性能、弱网适应性或长期稳定性。双客户端验证不等于 16 真人并发验证。

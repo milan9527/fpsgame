@@ -66,7 +66,7 @@ func run() -> void:
 		remote.update_stance()
 		remote.render_frame(0.02, false, false, false)
 	assert(muzzle_positions[2] < muzzle_positions[1] and muzzle_positions[1] < muzzle_positions[0], "Distinct barrel lengths drive muzzle effects")
-	assert(actor.ammo + actor.reserve == 150, "Weapon switching preserves total ammunition")
+	assert(actor.total_ammunition() == 163, "Weapon switching preserves total ammunition")
 	print("WEAPON_VISUALS_RULES_PASS models=3 local=ok remote_snapshot=ok anchors=ok optic_alignment=ok zoom=ok bone_attachment=ok bounded_meshes=ok inventory_unchanged=ok")
 	game.queue_free()
 	await process_frame

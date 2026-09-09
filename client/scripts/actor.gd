@@ -32,7 +32,12 @@ var armor := 50.0
 var kills := 0
 var rank := 0
 var weapon := 0
-var ammo := 30
+var magazines := PackedInt32Array([30, 8, 5])
+var ammo: int:
+	get:
+		return magazines[weapon]
+	set(value):
+		magazines[weapon] = value
 var reserve := 120
 var medkits := 2
 var grenades := 2
@@ -308,12 +313,13 @@ func heal() -> void:
 func switch_weapon(index: int) -> void:
 	if not alive or throw_left > 0 or index < 0 or index > 2 or index == weapon or reload_left > 0:
 		return
-	# Shared ammunition pool; switching never manufactures rounds.
-	reserve += ammo
+	# Loaded rounds stay in their own weapon. Only a completed reload transfers
+	# reserve ammunition into a magazine.
 	weapon = index
-	ammo = mini(CAPACITY[weapon], reserve)
-	reserve -= ammo
 	fire_left = 0.5
+
+func total_ammunition() -> int:
+	return reserve + magazines[0] + magazines[1] + magazines[2]
 
 func apply_damage(amount: float) -> void:
 	if not alive:
@@ -332,7 +338,7 @@ func apply_damage(amount: float) -> void:
 		gun.visible = false
 
 func pack() -> Dictionary:
-	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "throw": throw_left, "ack": last_sequence}
+	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "mags": magazines.duplicate(), "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "throw": throw_left, "ack": last_sequence}
 
 func unpack(data: Dictionary, local: bool) -> void:
 	target_position = data.p
@@ -348,7 +354,7 @@ func unpack(data: Dictionary, local: bool) -> void:
 	kills = data.k
 	rank = data.r
 	weapon = data.w
-	ammo = data.m
+	magazines = PackedInt32Array(data.mags)
 	reserve = data.s
 	medkits = data.med
 	reload_left = data.reload

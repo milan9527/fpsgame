@@ -26,6 +26,7 @@ var username: LineEdit
 var password: LineEdit
 var endpoint: LineEdit
 var health_bar: ProgressBar
+var loadout_label: Label
 var armor_bar: ProgressBar
 var radar: Control
 var local_position := Vector3.ZERO
@@ -152,6 +153,7 @@ func _ready() -> void:
 	headline = placed_label(hud, Vector2(40, 28), 23, ACCENT)
 	stats = placed_label(hud, Vector2(40, 66), 17)
 	weapon = placed_label(hud, Vector2(40, 750), 23)
+	loadout_label = placed_label(hud, Vector2(40, 779), 14)
 	health_bar = bar(Vector2(40, 800), Color("77c9b0"))
 	armor_bar = bar(Vector2(40, 829), Color("7ebce4"))
 	prompt = placed_label(hud, Vector2(480, 735), 18, ACCENT)
@@ -366,6 +368,7 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 	headline.text = "ASH VALLEY   /   " + phase.to_upper()
 	stats.text = "%02d ALIVE    •    %02d ELIMINATIONS    •    ZONE %dm    •    %02d:%02d" % [alive_count, actor.kills, zone, int(time_left) / 60, int(time_left) % 60]
 	weapon.text = "%s    %02d / %03d" % [actor.NAMES[actor.weapon], actor.ammo, actor.reserve]
+	loadout_label.text = "1  AR %02d   |   2  SG %02d   |   3  SR %02d" % [actor.magazines[0], actor.magazines[1], actor.magazines[2]]
 	if actor.crouched:
 		weapon.text += "  [CROUCHED]"
 	health_bar.value = actor.health
@@ -381,6 +384,8 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 		prompt.text = "WARNING  /  RETURN TO THE SAFE ZONE"
 	elif actor.weapon_blocked and not spectating:
 		prompt.text = "MUZZLE BLOCKED / STEP BACK OR REPOSITION"
+	elif actor.ammo == 0 and not spectating:
+		prompt.text = "R  RELOAD / EMPTY MAGAZINE" if actor.reserve > 0 else "NO RESERVE AMMUNITION / FIND SUPPLIES"
 	if grenade_warning_distance < 9:
 		prompt.text = "FRAG NEARBY / %dm — MOVE TO COVER" % ceili(grenade_warning_distance)
 	feed.text = "\n".join(events)

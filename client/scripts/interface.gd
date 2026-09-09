@@ -54,6 +54,7 @@ var local_exit_button: Button
 var spectating := false
 var sight_aiming := false
 var weapon_blocked := false
+var supply_prompt := ""
 var spectator_label: Label
 const INK := Color("0c1721")
 const ACCENT := Color("e2b875")
@@ -369,7 +370,7 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 		weapon.text += "  [CROUCHED]"
 	health_bar.value = actor.health
 	armor_bar.value = actor.armor
-	prompt.text = "E  Pick up nearby supplies   |   H  Medkit ×%d   |   G  Frag ×%d" % [actor.medkits, actor.grenades]
+	prompt.text = ("H  Medkit ×%d   |   G  Frag ×%d" % [actor.medkits, actor.grenades]) if supply_prompt == "" else supply_prompt
 	if actor.throw_left > 0:
 		prompt.text = "THROWING FRAG"
 	elif actor.reload_left > 0:

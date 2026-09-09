@@ -10,6 +10,7 @@ const Spectator = preload("res://scripts/spectator.gd")
 const LocalProfile = preload("res://scripts/local_profile.gd")
 const BotNavigator = preload("res://scripts/bot_navigator.gd")
 const HitHistory = preload("res://scripts/hit_history.gd")
+const SupplyRules = preload("res://scripts/supply_rules.gd")
 var hit_history := HitHistory.new()
 var rewind_peers := {}
 const PORT := 27015
@@ -364,7 +365,8 @@ func _physics_process(dt: float) -> void:
 			if net_tick >= 1.0 / 30:
 				net_tick = 0
 				if phase == "live" and has_actions(cmd):
-					action_command.rpc_id(1, network_round_id, cmd)
+					var supply_id := int(supply_target(actor).get("id", -1)) if cmd.loot else -1
+					action_command.rpc_id(1, network_round_id, cmd, supply_id)
 				input_command.rpc_id(1, without_actions(cmd))
 				action_latch.clear()
 		else:
@@ -541,15 +543,17 @@ func without_actions(cmd: Dictionary) -> Dictionary:
 	return movement
 
 @rpc("any_peer", "call_remote", "reliable", 4)
-func action_command(round_id: String, cmd: Dictionary) -> void:
+func action_command(round_id: String, cmd: Dictionary, loot_target = -1) -> void:
 	if not dedicated:
 		return
 	var id := multiplayer.get_remote_sender_id()
 	if not sessions.has(id) or not actors.has(id):
 		return
-	receive_actions(actors[id], round_id, cmd)
+	receive_actions(actors[id], round_id, cmd, loot_target)
 
-func receive_actions(actor, round_id: String, cmd: Dictionary) -> bool:
+func receive_actions(actor, round_id: String, cmd: Dictionary, loot_target = -1) -> bool:
+	if not loot_target is int or loot_target < -1 or loot_target > 4294967295:
+		return false
 	if round_id != match_id or phase != "live" or not actor.alive or not valid_command(cmd):
 		return false
 	if cmd.seq != floorf(cmd.seq) or cmd.seq < 0 or cmd.seq > 2147483647 or cmd.seq <= actor.last_action_sequence:
@@ -565,7 +569,7 @@ func receive_actions(actor, round_id: String, cmd: Dictionary) -> bool:
 	var saved_pitch: float = actor.pitch
 	actor.yaw = cmd.yaw
 	actor.pitch = cmd.pitch
-	apply_actions(actor, cmd)
+	apply_actions(actor, cmd, loot_target, true)
 	actor.yaw = saved_yaw
 	actor.pitch = saved_pitch
 	return true
@@ -593,7 +597,7 @@ func apply_command(actor, cmd: Dictionary) -> void:
 	actor.aiming = cmd.ads
 	apply_actions(actor, cmd)
 
-func apply_actions(actor, cmd: Dictionary) -> void:
+func apply_actions(actor, cmd: Dictionary, loot_target := -1, explicit_pickup := false) -> void:
 	if phase != "live" or not actor.alive:
 		return
 	actor.jump_requested = actor.jump_requested or cmd.jump
@@ -603,8 +607,8 @@ func apply_actions(actor, cmd: Dictionary) -> void:
 		actor.heal()
 	if cmd.weapon >= 0:
 		actor.switch_weapon(int(cmd.weapon))
-	if cmd.loot:
-		pickup(actor)
+	if cmd.loot and (not explicit_pickup or loot_target >= 0):
+		pickup(actor, loot_target)
 	if cmd.throw:
 		throw_grenade(actor)
 
@@ -819,18 +823,45 @@ func damage(target, amount: float, attacker_id: int, bypass_protection := false,
 		var loot_id := 1000 + absi(target.actor_id)
 		loot[loot_id] = {"p": target.position, "kind": 0}
 
-func pickup(actor) -> void:
-	if not actor.alive:
-		return
-	for id in loot.keys():
-		if actor.position.distance_to(loot[id].p) < 2.8:
-			match int(loot[id].kind):
-				0: actor.reserve = mini(300, actor.reserve + 45)
-				1: actor.medkits = mini(5, actor.medkits + 1)
-				2: actor.armor = minf(100, actor.armor + 40)
-				3: actor.grenades = mini(4, actor.grenades + 1)
-			loot.erase(id)
-			break
+func supply_accessible(actor, item: Dictionary) -> bool:
+	if actor.position.distance_to(item.p) >= SupplyRules.RANGE:
+		return false
+	var query := PhysicsRayQueryParameters3D.create(actor.eye_position(), item.p + Vector3.UP * 0.35, 1)
+	query.hit_from_inside = true
+	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+func supply_target(actor) -> Dictionary:
+	if not actor.alive or phase != "live":
+		return {}
+	var best := {}
+	var best_distance := INF
+	var best_usable := false
+	for id in loot:
+		var item: Dictionary = loot[id]
+		var distance: float = actor.position.distance_to(item.p)
+		var usable := SupplyRules.capacity(actor, int(item.kind)) > 0
+		if (best_usable and not usable) or (usable == best_usable and distance >= best_distance):
+			continue
+		if not supply_accessible(actor, item):
+			continue
+		best = {"id": id, "kind": item.kind, "amount": SupplyRules.amount(item), "usable": usable}
+		best_distance = distance
+		best_usable = usable
+	return best
+
+func pickup(actor, requested_id := -1) -> bool:
+	if not actor.alive or phase != "live":
+		return false
+	var id := requested_id
+	if id < 0:
+		id = int(supply_target(actor).get("id", -1))
+	if not loot.has(id) or not supply_accessible(actor, loot[id]):
+		return false
+	if SupplyRules.transfer(actor, loot[id]) <= 0:
+		return false
+	if SupplyRules.amount(loot[id]) <= 0.00001:
+		loot.erase(id)
+	return true
 
 func alive_count() -> int:
 	var count := 0
@@ -913,6 +944,14 @@ func _process(dt: float) -> void:
 	ui.update_scoreboard(actors.values(), Input.is_action_pressed("scoreboard") and not ui.pause_panel.visible)
 	if actors.has(local_id):
 		var actor = actors[local_id]
+		var supply := supply_target(actor) if not spectator.active else {}
+		world.highlight_supply(int(supply.get("id", -1)))
+		ui.supply_prompt = ""
+		if not supply.is_empty():
+			var item_name: String = SupplyRules.NAMES[int(supply.kind)]
+			var quantity: float = supply.amount
+			var quantity_text := str(int(quantity)) if is_equal_approx(quantity, roundf(quantity)) else String.num(quantity, 1)
+			ui.supply_prompt = ("E  %s ×%s" % [item_name, quantity_text]) if supply.usable else item_name + " / INVENTORY FULL"
 		var message := ""
 		if phase == "finished":
 			message = ("VICTORY" if actor.rank == 1 else "OPERATION COMPLETE") + "\nPLACEMENT  #%d  /  %d ELIMINATIONS" % [actor.rank, actor.kills]

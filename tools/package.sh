@@ -10,6 +10,7 @@ cp docs/LOCAL_RESULTS.md artifacts/IronMeridian-Linux/docs/LOCAL_RESULTS.md
 cp docs/LAG_COMPENSATION.md artifacts/IronMeridian-Linux/docs/LAG_COMPENSATION.md
 cp docs/PROTOCOL.md artifacts/IronMeridian-Linux/docs/PROTOCOL.md
 cp docs/WEAPON_VISUALS.md artifacts/IronMeridian-Linux/docs/WEAPON_VISUALS.md
+cp docs/SUPPLIES.md artifacts/IronMeridian-Linux/docs/SUPPLIES.md
 cp LICENSE artifacts/IronMeridian-Linux/LICENSE
 cat > artifacts/IronMeridian-Linux/play.sh <<'SH'
 #!/usr/bin/env bash
@@ -19,6 +20,9 @@ exec ./IronMeridian --main-pack IronMeridian.pck "$@"
 SH
 chmod +x artifacts/IronMeridian-Linux/play.sh
 # A packed-project smoke run checks imported GLB assets and resource paths.
+timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/supply_rules.gd" > artifacts/packed-supplies.log 2>&1
+rg -q SUPPLY_RULES_PASS artifacts/packed-supplies.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-supplies.log; then cat artifacts/packed-supplies.log; exit 1; fi
 timeout 20s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/pause_rules.gd" > artifacts/packed-pause.log 2>&1
 rg -q PAUSE_RULES_PASS artifacts/packed-pause.log
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-pause.log; then cat artifacts/packed-pause.log; exit 1; fi

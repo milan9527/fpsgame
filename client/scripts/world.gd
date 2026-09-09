@@ -1,6 +1,7 @@
 extends Node3D
 
 var loot_nodes: Dictionary = {}
+var highlighted_supply := -1
 var zone_mesh: MeshInstance3D
 var zone_radius := 110.0
 var rng := RandomNumberGenerator.new()
@@ -180,10 +181,33 @@ func show_loot(items: Dictionary) -> void:
 		if not items.has(id):
 			loot_nodes[id].queue_free()
 			loot_nodes.erase(id)
+			if highlighted_supply == id:
+				highlighted_supply = -1
+	var colors := ["e8c77b", "77d7ad", "7bbee8", "d9844e"]
 	for id in items:
-		if loot_nodes.has(id):
-			continue
 		var item: Dictionary = items[id]
-		var colors := ["e8c77b", "77d7ad", "7bbee8", "d9844e"]
+		if loot_nodes.has(id):
+			var existing: MeshInstance3D = loot_nodes[id]
+			existing.position = item.p + Vector3(0, 0.35, 0)
+			if existing.get_meta("supply_kind", -1) != item.kind:
+				existing.material_override = mat(colors[item.kind]).duplicate()
+				existing.set_meta("supply_kind", item.kind)
+				if highlighted_supply == id:
+					highlighted_supply = -1
+			continue
 		var mesh := block(item.p + Vector3(0, 0.35, 0), Vector3(0.65, 0.5, 0.65), colors[item.kind], false)
+		mesh.material_override = mesh.material_override.duplicate()
+		mesh.set_meta("supply_kind", item.kind)
 		loot_nodes[id] = mesh
+
+func highlight_supply(id: int) -> void:
+	if highlighted_supply == id:
+		return
+	if loot_nodes.has(highlighted_supply):
+		loot_nodes[highlighted_supply].material_override.emission_enabled = false
+	highlighted_supply = id
+	if loot_nodes.has(id):
+		var material: StandardMaterial3D = loot_nodes[id].material_override
+		material.emission_enabled = true
+		material.emission = material.albedo_color
+		material.emission_energy_multiplier = 1.2

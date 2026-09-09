@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+timeout 25s xvfb-run -a ./tools/godot --path client --audio-driver Dummy --script ../tests/supply_rules.gd -- --capture-supplies > artifacts/supply-rules.log 2>&1
+rg -q SUPPLY_RULES_PASS artifacts/supply-rules.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/supply-rules.log; then cat artifacts/supply-rules.log; exit 1; fi
+.venv/bin/python tools/test_supply_network.py
 timeout 20s xvfb-run -a ./tools/godot --path client --audio-driver Dummy --script ../tests/pause_rules.gd -- --capture-pause > artifacts/pause-rules.log 2>&1
 rg -q PAUSE_RULES_PASS artifacts/pause-rules.log
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/pause-rules.log; then cat artifacts/pause-rules.log; exit 1; fi

@@ -1,5 +1,9 @@
 extends CharacterBody3D
 
+const CharacterAnimation = preload("res://scripts/character_animation.gd")
+var character_animation := CharacterAnimation.new()
+var grounded := false
+
 var actor_id: int
 var display_name: String
 var user_id := ""
@@ -75,6 +79,7 @@ func _ready() -> void:
 		fallback.material_override = material
 		body_mesh = fallback
 	add_child(body_mesh)
+	character_animation.setup(body_mesh)
 	head = Node3D.new()
 	head.position.y = 1.6
 	add_child(head)
@@ -162,6 +167,7 @@ func simulate(dt: float) -> void:
 		velocity.y = 7.5
 	jump_requested = false
 	move_and_slide()
+	grounded = is_on_floor()
 	position.x = clampf(position.x, -115, 115)
 	position.z = clampf(position.z, -115, 115)
 	if position.y < -10:
@@ -196,12 +202,13 @@ func apply_damage(amount: float) -> void:
 		alive = false
 		collision_layer = 0
 		collision_mask = 0
-		body_mesh.rotation.z = PI / 2
-		body_mesh.position.y = 0.3
+		if not character_animation.available:
+			body_mesh.rotation.z = PI / 2
+			body_mesh.position.y = 0.3
 		gun.visible = false
 
 func pack() -> Dictionary:
-	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "ads": aiming, "recoil": recoil}
+	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded}
 
 func unpack(data: Dictionary, local: bool) -> void:
 	target_position = data.p
@@ -223,11 +230,14 @@ func unpack(data: Dictionary, local: bool) -> void:
 	set_stance(data.crouched)
 	aiming = data.ads
 	recoil = data.recoil
+	velocity = data.vel
+	grounded = data.ground
 	if alive and not data.live:
 		apply_damage(10000)
 	alive = data.live
 
 func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> void:
+	character_animation.update(self, dt)
 	if network_client:
 		position = position.lerp(target_position, minf(1, dt * 20))
 	rotation.y = yaw
@@ -278,8 +288,8 @@ func set_stance(lowered: bool) -> void:
 	body_shape.shape.height = height
 	body_shape.position.y = height / 2
 	head.position.y = eye_height()
-	# The current mesh has no rig; collision/eye height is authoritative, pose is provisional.
-	body_mesh.scale.y = height / STANDING_HEIGHT
+	if not character_animation.available:
+		body_mesh.scale.y = height / STANDING_HEIGHT
 
 func shot_spread() -> float:
 	var base: float = [0.009, 0.045, 0.002][weapon]

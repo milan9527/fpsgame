@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 import time
-import uuid
+from test_accounts import account as test_account
 import httpx
 
 root = Path(__file__).resolve().parent.parent
@@ -13,11 +13,11 @@ for line in (root / '.env').read_text().splitlines():
     key, value = line.split('=', 1)
     if key == 'SERVER_SECRET':
         env[key] = value
-name = 'round_' + uuid.uuid4().hex[:12]
-password = 'round-test-password-876!'
-response = httpx.post(base + '/auth/register', json={'username': name, 'password': password})
-response.raise_for_status()
-account = response.json()
+account = test_account('full-round')
+name = account['username']
+password = account['password']
+profile_headers = {'Authorization': 'Bearer ' + account['token']}
+before_matches = httpx.get(base + '/profile', headers=profile_headers).json()['matches']
 server_log = open(root / 'artifacts/full-round-server.log', 'w')
 client_log = open(root / 'artifacts/full-round-client.log', 'w')
 server = subprocess.Popen([str(root / 'tools/godot'), '--headless', '--path', str(root / 'client'), '--time-scale', '20', '--', '--server'], env=env, stdout=server_log, stderr=subprocess.STDOUT)
@@ -39,7 +39,7 @@ try:
     headers = {'Authorization': 'Bearer ' + account['token']}
     for _ in range(60):
         profile = httpx.get(base + '/profile', headers=headers).json()
-        if profile['matches'] == 1:
+        if profile['matches'] == before_matches + 1:
             break
         time.sleep(0.2)
     else:

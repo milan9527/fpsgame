@@ -52,6 +52,7 @@ var test_fired := false
 var test_crouched := false
 var test_recoil := false
 var test_remote_crouch := false
+var test_remote_animation := false
 var authenticated_at := 0
 
 func _ready() -> void:
@@ -251,12 +252,14 @@ func _physics_process(dt: float) -> void:
 				for other in actors.values():
 					if other.actor_id > 0 and other.actor_id != local_id and other.crouched:
 						test_remote_crouch = true
+						if other.character_animation.available and other.character_animation.active_clip.begins_with("Crouch"):
+							test_remote_animation = true
 			if round_client and phase == "finished" and actors.has(local_id) and actors[local_id].rank > 0:
 				print("FULL_ROUND_CLIENT_PASS rank=" + str(actors[local_id].rank))
 				get_tree().quit()
 			if not round_client and bot_test_timer > 26:
-				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch:
-					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok" % [local_id, actors.size(), phase])
+				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation:
+					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok" % [local_id, actors.size(), phase])
 					get_tree().quit()
 				else:
 					push_error("Online smoke test failed to reach active match")
@@ -793,6 +796,7 @@ func submit_result() -> void:
 func run_smoke_checks() -> void:
 	var actor = actors[local_id]
 	assert(actors.size() == MAX_PLAYERS, "Full offline roster")
+	assert(actor.character_animation.available and actor.character_animation.clips.has("CrouchReload"), "Packaged skinned character and animation clips load")
 	assert(loot.size() > 20, "Loot exists")
 	var health_before: float = actor.health
 	actor.apply_damage(20)
@@ -846,7 +850,7 @@ func run_smoke_checks() -> void:
 	finish_round()
 	assert(actor.rank == 1 and actor.kills == 15 and phase == "finished", "Victory and kills resolve")
 	await get_tree().create_timer(0.15).timeout
-	print("OFFLINE_SMOKE_PASS actors=16 reload=ok heal=ok damage=ok victory=ok raycast=ok cover=ok fire_interval=ok")
+	print("OFFLINE_SMOKE_PASS actors=16 reload=ok heal=ok damage=ok victory=ok raycast=ok cover=ok fire_interval=ok rig=ok")
 	get_tree().quit()
 
 func capture_frame() -> void:

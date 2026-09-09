@@ -50,3 +50,7 @@ Linux 客户端以 OpenGL Compatibility 渲染。开发主机通过软件 OpenGL
 ## AI 任务
 
 容器独立于编辑器和 Codex 前端运行。AI 自主开发的持续性取决于平台提供的 Goal 调度和会话生命周期，不由 Docker restart 保证。项目状态与下一步工作保存在 `docs/STATUS.md`，重新打开工作区可据此续接。
+
+## 测试资源
+
+骨骼蒙皮测试通过 Xvfb 使用实际 OpenGL 渲染，验证顶点变形与脚底位置；纯 headless 渲染器不能完成这项检查。联机测试账户凭据保存在忽略提交且权限为 0600 的 `artifacts/test-accounts.json`，不包含持久令牌。仅在重建测试数据库后删除此缓存以重新生成测试账户。

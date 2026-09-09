@@ -67,21 +67,11 @@ box('Identification plate', (0.052, -0.025, 0.015), (0.005, 0.07, 0.025), brass,
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.export_scene.gltf(filepath=str(OUT / 'carbine.glb'), export_format='GLB', use_selection=True)
 bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / 'carbine.blend'))
-bpy.ops.object.delete(use_global=False)
+weapon_parts = list(bpy.context.scene.objects)
+for part in weapon_parts:
+    for collection in list(part.users_collection):
+        collection.objects.unlink(part)
 
-# Humanoid mesh assembled from original low-poly armor pieces.
-box('Torso armor', (0, 0, 1.16), (0.60, 0.32, 0.53), armor, 0.055)
-box('Pelvis', (0, 0, 0.80), (0.44, 0.30, 0.24), cloth, 0.04)
-for side in [-1, 1]:
-    box('Leg', (side * 0.145, 0, 0.44), (0.22, 0.25, 0.64), cloth, 0.045)
-    box('Boot', (side * 0.145, 0.06, 0.095), (0.24, 0.38, 0.19), steel, 0.02)
-    box('Arm', (side * 0.39, 0, 1.10), (0.20, 0.23, 0.55), cloth, 0.045)
-    box('Shoulder', (side * 0.37, 0, 1.35), (0.27, 0.30, 0.22), armor, 0.05)
-    box('Pouch', (side * 0.15, 0.19, 1.09), (0.13, 0.10, 0.20), cloth, 0.012)
-box('Helmet', (0, 0, 1.65), (0.40, 0.40, 0.34), armor, 0.09)
-box('Visor', (0, 0.197, 1.65), (0.31, 0.02, 0.11), visor, 0.01)
-box('Radio antenna', (0.26, -0.20, 1.45), (0.025, 0.025, 0.40), steel, 0.003)
-bpy.ops.object.select_all(action='SELECT')
-bpy.ops.export_scene.gltf(filepath=str(OUT / 'operator.glb'), export_format='GLB', use_selection=True)
-bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / 'operator.blend'))
+# The humanoid authoring script shares the material palette and mesh helpers.
+exec(compile((ROOT / 'tools' / 'build_operator.py').read_text(), 'build_operator.py', 'exec'))
 print('ASSETS_BUILT carbine.glb operator.glb')

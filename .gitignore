@@ -8,3 +8,5 @@ tools/blender*/
 artifacts/*
 !artifacts/.gitkeep
 *.log
+
+*.blend1

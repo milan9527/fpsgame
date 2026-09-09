@@ -2,17 +2,15 @@
 import os
 from pathlib import Path
 import subprocess
-import uuid
-import httpx
+from test_accounts import account
 
 root = Path(__file__).resolve().parent.parent
 processes = []
 try:
     for i in range(2):
-        name = 'net_' + uuid.uuid4().hex[:12]
-        password = 'network-test-password-729'
-        response = httpx.post('http://127.0.0.1:8000/auth/register', json={'username': name, 'password': password})
-        response.raise_for_status()
+        credentials = account('network-' + str(i))
+        name = credentials['username']
+        password = credentials['password']
         env = dict(os.environ, TEST_USERNAME=name, TEST_PASSWORD=password, API_URL='http://127.0.0.1:8000')
         log_path = root / 'artifacts' / f'online-client-{i}.log'
         log = open(log_path, 'w')

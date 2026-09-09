@@ -62,8 +62,16 @@ var test_grenade_seen := false
 var test_grenade_exploded := false
 var test_throw_sent := false
 var authenticated_at := 0
+var build_info: Dictionary = {}
 
 func _ready() -> void:
+	var manifest = JSON.parse_string(FileAccess.get_file_as_string("res://protocol.json"))
+	if not manifest is Dictionary or not manifest.has("protocol") or not manifest.has("content_revision"):
+		push_error("Missing or invalid build manifest")
+		get_tree().quit(1)
+		return
+	build_info = manifest
+	build_info.protocol = int(build_info.protocol)
 	rng.randomize()
 	var args := OS.get_cmdline_user_args()
 	dedicated = "--server" in args
@@ -125,6 +133,11 @@ func setup_input() -> void:
 func start_server() -> void:
 	if server_key.length() < 32:
 		push_error("SERVER_SECRET must contain at least 32 characters")
+		get_tree().quit(1)
+		return
+	var response: Dictionary = await http_call("/internal/build/check", build_info, true)
+	if response.code != 200 or not compatible_build(response.body):
+		push_error("Server build is incompatible with operations service")
 		get_tree().quit(1)
 		return
 	var peer := ENetMultiplayerPeer.new()
@@ -660,7 +673,7 @@ func authenticate(value: String) -> void:
 	if not pending.has(id) or pending[id].checking or value.length() > 128 or value.length() < 20:
 		return
 	pending[id].checking = true
-	var response: Dictionary = await http_call("/internal/tickets/consume", {"ticket": value}, true)
+	var response: Dictionary = await http_call("/internal/tickets/consume", ticket_payload(value), true)
 	if not pending.has(id):
 		return
 	if not peer_ready(id):
@@ -745,6 +758,20 @@ func snapshot(packet: PackedByteArray) -> void:
 
 func sign_in(username: String, password: String, register: bool, endpoint: String) -> void:
 	api_url = endpoint
+	var preflight: Dictionary = await http_call("/protocol", {}, false, HTTPClient.METHOD_GET)
+	if preflight.code != 200:
+		ui.show_menu("Server update required: build information unavailable." if preflight.code == 404 else "Operations service unavailable. Check the API address and retry.")
+		if bot_client:
+			get_tree().quit(1)
+		return
+	if not compatible_build(preflight.body):
+		var required_version := "updated client"
+		if preflight.body is Dictionary:
+			required_version = str(preflight.body.get("client_version", required_version))
+		ui.show_menu("Game version mismatch. Required build: " + required_version)
+		if bot_client:
+			get_tree().quit(1)
+		return
 	var response: Dictionary = await http_call("/auth/register" if register else "/auth/login", {"username": username, "password": password})
 	if response.code != 200 and response.code != 201:
 		ui.show_menu("Account request failed: " + error_message(response))
@@ -753,9 +780,12 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 		return
 	token = response.body.token
 	token_origin = api_url
-	response = await http_call("/matchmaking/join", {})
+	response = await http_call("/matchmaking/join", build_info)
 	if response.code != 200:
 		ui.show_menu("Matchmaking failed: " + error_message(response))
+		return
+	if not compatible_build(response.body.get("build", {})):
+		ui.show_menu("Matchmaking returned an incompatible game build.")
 		return
 	ticket = response.body.ticket
 	var peer := ENetMultiplayerPeer.new()
@@ -1067,3 +1097,11 @@ func grenade_exploded(round_id: String, id: int, origin: Vector3) -> void:
 	effect.position = origin
 	add_child(effect)
 	sound.shot(origin, 3)
+
+func compatible_build(remote) -> bool:
+	return remote is Dictionary and remote.get("protocol") == build_info.protocol and remote.get("content_revision") == build_info.content_revision
+
+func ticket_payload(value: String) -> Dictionary:
+	var payload := build_info.duplicate()
+	payload.ticket = value
+	return payload

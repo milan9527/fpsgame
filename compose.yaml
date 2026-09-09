@@ -25,7 +25,9 @@ services:
       retries: 12
     logging: *logging
   api:
-    build: backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://iron:${POSTGRES_PASSWORD}@postgres/iron

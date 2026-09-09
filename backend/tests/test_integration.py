@@ -1,12 +1,15 @@
 """Runs against the actual HTTP service, PostgreSQL and Redis in compose."""
 import concurrent.futures
 import os
+import json
+from pathlib import Path
 import uuid
 import httpx
 import pytest
 
 BASE = os.getenv('TEST_API', 'http://127.0.0.1:8000')
 PASSWORD = 'integration-only-password-934!'
+BUILD = json.loads((Path(__file__).resolve().parents[2] / 'client/protocol.json').read_text())
 
 
 @pytest.fixture(scope='module')
@@ -40,12 +43,12 @@ def test_login_and_validation(account):
 
 
 def test_ticket_atomic_consumption(account):
-    response = httpx.post(BASE + '/matchmaking/join', json={}, headers=auth(account))
+    response = httpx.post(BASE + '/matchmaking/join', json=BUILD, headers=auth(account))
     assert response.status_code == 200
     ticket = response.json()['ticket']
-    assert httpx.post(BASE + '/internal/tickets/consume', json={'ticket': ticket}).status_code == 403
+    assert httpx.post(BASE + '/internal/tickets/consume', json=dict(BUILD, ticket=ticket)).status_code == 403
     def consume(_):
-        return httpx.post(BASE + '/internal/tickets/consume', json={'ticket': ticket}, headers=internal())
+        return httpx.post(BASE + '/internal/tickets/consume', json=dict(BUILD, ticket=ticket), headers=internal())
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         replies = list(executor.map(consume, range(2)))
     assert sorted(r.status_code for r in replies) == [200, 401]

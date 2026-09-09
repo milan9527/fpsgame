@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from .models import User, Match, Result
 from .database import engine
+from .protocol import BUILD, BuildInfo, require_compatible
 
 JWT_SECRET = os.environ['JWT_SECRET']
 SERVER_SECRET = os.environ['SERVER_SECRET']
@@ -68,7 +69,7 @@ def token(user: User):
 def health(session: Session = Depends(db)):
     session.execute(text('SELECT 1'))
     cache.ping()
-    return {'status': 'ok', 'protocol': 1, 'schema_revision': session.scalar(text('SELECT version_num FROM alembic_version'))}
+    return {'status': 'ok', 'protocol': BUILD['protocol'], 'schema_revision': session.scalar(text('SELECT version_num FROM alembic_version'))}
 
 
 @app.post('/auth/register', status_code=201)
@@ -110,29 +111,55 @@ def leaderboard(session: Session = Depends(db)):
     return [{'username': u.username, 'wins': u.wins, 'kills': u.kills, 'matches': u.matches} for u in session.scalars(select(User).order_by(User.wins.desc(), User.kills.desc(), User.username).limit(50))]
 
 
+@app.get('/protocol')
+def protocol():
+    return BUILD
+
+
+@app.post('/internal/build/check', dependencies=[Depends(server_auth)])
+def check_server_build(body: BuildInfo):
+    require_compatible(body)
+    return BUILD
+
+
 @app.post('/matchmaking/join')
-def join(uid: str = Depends(user_token), session: Session = Depends(db)):
+def join(body: BuildInfo, uid: str = Depends(user_token), session: Session = Depends(db)):
+    require_compatible(body)
     limit('join:' + uid, 10, 60)
     user = session.get(User, uid)
     if not user:
         raise HTTPException(404, 'Account not found')
     ticket = secrets.token_urlsafe(32)
-    cache.hset('ticket:' + hashlib.sha256(ticket.encode()).hexdigest(), mapping={'uid': uid, 'username': user.username})
-    cache.expire('ticket:' + hashlib.sha256(ticket.encode()).hexdigest(), 45)
-    return {'ticket': ticket, 'host': os.getenv('GAME_PUBLIC_HOST', '127.0.0.1'), 'port': int(os.getenv('GAME_PORT', '27015')), 'expires_in': 45}
+    key = 'ticket:' + hashlib.sha256(ticket.encode()).hexdigest()
+    with cache.pipeline(transaction=True) as pipeline:
+        pipeline.hset(key, mapping={'uid': uid, 'username': user.username, 'protocol': str(BUILD['protocol']), 'content_revision': BUILD['content_revision']})
+        pipeline.expire(key, 45)
+        pipeline.execute()
+    return {'ticket': ticket, 'host': os.getenv('GAME_PUBLIC_HOST', '127.0.0.1'), 'port': int(os.getenv('GAME_PORT', '27015')), 'expires_in': 45, 'build': BUILD}
 
 
-class Ticket(BaseModel):
+class Ticket(BuildInfo):
     ticket: str = Field(min_length=20, max_length=128)
 
 
 @app.post('/internal/tickets/consume', dependencies=[Depends(server_auth)])
 def consume(body: Ticket):
+    require_compatible(body)
     key = 'ticket:' + hashlib.sha256(body.ticket.encode()).hexdigest()
-    data = cache.eval("local v=redis.call('HGETALL',KEYS[1]); redis.call('DEL',KEYS[1]); return v", 1, key)
+    data = cache.eval("""
+        local v=redis.call('HGETALL',KEYS[1]);
+        if #v==0 then return v end;
+        if redis.call('HGET',KEYS[1],'protocol')~=ARGV[1] or redis.call('HGET',KEYS[1],'content_revision')~=ARGV[2] then
+            return {'__error__', 'build_mismatch'};
+        end;
+        redis.call('DEL',KEYS[1]); return v;
+    """, 1, key, str(BUILD['protocol']), BUILD['content_revision'])
     if not data:
         raise HTTPException(401, 'Invalid or expired ticket')
-    return dict(zip(data[::2], data[1::2]))
+    result = dict(zip(data[::2], data[1::2]))
+    if '__error__' in result:
+        raise HTTPException(409, 'Ticket was issued for a different build')
+    return result
 
 
 class PlayerResult(BaseModel):

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+timeout 40s ./tools/godot --headless --path client --script ../tests/training_rules.gd > artifacts/training-rules.log 2>&1
+rg -q TRAINING_RULES_PASS artifacts/training-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/training-rules.log; then cat artifacts/training-rules.log; exit 1; fi
 timeout 30s ./tools/godot --headless --path client --script ../tests/checkpoint_rules.gd > artifacts/checkpoint-rules.log 2>&1
 rg -q CHECKPOINT_RULES_PASS artifacts/checkpoint-rules.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/checkpoint-rules.log; then cat artifacts/checkpoint-rules.log; exit 1; fi

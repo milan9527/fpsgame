@@ -32,6 +32,10 @@ cp docs/SMOKE_GRENADES.md artifacts/IronMeridian-Linux/docs/SMOKE_GRENADES.md
 cp docs/FALL_DAMAGE.md artifacts/IronMeridian-Linux/docs/FALL_DAMAGE.md
 cp docs/CONTROLS.md artifacts/IronMeridian-Linux/docs/CONTROLS.md
 cp docs/SOLO_CHECKPOINTS.md artifacts/IronMeridian-Linux/docs/SOLO_CHECKPOINTS.md
+cp docs/TRAINING.md artifacts/IronMeridian-Linux/docs/TRAINING.md
+timeout 40s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/training_rules.gd" > artifacts/packed-training.log 2>&1
+rg -q TRAINING_RULES_PASS artifacts/packed-training.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-training.log; then cat artifacts/packed-training.log; exit 1; fi
 timeout 30s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/checkpoint_rules.gd" > artifacts/packed-checkpoint.log 2>&1
 rg -q CHECKPOINT_RULES_PASS artifacts/packed-checkpoint.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-checkpoint.log; then cat artifacts/packed-checkpoint.log; exit 1; fi

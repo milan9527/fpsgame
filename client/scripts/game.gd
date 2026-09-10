@@ -31,6 +31,7 @@ var loot: Dictionary = {}
 var next_loot_id := 48
 const Bindings = preload("res://scripts/control_bindings.gd")
 var bindings = Bindings.new()
+var training = null
 var checkpoint = preload("res://scripts/solo_checkpoint.gd").new()
 var grenades: Dictionary = {}
 const FallRules = preload("res://scripts/fall_rules.gd")
@@ -174,6 +175,7 @@ func _ready() -> void:
 		ui.inventory.equipment_requested.connect(inventory_equipment)
 		ui.inventory.drop_requested.connect(inventory_drop)
 		ui.solo_requested.connect(start_solo)
+		ui.training_requested.connect(start_training)
 		ui.checkpoint_save_requested.connect(suspend_solo)
 		ui.checkpoint_resume_requested.connect(resume_solo)
 		refresh_checkpoint_menu()
@@ -299,6 +301,22 @@ func report_room() -> bool:
 	room_heartbeat_success = Time.get_ticks_msec()
 	return true
 
+func start_training() -> void:
+	save_local_operation()
+	connection_attempt += 1
+	cancel_admission()
+	get_tree().paused = false
+	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	online = false
+	running = true
+	local_id = 1
+	sessions = {1: {"username": "YOU", "uid": ""}}
+	world.prepare_navigation()
+	reset_round()
+	training = preload("res://scripts/training_course.gd").new()
+	training.start(self)
+	ui.show_game()
+
 func start_solo() -> void:
 	connection_attempt += 1
 	cancel_admission()
@@ -306,6 +324,7 @@ func start_solo() -> void:
 		multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	get_tree().paused = false
 	save_local_operation()
+	training = null
 	flush_local_results()
 	world.prepare_navigation()
 	online = false
@@ -420,6 +439,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			ui.set_inventory(false)
 			get_viewport().set_input_as_handled()
 			return
+		if phase == "training_complete":
+			leave()
+			return
 		ui.set_pause(not ui.pause_panel.visible)
 		return
 	if not actors.has(local_id):
@@ -457,7 +479,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func change_pause(enabled: bool) -> void:
 	get_tree().paused = enabled and running and not online and not dedicated
 	ui.pause_feedback(get_tree().paused)
-	ui.checkpoint_save_button.visible = enabled and not online and phase == "live" and actors.has(local_id) and actors[local_id].alive
+	ui.checkpoint_save_button.visible = enabled and training == null and not online and phase == "live" and actors.has(local_id) and actors[local_id].alive
 	ui.checkpoint_save_button.text = "REPLACE SAVED OPERATION & RETURN" if FileAccess.file_exists(checkpoint.path) or FileAccess.file_exists(checkpoint.path + ".bak") else "SAVE OPERATION & RETURN"
 	ui.pause_description.text = "Operation paused. Resume when ready." if not online else "Online operation continues. You remain vulnerable."
 	action_latch.clear()
@@ -632,13 +654,14 @@ func _physics_process(dt: float) -> void:
 		elapsed += dt
 		phase_time = maxf(0, ROUND_SECONDS - elapsed)
 		# The authority alone advances the staged circle schedule.
-		zone_state = zone_plan.sample(elapsed)
-		zone = zone_state.radius
-		zone_center = zone_state.center
+		if training == null:
+			zone_state = zone_plan.sample(elapsed)
+			zone = zone_state.radius
+			zone_center = zone_state.center
 		world.set_zone(zone, zone_center)
 		zone_tick += dt
 		for actor in actors.values():
-			if actor.is_bot:
+			if actor.is_bot and training == null:
 				bot_input(actor, dt)
 			if dedicated and not actor.is_bot and Time.get_ticks_msec() - actor.last_command_msec > 350:
 				actor.move_input = Vector2.ZERO
@@ -650,13 +673,15 @@ func _physics_process(dt: float) -> void:
 		for actor in actors.values():
 			if actor.shooting:
 				shoot(actor)
-		if zone_tick >= 1:
+		if zone_tick >= 1 and training == null:
 			zone_tick = 0
 			for actor in actors.values():
 				if Vector2(actor.position.x, actor.position.z).distance_to(zone_center) > zone:
 					damage(actor, 5 + elapsed / 24, 0)
 		advance_grenades(dt)
-		if alive_count() <= 1 or elapsed >= ROUND_SECONDS:
+		if training != null:
+			training.update(self)
+		elif alive_count() <= 1 or elapsed >= ROUND_SECONDS:
 			finish_round()
 	elif phase == "finished":
 		phase_time -= dt
@@ -1016,7 +1041,9 @@ func shot_fx(id: int, origin: Vector3, end: Vector3, kind: int) -> void:
 	get_tree().create_timer(0.065, false).timeout.connect(line.queue_free)
 
 func damage(target, amount: float, attacker_id: int, bypass_protection := false, headshot := false, cause := "THE ZONE", impact_origin = null, ignore_armor := false) -> void:
-	if phase == "finished" or not target.alive or (not bypass_protection and phase == "live" and elapsed < 5):
+	if training != null and (target.actor_id == local_id or training.step != 2 or attacker_id != local_id or cause == "FRAG"):
+		return
+	if phase in ["finished", "training_complete"] or not target.alive or (training == null and not bypass_protection and phase == "live" and elapsed < 5):
 		return
 	var before: float = target.health + target.armor
 	target.apply_damage(amount, ignore_armor)
@@ -1044,7 +1071,10 @@ func damage(target, amount: float, attacker_id: int, bypass_protection := false,
 			participants[attacker_id].kills += 1
 			source = "DISCONNECTED OPERATOR"
 		add_event(source + "  >  " + target.display_name)
-		drop_inventory(target)
+		if training == null:
+			drop_inventory(target)
+		elif attacker_id == local_id and cause != "FRAG":
+			training.record_kill(target)
 
 func drop_inventory(actor) -> void:
 	if actor.alive or (online and not dedicated):
@@ -1141,7 +1171,7 @@ func finish_round() -> void:
 		save_local_operation()
 
 func save_local_operation() -> void:
-	if local_profile == null or online or phase not in ["live", "finished"] or not actors.has(local_id) or match_id == local_recorded_id:
+	if training != null or local_profile == null or online or phase not in ["live", "finished"] or not actors.has(local_id) or match_id == local_recorded_id:
 		return
 	var actor = actors[local_id]
 	var completed: bool = phase == "finished" or not actor.alive
@@ -1223,6 +1253,11 @@ func _process(dt: float) -> void:
 				continue
 			ui.grenade_warning_distance = minf(ui.grenade_warning_distance, viewed_actor.position.distance_to(grenade.position))
 		ui.update_hud(viewed_actor, alive_count(), phase, phase_time, zone, events, message, zone_state)
+		ui.training_label.visible = training != null
+		if training != null:
+			ui.training_label.text = training.hint()
+			ui.headline.text = "BASIC TRAINING / %d OF 9" % mini(training.step + 1, 9)
+			ui.stats.text = "PRACTICE / NO MATCH RESULTS"
 		ui.set_spectator(spectator.active, spectator.target_name, actor.rank)
 
 func peer_connected(id: int) -> void:
@@ -1507,6 +1542,8 @@ func leave(message := "") -> void:
 	if dedicated or shutdown_requested:
 		return
 	save_local_operation()
+	training = null
+	ui.training_label.hide()
 	connection_attempt += 1
 	cancel_admission()
 	get_tree().paused = false
@@ -1744,6 +1781,8 @@ func detonate_grenade(id: int) -> void:
 			smoke_clouds[id] = {"p": origin + Vector3.UP * 2, "age": 0.0}
 		return
 	if phase == "live":
+		if training != null and attacker_id == local_id:
+			training.record_frag()
 		for actor in actors.values():
 			if not actor.alive:
 				continue
@@ -1895,6 +1934,8 @@ func snapshot_solo() -> Dictionary:
 	return {"version": 1, "content": build_info.content_revision, "id": match_id, "elapsed": elapsed, "zone_tick": zone_tick, "centers": zone_plan.centers.duplicate(), "rng_seed": rng.seed, "rng_state": rng.state, "actors": states, "loot": loot.duplicate(true), "grenades": projectiles, "clouds": smoke_clouds.duplicate(true), "events": events.duplicate(), "next_loot": next_loot_id, "next_grenade": next_grenade_id, "waypoint": ui.tactical_map.waypoint}
 
 func suspend_solo() -> bool:
+	if training != null:
+		return false
 	if dedicated or online or not running or phase != "live" or not actors.has(local_id) or not actors[local_id].alive:
 		return false
 	ui.set_pause(true)

@@ -1,6 +1,8 @@
 extends CanvasLayer
 
 signal leaderboard_requested(endpoint: String)
+signal training_requested
+var training_label: Label
 signal solo_requested
 signal online_requested(username: String, password: String, register: bool, endpoint: String)
 signal leave_requested
@@ -122,6 +124,7 @@ func _ready() -> void:
 	left.add_child(history_buttons)
 	button(history_buttons, "SERVICE LEADERBOARD", func(): leaderboard_requested.emit(endpoint.text.trim_suffix("/")))
 	button(history_buttons, "LOCAL OPERATIONS", func(): local_history_requested.emit())
+	button(history_buttons, "BASIC TRAINING", func(): training_requested.emit())
 	checkpoint_resume_button = Button.new()
 	checkpoint_resume_button.text = "CONTINUE SAVED OPERATION"
 	checkpoint_resume_button.pressed.connect(func(): checkpoint_resume_requested.emit())
@@ -178,6 +181,10 @@ func _ready() -> void:
 	hud.theme = theme
 	add_child(hud)
 	hud.draw.connect(draw_hud)
+	training_label = placed_label(hud, Vector2(40, 210), 20, ACCENT)
+	training_label.size.x = 370
+	training_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	training_label.hide()
 	headline = placed_label(hud, Vector2(40, 28), 23, ACCENT)
 	stats = placed_label(hud, Vector2(40, 66), 17)
 	weapon = placed_label(hud, Vector2(40, 750), 23)

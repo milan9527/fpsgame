@@ -1156,6 +1156,8 @@ func damage(target, amount: float, attacker_id: int, bypass_protection := false,
 	if phase in ["finished", "training_complete"] or not target.alive or (training == null and not bypass_protection and phase == "live" and elapsed < 5):
 		return
 	var before: float = target.health + target.armor
+	var health_before: float = target.health
+	var armor_before: float = target.armor
 	target.apply_damage(amount, ignore_armor)
 	var actual_damage: float = before - target.health - target.armor
 	if actors.has(attacker_id) and attacker_id != target.actor_id:
@@ -1181,10 +1183,29 @@ func damage(target, amount: float, attacker_id: int, bypass_protection := false,
 			participants[attacker_id].kills += 1
 			source = "DISCONNECTED OPERATOR"
 		add_event(source + "  >  " + target.display_name)
+		var method: String = cause
+		if cause == "THE ZONE" and actors.has(attacker_id):
+			method = actors[attacker_id].NAMES[actors[attacker_id].weapon]
+		var distance := -1.0
+		if cause == "FRAG" and impact_origin is Vector3:
+			distance = target.position.distance_to(impact_origin)
+		elif actors.has(attacker_id) and attacker_id != target.actor_id:
+			distance = target.position.distance_to(actors[attacker_id].position)
+		var report := {"source": "YOURSELF" if attacker_id == target.actor_id else source, "cause": method, "headshot": headshot, "distance": distance, "health_damage": health_before - target.health, "armor_damage": armor_before - target.armor}
+		if dedicated:
+			if peer_ready(target.actor_id):
+				death_report.rpc_id(target.actor_id, match_id, report)
+		elif target.actor_id == local_id:
+			death_report(match_id, report)
 		if training == null:
 			drop_inventory(target)
 		elif attacker_id == local_id and cause != "FRAG":
 			training.record_kill(target)
+
+@rpc("authority", "call_remote", "reliable")
+func death_report(round_id: String, report: Dictionary) -> void:
+	if not dedicated and running and round_id == (network_round_id if online else match_id):
+		ui.receive_death_recap(report)
 
 func drop_inventory(actor) -> void:
 	if actor.alive or (online and not dedicated):
@@ -1371,6 +1392,7 @@ func _process(dt: float) -> void:
 			ui.headline.text = "BASIC TRAINING / %d OF 9" % mini(training.step + 1, 9)
 			ui.stats.text = "PRACTICE / NO MATCH RESULTS"
 		ui.set_spectator(spectator.active, spectator.target_name, actor.rank)
+		ui.recap_panel.visible = not actor.alive and not ui.death_recap.is_empty()
 
 func peer_connected(id: int) -> void:
 	if dedicated:

@@ -36,6 +36,9 @@ var stats: Label
 var weapon: Label
 var prompt: Label
 var feed: Label
+var death_recap: Dictionary = {}
+var recap_panel: PanelContainer
+var recap_label: Label
 var result_label: Label
 var username: LineEdit
 var password: LineEdit
@@ -208,6 +211,17 @@ func _ready() -> void:
 	hit_text = placed_label(hud, Vector2(610, 505), 16, ACCENT)
 	result_label = placed_label(hud, Vector2(430, 290), 38, ACCENT)
 	spectator_label = placed_label(hud, Vector2(430, 140), 22, ACCENT)
+	recap_panel = PanelContainer.new()
+	recap_panel.position = Vector2(40, 560)
+	recap_panel.custom_minimum_size = Vector2(470, 120)
+	recap_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var recap_style := StyleBoxFlat.new()
+	recap_style.bg_color = Color(0.035, 0.065, 0.085, 0.94)
+	recap_style.set_content_margin_all(14)
+	recap_panel.add_theme_stylebox_override("panel", recap_style)
+	hud.add_child(recap_panel)
+	recap_label = label(recap_panel, "", 18)
+	recap_panel.hide()
 	hud.visible = false
 	inventory = preload("res://scripts/inventory_panel.gd").new()
 	inventory.theme = theme
@@ -384,6 +398,8 @@ func show_menu(message := "") -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func show_game() -> void:
+	death_recap.clear()
+	recap_panel.hide()
 	controls.close()
 	set_map(false)
 	tactical_map.waypoint = null
@@ -401,6 +417,16 @@ func show_game() -> void:
 	connection_cancel.disabled = true
 	password.text = ""
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+func receive_death_recap(report: Dictionary) -> void:
+	death_recap = report.duplicate(true)
+	var method: String = report.cause
+	if report.headshot:
+		method += " / HEADSHOT"
+	if report.distance >= 0:
+		method += " / %dm%s" % [roundi(report.distance), " FROM BLAST" if report.cause == "FRAG" else ""]
+	recap_label.text = "ELIMINATED BY  /  " + report.source + "\n" + method
+	recap_label.text += "\nFINAL HIT  /  %d HEALTH  ·  %d ARMOR" % [roundi(report.health_damage), roundi(report.armor_damage)]
 
 func set_pause(enabled: bool) -> void:
 	if enabled:

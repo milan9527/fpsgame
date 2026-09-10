@@ -154,3 +154,7 @@ if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/tac
 
 .venv/bin/python tools/test_foregrip_network.py
 .venv/bin/python tools/test_session_logout.py
+timeout 25s ./tools/godot --headless --path client --script ../tests/death_recap_rules.gd > artifacts/death-recap-rules.log 2>&1
+rg -q DEATH_RECAP_RULES_PASS artifacts/death-recap-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/death-recap-rules.log; then cat artifacts/death-recap-rules.log; exit 1; fi
+.venv/bin/python tools/test_death_recap_network.py

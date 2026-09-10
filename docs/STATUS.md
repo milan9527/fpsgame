@@ -4,6 +4,8 @@
 
 ## 已实际实现
 
+- 淘汰报告：观战时显示权威致命一击的攻击者、武器或环境原因、爆头、距离及实际生命/护甲损失；只向受害者发送，新回合清理。详见 [淘汰报告](DEATH_RECAP.md)。
+
 - 单机单槽保存/继续：回合 ID、角色库存与计时、缩圈、随机状态、物资、在途投掷物和烟雾；校验、原子替换、上一份备份、失败留在暂停界面及已结算回合恢复隔离。详见 [单机保存](SOLO_CHECKPOINTS.md)。
 
 - 键盘改键：主菜单/暂停菜单入口、物理键捕获、按战斗/观战上下文检查冲突、本地原子保存、失败保留旧配置、恢复默认及动态 HUD 提示。详见 [控制设置](CONTROLS.md)。
@@ -260,3 +262,9 @@
 迁移前已备份。旧备份恢复或迁移回退可能倒退会话版本，正式开放前需要更换 JWT 签名密钥并废弃旧房间票据。在线退出依赖健康心跳，不提供服务故障期间的即时断开保证；设备列表和单设备撤销尚未实现。
 
 本版 Linux 包通过现有玩法回归和打包后账户界面测试；普通双客户端对局及加速完整对局落库通过。升级后备份在隔离容器中恢复 51 个账户、90 场对局及 136 条结果，会话版本有效，正式库未被替换。证据：`artifacts/session-package.log`、`artifacts/session-packed-logout.log`、`artifacts/session-online.log`、`artifacts/session-full-round.log`、`artifacts/session-restore-drill.json`。测试范围仍不代表商业游戏全部功能或公网大规模运营验收。
+
+### 权威淘汰报告（0.30 / 协议 14）
+
+新增观战中的致命一击报告，包含来源、武器/环境原因、爆头、米级距离以及最后一击扣除的生命/护甲。生命/护甲展示取整，底层保留实际数值，不将过量伤害当作已扣除数值。报告仅可靠发送给受害者，使用在线回合编号隔离；新回合清除。安全区、坠落、手雷爆心、自伤及断线投掷者分别处理。它不包含录像回放或整场交火累计伤害。
+
+单机规则与实际渲染、两个真实客户端的报告接收/观战/隐私、协议门禁、完整对局落库、账户退出回归及 Linux 打包玩法门禁通过。证据：`artifacts/death-recap-rules.log`、`artifacts/death-recap.png`、`artifacts/death-recap-network.log`、`artifacts/recap-protocol.log`、`artifacts/recap-full-round.log`、`artifacts/recap-session-regression.log`、`artifacts/recap-package.log`、`artifacts/packed-death-recap.log`。

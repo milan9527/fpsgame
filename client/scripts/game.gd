@@ -995,7 +995,7 @@ func bot_input(actor, dt: float) -> void:
 			for supply in loot.values():
 				if Vector2(supply.p.x, supply.p.z).distance_to(zone_center) > maxf(4, zone - 7):
 					continue
-				var wanted: bool = (supply.kind == 0 and actor.reserve < 45) or (supply.kind == 1 and actor.medkits == 0) or (supply.kind == 2 and actor.armor < 25)
+				var wanted: bool = (supply.kind == 0 and actor.reserve < 45) or (supply.kind == 1 and actor.medkits == 0) or (supply.kind == 2 and actor.armor < 25) or (supply.kind == 4 and actor.smokes == 0 and actor.medkits > 0)
 				var distance: float = actor.position.distance_to(supply.p)
 				if wanted and distance < nearest:
 					nearest = distance
@@ -1050,16 +1050,10 @@ func bot_input(actor, dt: float) -> void:
 	var local_direction: Vector3 = Basis(Vector3.UP, -actor.yaw) * direction
 	actor.move_input = Vector2(local_direction.x, local_direction.z).limit_length()
 
-	if elapsed > 8 and actors.has(actor.target_id) and actor.grenades > 0:
-		var distance: float = actor.position.distance_to(actors[actor.target_id].position)
-		if distance > 23 and distance < 32 and actor.shooting and actor.throw_left <= 0:
-			var saved_pitch: float = actor.pitch
-			actor.pitch = 0.25
-			throw_grenade(actor)
-			actor.pitch = saved_pitch
+	actor.navigator.utilities.update(self, actor, dt, cover_point.is_finite(), actor.sprint)
 	if actor.ammo == 0:
 		actor.reload_weapon()
-	if actor.health < 40 and actor.target_id == 0:
+	if actor.health < 40 and actor.target_id == 0 and actor.navigator.utilities.smoke_hold <= 0:
 		actor.heal()
 	pickup(actor)
 	if actor.grips > 0 and actor.grip_slots[actor.weapon] == 0:

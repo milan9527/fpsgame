@@ -4,6 +4,8 @@
 
 ## 已实际实现
 
+- 机器人烟雾自救与投掷冷却：实际寻找/拾取烟雾，在缺少实体掩体时投掷、等待烟雾遮挡再治疗，进圈优先；使用正常库存与权威物理。详见 [机器人投掷物](BOT_UTILITIES.md)。
+
 - 联机 HUD 网络状态：实际 ENet RTT/波动、有效快照更新时间、延迟与更新停顿提示、自动恢复及回合隔离。详见 [网络状态](NETWORK_STATUS.md)。
 
 - 淘汰报告：观战时显示权威致命一击的攻击者、武器或环境原因、爆头、距离及实际生命/护甲损失；只向受害者发送，新回合清理。详见 [淘汰报告](DEATH_RECAP.md)。
@@ -276,3 +278,9 @@
 新增 ENet 往返延迟和波动、有效快照更新时间、同步等待/高延迟/更新停顿提示；超过一秒未更新时告警，恢复更新后解除。单机隐藏，新回合重新测量，返回菜单清除，旧回合包不刷新状态。数据不代表丢包率、全体角色同帧到达或后台数据库健康，也不提供自动重连。
 
 规则与打包规则通过。实际战斗中使用双向各 75ms 的 UDP 延迟，测得 RTT 180ms；阻断下行 1.8 秒、丢弃 302 个下行数据报，HUD 显示更新停顿，恢复转发后回到正常更新并保持连接。已检查实际截图。证据：`artifacts/network-status-rules.log`、`artifacts/packed-network-status.log`、`artifacts/network-status-proxy.log`、`artifacts/network-status-client.log`、`artifacts/network-status-stalled.png`。
+
+### 机器人烟雾自救与投掷冷却（0.32）
+
+机器人巡逻寻物资时会考虑烟雾。受伤、仍有医疗包且缺少实体掩体时，使用实际库存向近地投掷，停止射击并蹲伏，实际烟雾遮断已知威胁视线后才治疗；最多驻留 8 秒，进圈立即取消驻留。破片手雷与烟雾共享投掷成功后的战术冷却，分别为 12 / 18 秒。正常动作限制、烟雾物理与数量上限保持生效。临时决策计时不写入存档，续存后重新决策，实际物资和投掷物仍保存。
+
+实际刚体落地、起烟、遮挡后治疗及库存/冷却/掩体/进圈规则通过；专服机器人实际拾取烟雾并完成治疗，真实客户端验证库存、飞行投掷物、烟雾和治疗同步。原有实体掩体规则和完整对局落库通过。证据：`artifacts/bot-utilities-rules.log`、`artifacts/packed-bot-utilities.log`、`artifacts/bot-utilities-network.log`、`artifacts/packed-bot-cover.log`、`artifacts/bot-utilities-full-round.log`。尚不包含通用投掷轨迹规划、团队烟墙或更完整的多威胁战术。

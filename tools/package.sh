@@ -43,6 +43,10 @@ timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests
 rg -q DEATH_RECAP_RULES_PASS artifacts/packed-death-recap.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-death-recap.log; then cat artifacts/packed-death-recap.log; exit 1; fi
 cp docs/BOT_COVER.md artifacts/IronMeridian-Linux/docs/BOT_COVER.md
+cp docs/BOT_UTILITIES.md artifacts/IronMeridian-Linux/docs/BOT_UTILITIES.md
+timeout 30s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/bot_utilities_rules.gd" > artifacts/packed-bot-utilities.log 2>&1
+rg -q BOT_UTILITIES_RULES_PASS artifacts/packed-bot-utilities.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-bot-utilities.log; then cat artifacts/packed-bot-utilities.log; exit 1; fi
 cp docs/TRAINING.md artifacts/IronMeridian-Linux/docs/TRAINING.md
 timeout 20s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/foregrip_rules.gd" > artifacts/packed-foregrip.log 2>&1
 rg -q FOREGRIP_RULES_PASS artifacts/packed-foregrip.log

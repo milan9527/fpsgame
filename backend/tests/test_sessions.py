@@ -131,3 +131,22 @@ def test_database_revocation_survives_cache_cleanup_failure(context, monkeypatch
     monkeypatch.setattr(main.rooms,'revoke_reservation',fail)
     assert client.post('/auth/logout-all',headers=header).status_code == 503
     assert client.get('/profile',headers=header).status_code == 401
+
+
+def test_authenticated_duo_mode_reaches_allocation_and_ticket_binding(context):
+    client, users, _ = context
+    internal = {'X-Server-Key': main.SERVER_SECRET}
+    room = dict(main.BUILD, room_id='duo-http', instance_id=str(uuid.uuid4()),
+                generation=str(uuid.uuid4()), revision=1, host='127.0.0.1',
+                port=27999, capacity=2, phase='lobby', players=[], mode='duo')
+    assert client.post('/internal/rooms/heartbeat', json=room, headers=internal).status_code == 200
+    auth = login(client, users[0])
+    assert client.post('/matchmaking/rooms/join', json=dict(main.BUILD, room_id='duo-http'), headers=auth).status_code == 503
+    response = client.post('/matchmaking/rooms/join', json=dict(main.BUILD, mode='duo'), headers=auth)
+    assert response.status_code == 200 and response.json()['mode'] == 'duo'
+    allocation = response.json()
+    ticket = dict(main.BUILD, **{key: allocation[key] for key in ['room_id', 'instance_id', 'generation', 'ticket']})
+    assert client.post('/internal/rooms/tickets/consume', json=ticket, headers=internal).status_code == 409
+    consumed = client.post('/internal/rooms/tickets/consume', json=dict(ticket, mode='duo'), headers=internal)
+    assert consumed.status_code == 200
+    assert consumed.json()['uid'] == users[0]['id'] and consumed.json()['mode'] == 'duo'

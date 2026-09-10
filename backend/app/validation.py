@@ -12,7 +12,7 @@ def validation_error(request: Request, error: RequestValidationError):
         # These names are schema fields, not arbitrary keys supplied in a body.
         if field not in {'username', 'password', 'room_id', 'instance_id', 'generation', 'revision',
                          'host', 'port', 'capacity', 'phase', 'players', 'ticket', 'match_id',
-                         'protocol', 'content_revision', 'client_version'}:
+                         'protocol', 'content_revision', 'client_version', 'mode'}:
             field = 'request'
         if field == 'username':
             message = 'Username must contain 3–24 letters, digits or underscores.'

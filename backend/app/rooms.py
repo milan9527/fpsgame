@@ -19,6 +19,7 @@ class RoomHeartbeat(BuildInfo):
     port: int = Field(strict=True, ge=1, le=65535)
     capacity: int = Field(strict=True, ge=1, le=16)
     phase: Literal['waiting', 'lobby', 'live', 'finished']
+    mode: Literal['solo', 'duo'] = 'solo'
     players: list[uuid.UUID] = Field(default_factory=list, max_length=16)
 
     session_versions: dict[uuid.UUID, Annotated[int, Field(strict=True, ge=0, le=9223372036854775806)]] = Field(default_factory=dict, max_length=16)
@@ -27,11 +28,14 @@ class RoomHeartbeat(BuildInfo):
     def valid_players(self):
         if len(self.players) != len(set(self.players)) or len(self.players) > self.capacity:
             raise ValueError('Players must be unique and fit room capacity')
+        if self.mode == 'duo' and self.capacity % 2:
+            raise ValueError('Duo capacity must contain complete two-player teams')
         return self
 
 
 class RoomJoin(BuildInfo):
     room_id: str = Field(default='', max_length=64, pattern=r'^[a-zA-Z0-9_-]*$')
+    mode: Literal['solo', 'duo'] = 'solo'
 
 
 class RoomTicket(BuildInfo):
@@ -39,6 +43,7 @@ class RoomTicket(BuildInfo):
     instance_id: uuid.UUID
     generation: uuid.UUID
     ticket: str = Field(min_length=20, max_length=128)
+    mode: Literal['solo', 'duo'] = 'solo'
 
 
 class CancelRoomTicket(BaseModel):
@@ -55,6 +60,7 @@ if raw then
     if old.revision>=room.revision then return 'stale_revision' end
     if old.host~=room.host or old.port~=room.port or old.protocol~=room.protocol or old.content_revision~=room.content_revision then return 'endpoint_conflict' end
     if old.generation==room.generation and old.capacity~=room.capacity then return 'capacity_conflict' end
+    if (old.mode or 'solo')~=room.mode and (old.generation==room.generation or #old.players>0 or #room.players>0) then return 'mode_conflict' end
     if old.generation==room.generation and (old.phase=='live' or old.phase=='finished') and (room.phase=='waiting' or room.phase=='lobby') then return 'generation_required' end
 end
 local owner=room.room_id..'/'..room.instance_id..'/'..room.generation
@@ -112,12 +118,12 @@ for _,id in ipairs(ids) do
     if not raw then redis.call('SREM',p..'directory',id)
     elseif ARGV[6]=='' or ARGV[6]==id then
         local room=cjson.decode(raw)
-        if (room.phase=='waiting' or room.phase=='lobby') and tostring(room.protocol)==ARGV[4] and room.content_revision==ARGV[5] then
+        if (room.phase=='waiting' or room.phase=='lobby') and tostring(room.protocol)==ARGV[4] and room.content_revision==ARGV[5] and (room.mode or 'solo')==ARGV[9] then
             local held=p..'held:'..id
             redis.call('ZREMRANGEBYSCORE',held,'-inf',now)
             if #room.players+redis.call('ZCARD',held)<room.capacity then
                 local owner=id..'/'..room.instance_id..'/'..room.generation
-                local ticket={uid=uid,username=ARGV[3],room_id=id,instance_id=room.instance_id,generation=room.generation,protocol=room.protocol,content_revision=room.content_revision,session_version=tonumber(ARGV[8])}
+                local ticket={uid=uid,username=ARGV[3],room_id=id,instance_id=room.instance_id,generation=room.generation,protocol=room.protocol,content_revision=room.content_revision,session_version=tonumber(ARGV[8]),mode=room.mode or 'solo'}
                 redis.call('SET',p..'ticket:'..ARGV[7],cjson.encode(ticket),'EX',45)
                 redis.call('SET',p..'user:'..uid,owner,'EX',45)
                 redis.call('SET',p..'user_version:'..uid,ARGV[8],'EX',45)
@@ -142,6 +148,7 @@ if not state then return {'unavailable'} end
 local room=cjson.decode(state)
 if room.instance_id~=ticket.instance_id or room.generation~=ticket.generation or (room.phase~='waiting' and room.phase~='lobby') then return {'unavailable'} end
 if tostring(ticket.protocol)~=ARGV[6] or ticket.content_revision~=ARGV[7] then return {'binding'} end
+if (ticket.mode or 'solo')~=ARGV[8] or (room.mode or 'solo')~=ARGV[8] then return {'binding'} end
 local owner=ticket.room_id..'/'..ticket.instance_id..'/'..ticket.generation
 if redis.call('GET',p..'user:'..ticket.uid)~=owner then return {'expired'} end
 -- Keep the capacity lease until a heartbeat confirms the player or 45s elapse.
@@ -177,11 +184,11 @@ class RoomDirectory:
             raise HTTPException(409, 'Room heartbeat rejected: ' + result)
         return {'status': 'ok', 'expires_in': 12}
 
-    def allocate(self, uid: str, username: str, requested_room='', session_version=0):
+    def allocate(self, uid: str, username: str, requested_room='', session_version=0, mode='solo'):
         ticket = secrets.token_urlsafe(32)
         digest = hashlib.sha256(ticket.encode()).hexdigest()
         result = self.cache.eval(ALLOCATE, 0, self.prefix, uid, username,
-                                 str(BUILD['protocol']), BUILD['content_revision'], requested_room, digest, str(session_version))
+                                 str(BUILD['protocol']), BUILD['content_revision'], requested_room, digest, str(session_version), mode)
         if result[0] == 'busy':
             raise HTTPException(409, 'Already connected or holding a room reservation')
         if result[0] != 'ok':
@@ -189,7 +196,7 @@ class RoomDirectory:
         room = json.loads(result[1])
         return {'ticket': ticket, 'room_id': room['room_id'], 'instance_id': room['instance_id'],
                 'generation': room['generation'], 'host': room['host'], 'port': room['port'],
-                'expires_in': 45, 'build': BUILD}
+                'expires_in': 45, 'build': BUILD, 'mode': room.get('mode', 'solo')}
 
     def revoke_reservation(self, uid, version):
         self.cache.eval("""
@@ -206,12 +213,14 @@ class RoomDirectory:
     def consume(self, body: RoomTicket):
         digest = hashlib.sha256(body.ticket.encode()).hexdigest()
         result = self.cache.eval(CONSUME, 0, self.prefix, digest, body.room_id, str(body.instance_id),
-                                 str(body.generation), str(BUILD['protocol']), BUILD['content_revision'])
+                                 str(body.generation), str(BUILD['protocol']), BUILD['content_revision'], body.mode)
         if result[0] == 'expired':
             raise HTTPException(401, 'Invalid or expired room ticket')
         if result[0] != 'ok':
             raise HTTPException(409, 'Ticket room binding or room availability changed')
-        return json.loads(result[1])
+        ticket = json.loads(result[1])
+        ticket.setdefault('mode', 'solo')
+        return ticket
 
     def cancel(self, uid: str, ticket: str):
         digest = hashlib.sha256(ticket.encode()).hexdigest()

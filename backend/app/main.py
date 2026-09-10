@@ -203,7 +203,7 @@ def room_join(body: RoomJoin, request: Request, uid: str = Depends(user_token), 
     user = session.get(User, uid)
     if not user:
         raise HTTPException(404, 'Account not found')
-    return rooms.allocate(uid, user.username, body.room_id, request.state.session_version)
+    return rooms.allocate(uid, user.username, body.room_id, request.state.session_version, body.mode)
 
 
 @app.post('/internal/rooms/tickets/consume', dependencies=[Depends(server_auth)])

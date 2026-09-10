@@ -4,6 +4,8 @@
 
 ## 已实际实现
 
+- M 键战术地图：由场景生成的道路/建筑/散布掩体、当前安全区与朝向、个人路标及 HUD 水平距离，包含输入隔离和回合清理。详见 [战术地图](TACTICAL_MAP.md)。
+
 - 连接取消按钮、未消费预留的账户级原子撤销、迟到响应与旧握手定时器隔离；消费/取消竞争及旧回合保护。详见 [连接生命周期](CONNECTION_LIFECYCLE.md)。
 
 - Godot 房间目录匹配与专服心跳；两个持久专服独立回合、票据绑定、容量预留、名单隔离、空房间回收及失联过期。当前固定两实例，详见 [房间目录](ROOM_DIRECTORY.md)。
@@ -151,6 +153,9 @@
 | 取消后的迟到响应与单机隔离、原请求凭据来源 | 通过（源码及打包版） | `artifacts/cancel-connection-rules.log`、`artifacts/packed-cancel-connection.log` |
 | 真实图形客户端取消无法连接的目标并立即重新分配 | 通过 | `artifacts/cancel-network.log` |
 | 取消版本双客户端正常入场、整局落库与兼容检查 | 通过 | `artifacts/cancel-online.log`、`artifacts/cancel-full-round.log`、`artifacts/cancel-protocol.log` |
+| 战术地图几何/坐标/路标边界/距离/输入隔离/菜单互斥/回合清理 | 通过（实际 OpenGL 及打包版） | `artifacts/tactical-map-rules.log`、`artifacts/packed-tactical-map.log` |
+| 图形窗口真实联机地图、权威位置/安全区与对局持续推进 | 通过 | `artifacts/map-network.log` |
+| 地图版本整局落库、兼容检查及菜单提示渲染 | 通过 | `artifacts/map-full-round.log`、`artifacts/map-protocol.log`、`artifacts/map-menu.log` |
 | 补给目标提示与高亮画面 | 已检查 | `artifacts/supply-prompt.png` |
 
 20 倍速测试用于验证完整流程，不代表实时性能、弱网适应性或长期稳定性。双客户端验证不等于 16 真人并发验证。

@@ -100,3 +100,7 @@ timeout 25s ./tools/godot --headless --path client --script ../tests/cancel_conn
 rg -q CANCEL_CONNECTION_RULES_PASS artifacts/cancel-connection-rules.log
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/cancel-connection-rules.log; then cat artifacts/cancel-connection-rules.log; exit 1; fi
 .venv/bin/python tools/test_cancel_connection.py
+timeout 25s xvfb-run -a ./tools/godot --path client --audio-driver Dummy --script ../tests/tactical_map_rules.gd -- --capture-map > artifacts/tactical-map-rules.log 2>&1
+rg -q TACTICAL_MAP_RULES_PASS artifacts/tactical-map-rules.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/tactical-map-rules.log; then cat artifacts/tactical-map-rules.log; exit 1; fi
+.venv/bin/python tools/test_map_network.py

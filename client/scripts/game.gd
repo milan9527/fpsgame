@@ -155,6 +155,8 @@ func _ready() -> void:
 		ui.pause_changed.connect(change_pause)
 		ui.connection_cancel_requested.connect(func(): leave("Connection cancelled."))
 		ui.inventory_changed.connect(func(_enabled): action_latch.clear(); inventory_pointer_guard = true)
+		ui.map_changed.connect(func(_enabled): action_latch.clear(); inventory_pointer_guard = true)
+		ui.tactical_map.features = world.map_features.duplicate(true)
 		ui.inventory.pickup_requested.connect(inventory_pickup)
 		ui.inventory.equipment_requested.connect(inventory_equipment)
 		ui.inventory.drop_requested.connect(inventory_drop)
@@ -215,7 +217,7 @@ func request_quit(code := 0, discard_local := false) -> void:
 	get_tree().quit(code)
 
 func setup_input() -> void:
-	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "inventory": KEY_B, "scoreboard": KEY_TAB, "spectate_previous": KEY_Q, "spectate_next": KEY_E}
+	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "inventory": KEY_B, "map": KEY_M, "scoreboard": KEY_TAB, "spectate_previous": KEY_Q, "spectate_next": KEY_E}
 	for action in keys:
 		InputMap.add_action(action)
 		var e := InputEventKey.new()
@@ -399,6 +401,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if dedicated or not running:
 		return
 	if event.is_action_pressed("pause"):
+		if ui.tactical_map.visible:
+			ui.set_map(false)
+			get_viewport().set_input_as_handled()
+			return
 		if ui.inventory.visible:
 			ui.set_inventory(false)
 			get_viewport().set_input_as_handled()
@@ -408,11 +414,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not actors.has(local_id):
 		return
 	var actor = actors[local_id]
+	if event.is_action_pressed("map") and not event.is_echo() and actor.alive and phase == "live" and not ui.pause_panel.visible:
+		ui.set_map(not ui.tactical_map.visible)
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("inventory") and not event.is_echo() and actor.alive and phase == "live" and not ui.pause_panel.visible:
 		ui.set_inventory(not ui.inventory.visible)
 		get_viewport().set_input_as_handled()
 		return
-	if ui.inventory.visible:
+	if ui.inventory.visible or ui.tactical_map.visible:
 		return
 	if not actor.alive:
 		if not ui.pause_panel.visible:
@@ -651,7 +661,7 @@ func _physics_process(dt: float) -> void:
 func local_command(actor) -> Dictionary:
 	sequence += 1
 	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "loot": false, "throw": false, "weapon": -1}
-	if ui.pause_panel.visible or ui.inventory.visible or not actor.alive:
+	if ui.pause_panel.visible or ui.inventory.visible or ui.tactical_map.visible or not actor.alive:
 		action_latch.clear()
 		return cmd
 	var movement := Input.get_vector("left", "right", "forward", "back")
@@ -1134,9 +1144,13 @@ func _process(dt: float) -> void:
 	sound.update_actors(actors, world, get_viewport().get_camera_3d())
 	world.show_loot(loot)
 	world.set_zone(zone)
-	ui.update_scoreboard(actors.values(), Input.is_action_pressed("scoreboard") and not ui.pause_panel.visible and not ui.inventory.visible)
+	ui.update_scoreboard(actors.values(), Input.is_action_pressed("scoreboard") and not ui.pause_panel.visible and not ui.inventory.visible and not ui.tactical_map.visible)
 	if actors.has(local_id):
 		var actor = actors[local_id]
+		if not actor.alive or phase != "live":
+			ui.tactical_map.waypoint = null
+			if ui.tactical_map.visible:
+				ui.set_map(false)
 		if ui.inventory.visible:
 			if not actor.alive or phase != "live":
 				ui.set_inventory(false)

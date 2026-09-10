@@ -8,6 +8,7 @@ var rng := RandomNumberGenerator.new()
 var materials: Dictionary = {}
 var navigation_region: NavigationRegion3D
 var navigation_bake_ms := 0
+var map_features: Array[Dictionary] = []
 
 func prepare_navigation() -> void:
 	if navigation_region != null:
@@ -98,6 +99,8 @@ func _ready() -> void:
 	block(Vector3(0, -0.5, 0), Vector3(240, 1, 240), "737b68", true, "terrain")
 	block(Vector3(0, 0.012, 0), Vector3(16, 0.02, 225), "3b484c", false)
 	block(Vector3(0, 0.025, 0), Vector3(225, 0.02, 14), "3b484c", false)
+	map_features.append({"rect": Rect2(-8, -112.5, 16, 225), "kind": "road"})
+	map_features.append({"rect": Rect2(-112.5, -7, 225, 14), "kind": "road"})
 	for i in range(-10, 11):
 		block(Vector3(0, 0.05, i * 10), Vector3(0.2, 0.02, 4), "bfc3a0", false)
 		block(Vector3(i * 10, 0.05, 0), Vector3(4, 0.02, 0.2), "bfc3a0", false)
@@ -110,6 +113,7 @@ func _ready() -> void:
 		if absf(at.x) < 12 or absf(at.z) < 10:
 			continue
 		block(at + Vector3(0, 0.75, 0), Vector3(2.5, 1.5, 2), "657477")
+		map_features.append({"rect": Rect2(Vector2(at.x - 1.25, at.z - 1), Vector2(2.5, 2)), "kind": "cover"})
 	for i in range(65):
 		var angle := rng.randf() * TAU
 		var radius := rng.randf_range(95, 145)
@@ -145,6 +149,7 @@ func _ready() -> void:
 	set_zone(110)
 
 func building(at: Vector3, style: int) -> void:
+	map_features.append({"rect": Rect2(Vector2(at.x - 8.5, at.z - 7), Vector2(17, 14)), "kind": "building"})
 	var colors := ["b0a58c", "829b9a", "a08773"]
 	var c: String = colors[style]
 	block(at + Vector3(0, 0.1, 0), Vector3(16, 0.2, 13), "a5a69a")

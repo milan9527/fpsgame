@@ -13,7 +13,10 @@ signal pause_changed(enabled: bool)
 signal connection_cancel_requested
 var connection_cancel: Button
 signal inventory_changed(enabled: bool)
+signal map_changed(enabled: bool)
 var inventory
+var tactical_map
+var waypoint_label: Label
 var pause_description: Label
 var feedback_pause_time := -1
 var menu: Control
@@ -113,7 +116,7 @@ func _ready() -> void:
 	var bottom := Control.new()
 	bottom.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left.add_child(bottom)
-	label(left, "WASD  Move    •    SHIFT  Sprint    •    SPACE  Jump\nR  Reload    •    E  Loot    •    H  Heal\n1/2/3  Weapons    •    RMB  Aim    •    ESC  Menu", 16, Color("b7c6c8"))
+	label(left, "WASD  Move    •    SHIFT  Sprint    •    SPACE  Jump\nR  Reload    •    E  Loot    •    H  Heal\n1/2/3  Weapons    •    RMB  Aim    •    ESC  Menu\nB  Inventory    •    M  Map    •    G  Frag", 16, Color("b7c6c8"))
 	var right := VBoxContainer.new()
 	right.custom_minimum_size.x = 390
 	right.add_theme_constant_override("separation", 13)
@@ -165,6 +168,7 @@ func _ready() -> void:
 	stats = placed_label(hud, Vector2(40, 66), 17)
 	weapon = placed_label(hud, Vector2(40, 750), 23)
 	loadout_label = placed_label(hud, Vector2(40, 779), 14)
+	waypoint_label = placed_label(hud, Vector2(540, 80), 16, Color("f6a77a"))
 	health_bar = bar(Vector2(40, 800), Color("77c9b0"))
 	armor_bar = bar(Vector2(40, 829), Color("7ebce4"))
 	prompt = placed_label(hud, Vector2(480, 735), 18, ACCENT)
@@ -177,6 +181,10 @@ func _ready() -> void:
 	inventory.theme = theme
 	add_child(inventory)
 	inventory.close_requested.connect(func(): set_inventory(false))
+	tactical_map = preload("res://scripts/tactical_map.gd").new()
+	tactical_map.theme = theme
+	add_child(tactical_map)
+	tactical_map.close_requested.connect(func(): set_map(false))
 	pause_panel = PanelContainer.new()
 	pause_panel.position = Vector2(480, 290)
 	pause_panel.size = Vector2(460, 250)
@@ -307,6 +315,8 @@ func save_settings() -> void:
 	settings.save("user://settings.cfg")
 
 func show_menu(message := "") -> void:
+	set_map(false)
+	tactical_map.waypoint = null
 	set_inventory(false)
 	menu.visible = true
 	leaderboard_panel.visible = false
@@ -322,6 +332,8 @@ func show_menu(message := "") -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func show_game() -> void:
+	set_map(false)
+	tactical_map.waypoint = null
 	set_inventory(false)
 	feedback_pause_time = -1
 	pause_panel.visible = false
@@ -338,15 +350,25 @@ func show_game() -> void:
 
 func set_pause(enabled: bool) -> void:
 	if enabled:
+		set_map(false)
 		set_inventory(false)
 	pause_panel.visible = enabled
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if enabled else Input.MOUSE_MODE_CAPTURED
 	pause_changed.emit(enabled)
 
 func set_inventory(enabled: bool) -> void:
+	if enabled:
+		set_map(false)
 	inventory.visible = enabled
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if enabled else Input.MOUSE_MODE_CAPTURED
 	inventory_changed.emit(enabled)
+
+func set_map(enabled: bool) -> void:
+	if enabled:
+		set_inventory(false)
+	tactical_map.visible = enabled
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if enabled else Input.MOUSE_MODE_CAPTURED
+	map_changed.emit(enabled)
 
 func pause_feedback(enabled: bool) -> void:
 	var now := Time.get_ticks_msec()
@@ -389,6 +411,9 @@ func draw_hud() -> void:
 	var p := radar_center + Vector2(local_position.x, local_position.z) * 0.72
 	hud.draw_circle(p, 4, ACCENT)
 	hud.draw_line(p, p + Vector2(-sin(local_yaw), -cos(local_yaw)) * 13, ACCENT, 2)
+	if tactical_map.waypoint is Vector2 and not spectating:
+		var target: Vector2 = radar_center + (tactical_map.waypoint * 0.72).limit_length(80)
+		hud.draw_circle(target, 5, tactical_map.MARKER, false, 2)
 
 func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: float, events: Array, message: String) -> void:
 	weapon_blocked = actor.weapon_blocked
@@ -420,6 +445,11 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 	local_position = actor.position
 	local_yaw = actor.yaw
 	radius = zone
+	tactical_map.refresh(actor.position, actor.yaw, zone, time_left)
+	waypoint_label.visible = tactical_map.waypoint is Vector2 and not spectating
+	if waypoint_label.visible:
+		var distance: float = Vector2(actor.position.x, actor.position.z).distance_to(tactical_map.waypoint)
+		waypoint_label.text = "WAYPOINT  %dm  /  M MAP" % roundi(distance)
 	hud.queue_redraw()
 
 func set_spectator(enabled: bool, nickname: String, placement: int) -> void:

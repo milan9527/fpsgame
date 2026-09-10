@@ -17,6 +17,7 @@ cp docs/INVENTORY.md artifacts/IronMeridian-Linux/docs/INVENTORY.md
 cp docs/DROPPING.md artifacts/IronMeridian-Linux/docs/DROPPING.md
 cp docs/ROOM_DIRECTORY.md artifacts/IronMeridian-Linux/docs/ROOM_DIRECTORY.md
 cp docs/CONNECTION_LIFECYCLE.md artifacts/IronMeridian-Linux/docs/CONNECTION_LIFECYCLE.md
+cp docs/TACTICAL_MAP.md artifacts/IronMeridian-Linux/docs/TACTICAL_MAP.md
 cp LICENSE artifacts/IronMeridian-Linux/LICENSE
 cat > artifacts/IronMeridian-Linux/play.sh <<'SH'
 #!/usr/bin/env bash
@@ -38,6 +39,9 @@ timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests
 rg -q DROP_RULES_PASS artifacts/packed-drop.log
 timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/cancel_connection_rules.gd" > artifacts/packed-cancel-connection.log 2>&1
 rg -q CANCEL_CONNECTION_RULES_PASS artifacts/packed-cancel-connection.log
+timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/tactical_map_rules.gd" > artifacts/packed-tactical-map.log 2>&1
+rg -q TACTICAL_MAP_RULES_PASS artifacts/packed-tactical-map.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-tactical-map.log; then cat artifacts/packed-tactical-map.log; exit 1; fi
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-cancel-connection.log; then cat artifacts/packed-cancel-connection.log; exit 1; fi
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-drop.log; then cat artifacts/packed-drop.log; exit 1; fi
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-inventory.log; then cat artifacts/packed-inventory.log; exit 1; fi

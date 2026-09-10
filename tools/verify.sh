@@ -5,6 +5,9 @@ timeout 25s xvfb-run -a ./tools/godot --path client --audio-driver Dummy --scrip
 rg -q SUPPLY_RULES_PASS artifacts/supply-rules.log
 timeout 25s xvfb-run -a ./tools/godot --path client --audio-driver Dummy --script ../tests/magazine_rules.gd -- --capture-magazines > artifacts/magazine-rules.log 2>&1
 rg -q MAGAZINE_RULES_PASS artifacts/magazine-rules.log
+timeout 25s ./tools/godot --headless --path client --script ../tests/death_loot_rules.gd > artifacts/death-loot-rules.log 2>&1
+rg -q DEATH_LOOT_RULES_PASS artifacts/death-loot-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/death-loot-rules.log; then cat artifacts/death-loot-rules.log; exit 1; fi
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/magazine-rules.log; then cat artifacts/magazine-rules.log; exit 1; fi
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/supply-rules.log; then cat artifacts/supply-rules.log; exit 1; fi
 .venv/bin/python tools/test_supply_network.py
@@ -80,3 +83,5 @@ docker compose restart game
 .venv/bin/python tools/test_delayed_online.py
 docker compose restart game
 .venv/bin/python tools/test_delayed_online.py --loss 0.1
+
+.venv/bin/python tools/test_death_loot_network.py

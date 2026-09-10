@@ -28,6 +28,7 @@ var sessions: Dictionary = {}
 var pending: Dictionary = {}
 var participants: Dictionary = {}
 var loot: Dictionary = {}
+var next_loot_id := 48
 var grenades: Dictionary = {}
 var next_grenade_id := 1
 var grenade_tombstones: Dictionary = {}
@@ -258,6 +259,7 @@ func reset_round() -> void:
 	events.clear()
 	last_eliminated_name = ""
 	loot.clear()
+	next_loot_id = 48
 	elapsed = 0
 	zone = 110
 	zone_tick = 0
@@ -822,8 +824,24 @@ func damage(target, amount: float, attacker_id: int, bypass_protection := false,
 			participants[attacker_id].kills += 1
 			source = "DISCONNECTED OPERATOR"
 		add_event(source + "  >  " + target.display_name)
-		var loot_id := 1000 + absi(target.actor_id)
-		loot[loot_id] = {"p": target.position, "kind": 0}
+		drop_inventory(target)
+
+func drop_inventory(actor) -> void:
+	if actor.alive or (online and not dedicated):
+		return
+	var amounts := [actor.total_ammunition(), actor.medkits, actor.armor, actor.grenades]
+	for kind in range(amounts.size()):
+		if amounts[kind] <= 0:
+			continue
+		while loot.has(next_loot_id):
+			next_loot_id += 1
+		loot[next_loot_id] = {"p": actor.position, "kind": kind, "amount": float(amounts[kind]), "drop_slot": kind}
+		next_loot_id += 1
+	actor.magazines = PackedInt32Array([0, 0, 0])
+	actor.reserve = 0
+	actor.medkits = 0
+	actor.armor = 0
+	actor.grenades = 0
 
 func supply_accessible(actor, item: Dictionary) -> bool:
 	if actor.position.distance_to(item.p) >= SupplyRules.RANGE:

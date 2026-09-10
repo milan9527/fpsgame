@@ -184,18 +184,27 @@ func show_loot(items: Dictionary) -> void:
 			if highlighted_supply == id:
 				highlighted_supply = -1
 	var colors := ["e8c77b", "77d7ad", "7bbee8", "d9844e"]
+	var stack_heights := {}
 	for id in items:
 		var item: Dictionary = items[id]
+		var offset := Vector3(0, 0.35, 0)
+		if item.has("drop_slot"):
+			# Keep interaction at the corpse position; compact stacks distinguish
+			# the remaining categories without scattering supplies through walls.
+			offset.y = 0.15 + int(stack_heights.get(item.p, 0)) * 0.2
+			stack_heights[item.p] = int(stack_heights.get(item.p, 0)) + 1
+		var size := Vector3(0.65, 0.2, 0.65) if item.has("drop_slot") else Vector3(0.65, 0.5, 0.65)
 		if loot_nodes.has(id):
 			var existing: MeshInstance3D = loot_nodes[id]
-			existing.position = item.p + Vector3(0, 0.35, 0)
+			existing.position = item.p + offset
+			existing.mesh.size = size
 			if existing.get_meta("supply_kind", -1) != item.kind:
 				existing.material_override = mat(colors[item.kind]).duplicate()
 				existing.set_meta("supply_kind", item.kind)
 				if highlighted_supply == id:
 					highlighted_supply = -1
 			continue
-		var mesh := block(item.p + Vector3(0, 0.35, 0), Vector3(0.65, 0.5, 0.65), colors[item.kind], false)
+		var mesh := block(item.p + offset, size, colors[item.kind], false)
 		mesh.material_override = mesh.material_override.duplicate()
 		mesh.set_meta("supply_kind", item.kind)
 		loot_nodes[id] = mesh

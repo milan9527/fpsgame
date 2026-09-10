@@ -4,6 +4,8 @@
 
 ## 已实际实现
 
+- 淘汰库存转移、弹匣弹药回收、按类别堆放与部分拾取；清空尸体库存防重复生成，详见 [淘汰物资](DEATH_LOOT.md)。
+
 - 三枪独立弹匣与共享储备，切枪保留装弹量；计时换弹、空弹匣提示与三枪 HUD，协议 6 同步。详见 [弹药规则](AMMUNITION.md)。
 
 - Godot 4.4.1 原生 FPS 客户端，Linux 可启动包。
@@ -120,6 +122,9 @@
 | 独立弹匣、切枪防自动装弹、计时/不足储备换弹、快照复制、HUD 与死亡保护 | 通过（实际 OpenGL 及打包版） | `artifacts/magazine-rules.log`、`artifacts/packed-magazines.log` |
 | 弹匣版本完整回合落库及协议 6 兼容 | 通过 | `artifacts/magazine-full-round.log`、`artifacts/magazine-protocol.log` |
 | 双客户端三枪开火/切回保留弹量、储备守恒及断开确认 | 通过 | `artifacts/magazine-online.log` |
+| 淘汰实际库存转移、弹匣回收、重复/空库存/编号/部分取用/回合清理 | 通过（源码、实际 OpenGL 与打包版） | `artifacts/death-loot-render.log`、`artifacts/packed-death-loot.log` |
+| 真实鉴权客户端淘汰物资余量同步、拾取去重与实体移除 | 通过 | `artifacts/death-loot-network.log` |
+| 淘汰物资版本整局落库与兼容检查 | 通过 | `artifacts/death-loot-full-round.log`、`artifacts/death-loot-protocol.log` |
 | 补给目标提示与高亮画面 | 已检查 | `artifacts/supply-prompt.png` |
 
 20 倍速测试用于验证完整流程，不代表实时性能、弱网适应性或长期稳定性。双客户端验证不等于 16 真人并发验证。

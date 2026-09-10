@@ -56,9 +56,9 @@ var settings := ConfigFile.new()
 var busy := false
 var grenade_warning_distance := INF
 var hit_until := 0
+var damage_indicators = preload("res://scripts/damage_indicators.gd").new()
 var damage_until := 0
 var hit_color := Color.WHITE
-var damage_source := Vector3.ZERO
 var hit_text: Label
 var leaderboard_panel: Control
 var leaderboard_label: Label
@@ -381,6 +381,7 @@ func show_game() -> void:
 	pause_panel.visible = false
 	hit_until = 0
 	damage_until = 0
+	damage_indicators.clear()
 	hit_text.text = ""
 	menu.visible = false
 	hide_local_history()
@@ -421,6 +422,7 @@ func pause_feedback(enabled: bool) -> void:
 			hit_until += now - feedback_pause_time
 		if damage_until > feedback_pause_time:
 			damage_until += now - feedback_pause_time
+		damage_indicators.resume(feedback_pause_time, now)
 		feedback_pause_time = -1
 
 func draw_hud() -> void:
@@ -441,10 +443,10 @@ func draw_hud() -> void:
 	if now < damage_until:
 		var opacity := float(damage_until - now) / 600.0
 		hud.draw_rect(Rect2(Vector2.ZERO, hud.size), Color(0.85, 0.1, 0.05, opacity * 0.5), false, 12)
-		var direction := damage_source - local_position
-		if direction.length() > 0.5:
-			var angle := -PI / 2 - (atan2(-direction.x, -direction.z) - local_yaw)
-			hud.draw_arc(center, 62, angle - 0.25, angle + 0.25, 12, Color(1, 0.2, 0.1, opacity), 5)
+	for mark in damage_indicators.visible_marks(local_yaw, now):
+		# A dark outline keeps the direction legible against bright sky and smoke.
+		hud.draw_arc(center, 66, mark.angle - 0.25, mark.angle + 0.25, 16, Color(0.08, 0.02, 0.01, mark.opacity), 9, true)
+		hud.draw_arc(center, 66, mark.angle - 0.25, mark.angle + 0.25, 16, Color(1, 0.25, 0.12, mark.opacity), 5, true)
 	var radar_center := Vector2(hud.size.x - 120, 120)
 	hud.draw_circle(radar_center, 88, Color(0.03, 0.08, 0.11, 0.85))
 	hud.draw_arc(radar_center + zone_info.get("center", Vector2.ZERO) * 0.72, radius * 0.72, 0, TAU, 64, Color("72bbd9"), 2)
@@ -510,6 +512,7 @@ func set_spectator(enabled: bool, nickname: String, placement: int) -> void:
 		prompt.text = "%s / %s  Switch operator   |   Mouse  Orbit   |   Wheel  Zoom   |   ESC  Menu" % [Bindings.key_label("spectate_previous"), Bindings.key_label("spectate_next")]
 		hit_until = 0
 		damage_until = 0
+		damage_indicators.clear()
 		hit_text.text = ""
 
 func show_leaderboard(rows: Array, profile: Dictionary = {}) -> void:
@@ -582,5 +585,5 @@ func combat_feedback(kind: int, amount: float, headshot: bool, killed: bool, ori
 		hit_text.text = "ELIMINATED" if killed else ("HEADSHOT" if headshot else "HIT %d" % roundi(amount))
 	else:
 		damage_until = Time.get_ticks_msec() + 600
-		damage_source = origin
+		damage_indicators.record(origin, local_position, Time.get_ticks_msec())
 	hud.queue_redraw()

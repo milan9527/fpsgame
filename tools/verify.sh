@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+timeout 25s ./tools/godot --headless --path client --script ../tests/bot_cover_rules.gd > artifacts/bot-cover-rules.log 2>&1
+rg -q BOT_COVER_RULES_PASS artifacts/bot-cover-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/bot-cover-rules.log; then cat artifacts/bot-cover-rules.log; exit 1; fi
 timeout 40s ./tools/godot --headless --path client --script ../tests/training_rules.gd > artifacts/training-rules.log 2>&1
 rg -q TRAINING_RULES_PASS artifacts/training-rules.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/training-rules.log; then cat artifacts/training-rules.log; exit 1; fi

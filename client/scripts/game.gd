@@ -904,6 +904,17 @@ func bot_input(actor, dt: float) -> void:
 					nearest = distance
 					actor.bot_destination = supply.p
 		destination = actor.bot_destination
+	var needs_cover: bool = actor.health < 65 or actor.ammo == 0 or actor.reload_left > 0
+	var cover_point: Vector3 = actor.navigator.cover.select(actor, world, actor.bot_last_seen, zone_center, zone, needs_cover, actor.bot_memory_left > 0, dt)
+	actor.crouch = false
+	if cover_point.is_finite():
+		destination = cover_point
+		if actor.position.distance_to(cover_point) < 0.9:
+			actor.crouch = true
+			actor.shooting = false
+			if actor.health < 65:
+				actor.heal()
+			actor.reload_weapon()
 	var radial := Vector2(actor.position.x, actor.position.z) - zone_center
 	actor.sprint = radial.length() > maxf(4, zone - 7)
 	if actor.sprint:
@@ -920,7 +931,10 @@ func bot_input(actor, dt: float) -> void:
 			var safe := next_center + next_offset.normalized() * maxf(0, next_radius - 7)
 			destination = Vector3(safe.x, 0, safe.y)
 			actor.sprint = true
-	var direction: Vector3 = actor.navigator.steer(actor, world, destination, dt)
+	if actor.sprint:
+		actor.navigator.cover.clear()
+		actor.crouch = false
+	var direction: Vector3 = actor.navigator.steer(actor, world, destination, dt, 0.1 if cover_point.is_finite() and not actor.sprint else 1.5)
 	# Short-range separation supplements global paths around static geometry.
 	if direction.length_squared() > 0:
 		for other in actors.values():

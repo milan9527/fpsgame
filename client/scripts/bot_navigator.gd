@@ -1,5 +1,7 @@
 extends RefCounted
 
+var cover = preload("res://scripts/bot_cover.gd").new()
+
 var path := PackedVector3Array()
 var index := 0
 var goal := Vector3.INF
@@ -11,7 +13,7 @@ var finished := true
 var reachable := false
 var repaths := 0
 
-func steer(actor, world, destination: Vector3, dt: float) -> Vector3:
+func steer(actor, world, destination: Vector3, dt: float, goal_tolerance := 1.5) -> Vector3:
 	if not world.navigation_ready():
 		return Vector3.ZERO
 	repath_left -= dt
@@ -20,7 +22,7 @@ func steer(actor, world, destination: Vector3, dt: float) -> Vector3:
 		var displacement: Vector3 = actor.position - previous_position
 		stuck_time = stuck_time + dt if Vector2(displacement.x, displacement.z).length() < 0.012 else 0.0
 	previous_position = actor.position
-	if repath_left <= 0 and (goal.distance_to(destination) > 1.5 or path.is_empty() or stuck_time > 1.2):
+	if repath_left <= 0 and (goal.distance_to(destination) > goal_tolerance or path.is_empty() or stuck_time > 1.2):
 		goal = destination
 		var projected: Vector3 = world.navigation_point(destination)
 		path = NavigationServer3D.map_get_path(world.get_world_3d().navigation_map, actor.position, projected, true)

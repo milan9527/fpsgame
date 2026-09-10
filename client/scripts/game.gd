@@ -663,9 +663,8 @@ func _physics_process(dt: float) -> void:
 		for actor in actors.values():
 			if actor.is_bot and training == null:
 				bot_input(actor, dt)
-			if dedicated and not actor.is_bot and Time.get_ticks_msec() - actor.last_command_msec > 350:
-				actor.move_input = Vector2.ZERO
-				actor.shooting = false
+			if dedicated and not actor.is_bot:
+				expire_held_input(actor, Time.get_ticks_msec())
 			actor.simulate(dt)
 			apply_landing(actor)
 		# Capture all actors at the same simulation boundary before resolving fire.
@@ -807,6 +806,16 @@ func receive_actions(actor, round_id: String, cmd: Dictionary, loot_target = -1)
 	actor.pitch = saved_pitch
 	return true
 
+func expire_held_input(actor, now: int) -> void:
+	if now - actor.last_command_msec <= 350:
+		return
+	actor.move_input = Vector2.ZERO
+	actor.shooting = false
+	actor.sprint = false
+	actor.aiming = false
+	actor.lean_input = 0.0
+	actor.crouch = false
+
 func valid_command(cmd: Dictionary) -> bool:
 	if cmd.size() != 17:
 		return false
@@ -815,6 +824,8 @@ func valid_command(cmd: Dictionary) -> bool:
 			return false
 		if not is_finite(float(cmd[key])):
 			return false
+	if cmd.seq != floorf(cmd.seq) or cmd.seq < 0 or cmd.seq > 2147483647 or cmd.weapon != floorf(cmd.weapon):
+		return false
 	for key in ["fire", "sprint", "crouch", "ads", "jump", "reload", "heal", "loot", "throw", "smoke_throw"]:
 		if not cmd.has(key) or not cmd[key] is bool:
 			return false

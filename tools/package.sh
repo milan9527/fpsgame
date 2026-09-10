@@ -34,6 +34,9 @@ cp docs/CONTROLS.md artifacts/IronMeridian-Linux/docs/CONTROLS.md
 cp docs/SOLO_CHECKPOINTS.md artifacts/IronMeridian-Linux/docs/SOLO_CHECKPOINTS.md
 cp docs/BOT_COVER.md artifacts/IronMeridian-Linux/docs/BOT_COVER.md
 cp docs/TRAINING.md artifacts/IronMeridian-Linux/docs/TRAINING.md
+timeout 15s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/input_timeout_rules.gd" > artifacts/packed-input-timeout.log 2>&1
+rg -q INPUT_TIMEOUT_RULES_PASS artifacts/packed-input-timeout.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-input-timeout.log; then cat artifacts/packed-input-timeout.log; exit 1; fi
 timeout 15s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/damage_indicators_rules.gd" > artifacts/packed-damage-indicators.log 2>&1
 rg -q DAMAGE_INDICATORS_PASS artifacts/packed-damage-indicators.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-damage-indicators.log; then cat artifacts/packed-damage-indicators.log; exit 1; fi

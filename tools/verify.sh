@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+timeout 15s ./tools/godot --headless --path client --script ../tests/input_timeout_rules.gd > artifacts/input-timeout-rules.log 2>&1
+rg -q INPUT_TIMEOUT_RULES_PASS artifacts/input-timeout-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/input-timeout-rules.log; then cat artifacts/input-timeout-rules.log; exit 1; fi
 timeout 15s ./tools/godot --headless --path client --script ../tests/damage_indicators_rules.gd > artifacts/damage-indicators.log 2>&1
 rg -q DAMAGE_INDICATORS_PASS artifacts/damage-indicators.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/damage-indicators.log; then cat artifacts/damage-indicators.log; exit 1; fi
@@ -142,3 +145,5 @@ if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/tac
 .venv/bin/python tools/test_fall_network.py
 
 .venv/bin/python tools/test_bindings_network.py
+
+.venv/bin/python tools/test_input_timeout.py

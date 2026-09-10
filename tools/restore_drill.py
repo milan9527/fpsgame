@@ -44,8 +44,14 @@ def drill(bundle, report_path):
                             '--exit-on-error', '--single-transaction', '--no-owner', '--no-privileges'], stdin=source, check=True)
         raw = subprocess.check_output(['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-At', '-v', 'ON_ERROR_STOP=1', '-c', SQL], text=True)
         state = json.loads(raw)
-        if state['schema_revision'] != '0002' or any(state[key] for key in ['invalid_stats', 'invalid_results', 'orphan_results', 'duplicate_results', 'unvalidated_constraints']):
+        if state['schema_revision'] not in ['0002', '0003'] or any(state[key] for key in ['invalid_stats', 'invalid_results', 'orphan_results', 'duplicate_results', 'unvalidated_constraints']):
             raise ValueError('Restored database failed schema or integrity checks')
+        if state['schema_revision'] == '0003':
+            invalid = subprocess.check_output(['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-At', '-v', 'ON_ERROR_STOP=1', '-c',
+                'SELECT count(*) FROM users WHERE session_version IS NULL OR session_version<0'], text=True)
+            state['invalid_session_versions'] = int(invalid.strip())
+            if state['invalid_session_versions']:
+                raise ValueError('Restored session versions failed integrity checks')
         # Exercise the restored FK/check constraints and roll back the probe transaction.
         probe = "BEGIN; DO $$ BEGIN BEGIN INSERT INTO results(match_id,user_id,kills,rank) VALUES ('missing-match','missing-user',0,1); RAISE EXCEPTION 'foreign key accepted invalid row'; EXCEPTION WHEN foreign_key_violation THEN NULL; END; END $$; ROLLBACK;"
         subprocess.run(['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-v', 'ON_ERROR_STOP=1', '-c', probe], stdout=subprocess.DEVNULL, check=True)

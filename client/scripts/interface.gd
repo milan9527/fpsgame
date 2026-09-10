@@ -3,6 +3,8 @@ extends CanvasLayer
 signal leaderboard_requested(endpoint: String)
 signal training_requested
 var training_label: Label
+signal logout_requested
+var logout_button: Button
 signal solo_requested
 signal online_requested(username: String, password: String, register: bool, endpoint: String)
 signal leave_requested
@@ -140,7 +142,16 @@ func _ready() -> void:
 	row.add_child(right)
 	label(right, "DEPLOYMENT", 26, ACCENT)
 	button(right, "SOLO  /  OFFLINE OPERATION", func(): solo_requested.emit())
-	label(right, "ONLINE ACCOUNT", 16, Color("9aafb4"))
+	var account_row := HBoxContainer.new()
+	right.add_child(account_row)
+	var account_label := label(account_row, "ONLINE ACCOUNT", 16, Color("9aafb4"))
+	account_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	logout_button = Button.new()
+	logout_button.text = "SIGN OUT ALL"
+	logout_button.add_theme_font_size_override("font_size", 13)
+	logout_button.disabled = true
+	logout_button.pressed.connect(func(): logout_requested.emit())
+	account_row.add_child(logout_button)
 	username = field(right, "Username (3–24 letters / digits)", "")
 	password = field(right, "Password (at least 10 characters)", "")
 	password.secret = true

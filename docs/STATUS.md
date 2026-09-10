@@ -252,3 +252,11 @@
 ### 垂直握把完整流程（0.28 / 协议 12）
 
 新增 Blender 原创握把和世界物资、三武器独立槽、背包安装/拆卸、20% 每发后坐力增量减免、备用库存容量及丢弃、死亡掉落、机器人自动安装、权威 RPC 与远端模型同步。单机检查点保存配件状态，并支持上一内容版本 `ash-valley-16` 在完整校验后迁移为空配件槽，保留原对局/物资。更早内容版本仍不支持。详见 `docs/ATTACHMENTS.md`。本次只包含握把，其他配件类型及手部 IK/安装动作仍未完成。
+
+### 退出全部账户会话（0.29 / 协议 13）
+
+数据库升级至 `0003`，持久化账户会话版本。主菜单可退出所有设备，撤销旧 JWT 和未消费票据；服务器心跳核验在线版本，通知失效客户端并断开连接。重新登录正常，单机存档内容版本不变。两个真实 Godot 客户端已验证异地退出通知、断开、旧令牌拒绝、新登录以及失败提示；数据库迁移、会话、房间和依赖故障共 26 项测试通过，包含取消旧票据不影响新登录预约。证据：`artifacts/session-logout-e2e.log`、`artifacts/session-backend-regression.log`、`artifacts/session-logout.png`。详见 `docs/ACCOUNT_SESSIONS.md`。
+
+迁移前已备份。旧备份恢复或迁移回退可能倒退会话版本，正式开放前需要更换 JWT 签名密钥并废弃旧房间票据。在线退出依赖健康心跳，不提供服务故障期间的即时断开保证；设备列表和单设备撤销尚未实现。
+
+本版 Linux 包通过现有玩法回归和打包后账户界面测试；普通双客户端对局及加速完整对局落库通过。升级后备份在隔离容器中恢复 51 个账户、90 场对局及 136 条结果，会话版本有效，正式库未被替换。证据：`artifacts/session-package.log`、`artifacts/session-packed-logout.log`、`artifacts/session-online.log`、`artifacts/session-full-round.log`、`artifacts/session-restore-drill.json`。测试范围仍不代表商业游戏全部功能或公网大规模运营验收。

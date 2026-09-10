@@ -42,14 +42,14 @@ def legacy(connection):
 
 
 def rows(connection):
-    return {table: connection.execute(text('SELECT * FROM ' + table + ' ORDER BY id')).all() for table in ('users', 'matches', 'results')}
+    return {table: connection.execute(text(('SELECT id,username,password,created,matches,wins,kills FROM users ORDER BY id' if table == 'users' else 'SELECT * FROM ' + table + ' ORDER BY id'))).all() for table in ('users', 'matches', 'results')}
 
 
 def test_fresh_and_repeat(database):
     with database.begin() as connection:
-        assert upgrade(connection) == '0002'
+        assert upgrade(connection) == '0003'
     with database.begin() as connection:
-        assert upgrade(connection) == '0002'
+        assert upgrade(connection) == '0003'
         assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
         assert {c['name'] for c in inspect(connection).get_check_constraints('users')} == {'ck_users_stats'}
 
@@ -59,12 +59,13 @@ def test_legacy_data_survives_upgrade_and_downgrade(database):
         legacy(connection)
         before = rows(connection)
     with database.begin() as connection:
-        assert upgrade(connection) == '0002'
+        assert upgrade(connection) == '0003'
         assert rows(connection) == before
+        assert connection.scalar(text('SELECT session_version FROM users')) == 0
         command.downgrade(configuration(connection), '0001')
         assert rows(connection) == before
     with database.begin() as connection:
-        assert upgrade(connection) == '0002'
+        assert upgrade(connection) == '0003'
         assert rows(connection) == before
         with pytest.raises(IntegrityError), connection.begin_nested():
             connection.execute(text('UPDATE users SET wins = matches + 1'))
@@ -79,7 +80,7 @@ def test_two_migrators_are_serialized(database):
         with database.begin() as connection:
             return upgrade(connection)
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        assert list(executor.map(run, range(2))) == ['0002', '0002']
+        assert list(executor.map(run, range(2))) == ['0003', '0003']
 
 
 def test_drift_is_rejected_without_stamping(database):

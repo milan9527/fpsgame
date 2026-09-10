@@ -3,7 +3,7 @@ import hashlib
 import json
 import secrets
 import uuid
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, model_validator
@@ -20,6 +20,8 @@ class RoomHeartbeat(BuildInfo):
     capacity: int = Field(strict=True, ge=1, le=16)
     phase: Literal['waiting', 'lobby', 'live', 'finished']
     players: list[uuid.UUID] = Field(default_factory=list, max_length=16)
+
+    session_versions: dict[uuid.UUID, Annotated[int, Field(strict=True, ge=0, le=9223372036854775806)]] = Field(default_factory=dict, max_length=16)
 
     @model_validator(mode='after')
     def valid_players(self):
@@ -92,6 +94,7 @@ if old then
 end
 for _,uid in ipairs(room.players) do
     redis.call('SET',p..'user:'..uid,owner,'EX',15)
+    redis.call('SET',p..'user_version:'..uid,tostring((room.session_versions or {})[uid] or 0),'EX',15)
     redis.call('ZREM',held,uid)
 end
 redis.call('SET',key,ARGV[2],'EX',12)
@@ -114,9 +117,10 @@ for _,id in ipairs(ids) do
             redis.call('ZREMRANGEBYSCORE',held,'-inf',now)
             if #room.players+redis.call('ZCARD',held)<room.capacity then
                 local owner=id..'/'..room.instance_id..'/'..room.generation
-                local ticket={uid=uid,username=ARGV[3],room_id=id,instance_id=room.instance_id,generation=room.generation,protocol=room.protocol,content_revision=room.content_revision}
+                local ticket={uid=uid,username=ARGV[3],room_id=id,instance_id=room.instance_id,generation=room.generation,protocol=room.protocol,content_revision=room.content_revision,session_version=tonumber(ARGV[8])}
                 redis.call('SET',p..'ticket:'..ARGV[7],cjson.encode(ticket),'EX',45)
                 redis.call('SET',p..'user:'..uid,owner,'EX',45)
+                redis.call('SET',p..'user_version:'..uid,ARGV[8],'EX',45)
                 redis.call('ZADD',held,now+45,uid)
                 redis.call('EXPIRE',held,60)
                 return {'ok',raw}
@@ -153,7 +157,7 @@ local ticket=cjson.decode(raw)
 if ticket.uid~=ARGV[3] then return 'owner' end
 local owner=ticket.room_id..'/'..ticket.instance_id..'/'..ticket.generation
 -- An old generation must never release a newer reservation for the same user.
-if redis.call('GET',p..'user:'..ticket.uid)==owner then
+if redis.call('GET',p..'user:'..ticket.uid)==owner and tonumber(redis.call('GET',p..'user_version:'..ticket.uid) or '0')==tonumber(ticket.session_version or 0) then
     redis.call('ZREM',p..'held:'..ticket.room_id,ticket.uid)
     redis.call('DEL',p..'user:'..ticket.uid)
 end
@@ -173,11 +177,11 @@ class RoomDirectory:
             raise HTTPException(409, 'Room heartbeat rejected: ' + result)
         return {'status': 'ok', 'expires_in': 12}
 
-    def allocate(self, uid: str, username: str, requested_room=''):
+    def allocate(self, uid: str, username: str, requested_room='', session_version=0):
         ticket = secrets.token_urlsafe(32)
         digest = hashlib.sha256(ticket.encode()).hexdigest()
         result = self.cache.eval(ALLOCATE, 0, self.prefix, uid, username,
-                                 str(BUILD['protocol']), BUILD['content_revision'], requested_room, digest)
+                                 str(BUILD['protocol']), BUILD['content_revision'], requested_room, digest, str(session_version))
         if result[0] == 'busy':
             raise HTTPException(409, 'Already connected or holding a room reservation')
         if result[0] != 'ok':
@@ -186,6 +190,18 @@ class RoomDirectory:
         return {'ticket': ticket, 'room_id': room['room_id'], 'instance_id': room['instance_id'],
                 'generation': room['generation'], 'host': room['host'], 'port': room['port'],
                 'expires_in': 45, 'build': BUILD}
+
+    def revoke_reservation(self, uid, version):
+        self.cache.eval("""
+            local key=ARGV[1]..'user:'..ARGV[2]
+            local owner=redis.call('GET',key)
+            local old=tonumber(redis.call('GET',ARGV[1]..'user_version:'..ARGV[2]) or '0')
+            if owner and old<tonumber(ARGV[3]) then
+                local room=string.match(owner,'^([^/]+)/')
+                if room then redis.call('ZREM',ARGV[1]..'held:'..room,ARGV[2]) end
+                redis.call('DEL',key,ARGV[1]..'user_version:'..ARGV[2])
+            end
+        """, 0, self.prefix, uid, str(version))
 
     def consume(self, body: RoomTicket):
         digest = hashlib.sha256(body.ticket.encode()).hexdigest()

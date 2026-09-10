@@ -33,6 +33,7 @@ cp docs/FALL_DAMAGE.md artifacts/IronMeridian-Linux/docs/FALL_DAMAGE.md
 cp docs/CONTROLS.md artifacts/IronMeridian-Linux/docs/CONTROLS.md
 cp docs/SOLO_CHECKPOINTS.md artifacts/IronMeridian-Linux/docs/SOLO_CHECKPOINTS.md
 cp docs/ATTACHMENTS.md artifacts/IronMeridian-Linux/docs/ATTACHMENTS.md
+cp docs/ACCOUNT_SESSIONS.md artifacts/IronMeridian-Linux/docs/ACCOUNT_SESSIONS.md
 cp docs/BOT_COVER.md artifacts/IronMeridian-Linux/docs/BOT_COVER.md
 cp docs/TRAINING.md artifacts/IronMeridian-Linux/docs/TRAINING.md
 timeout 20s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/foregrip_rules.gd" > artifacts/packed-foregrip.log 2>&1

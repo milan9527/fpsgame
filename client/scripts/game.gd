@@ -181,6 +181,7 @@ func _ready() -> void:
 		refresh_checkpoint_menu()
 		ui.leaderboard_requested.connect(show_leaderboard)
 		ui.online_requested.connect(sign_in)
+		ui.logout_requested.connect(sign_out_all)
 		ui.leave_requested.connect(func(): leave())
 		ui.quit_requested.connect(request_quit)
 		ui.quit_without_save_requested.connect(func(): request_quit(0, true))
@@ -288,10 +289,12 @@ func report_room() -> bool:
 	room_revision += 1
 	var signature := room_signature()
 	var players: Array = []
+	var versions := {}
 	for session in sessions.values():
 		players.append(session.uid)
+		versions[session.uid] = int(session.get("session_version", 0))
 	var payload := build_info.duplicate()
-	payload.merge({"room_id": room_id, "instance_id": room_instance, "generation": match_id, "revision": room_revision, "host": OS.get_environment("GAME_PUBLIC_HOST") if OS.has_environment("GAME_PUBLIC_HOST") else "127.0.0.1", "port": room_port, "capacity": MAX_PLAYERS, "phase": phase, "players": players})
+	payload.merge({"room_id": room_id, "instance_id": room_instance, "generation": match_id, "revision": room_revision, "host": OS.get_environment("GAME_PUBLIC_HOST") if OS.has_environment("GAME_PUBLIC_HOST") else "127.0.0.1", "port": room_port, "capacity": MAX_PLAYERS, "phase": phase, "players": players, "session_versions": versions})
 	var response: Dictionary = await http_call("/internal/rooms/heartbeat", payload, true)
 	room_heartbeat_busy = false
 	room_heartbeat_due = Time.get_ticks_msec() + 2000
@@ -299,7 +302,54 @@ func report_room() -> bool:
 		return false
 	room_heartbeat_signature = signature
 	room_heartbeat_success = Time.get_ticks_msec()
+	for id in sessions.keys():
+		if sessions[id].uid in response.body.get("revoked", []) and not sessions[id].get("revoking", false):
+			revoke_account_peer(id)
 	return true
+
+func revoke_account_peer(id: int) -> void:
+	sessions[id].revoking = true
+	if actors.has(id):
+		actors[id].last_command_msec = -1000
+	account_revoked.rpc_id(id)
+	await get_tree().create_timer(0.15).timeout
+	if peer_ready(id):
+		multiplayer.multiplayer_peer.disconnect_peer(id)
+
+@rpc("authority", "call_remote", "reliable")
+func account_revoked() -> void:
+	token = ""
+	token_origin = ""
+	ui.logout_button.disabled = true
+	leave("Account signed out on another device. Sign in again.")
+
+func sign_out_all() -> bool:
+	if dedicated or running or ui.busy or token.is_empty():
+		return false
+	ui.busy = true
+	ui.logout_button.disabled = true
+	var bearer := token
+	var origin := token_origin
+	var request := HTTPRequest.new()
+	request.timeout = 7
+	add_child(request)
+	var code := 0
+	if request.request(origin + "/auth/logout-all", PackedStringArray(["Authorization: Bearer " + bearer]), HTTPClient.METHOD_POST) == OK:
+		var response: Array = await request.request_completed
+		code = int(response[1]) if response[0] == HTTPRequest.RESULT_SUCCESS else 0
+	request.queue_free()
+	if bearer != token:
+		return false
+	ui.busy = false
+	if code == 200 or code == 401:
+		token = ""
+		token_origin = ""
+		ui.password.text = ""
+		ui.status.text = "Signed out of all devices. Sign in again to play online." if code == 200 else "This login expired. Sign in again before signing out all devices."
+		return code == 200
+	ui.logout_button.disabled = false
+	ui.status.text = "Sign-out could not be confirmed. Please retry when the service is available."
+	return false
 
 func start_training() -> void:
 	save_local_operation()
@@ -526,7 +576,7 @@ func grip_command(round_id: String, seq, index, attach) -> void:
 	if not dedicated:
 		return
 	var id := multiplayer.get_remote_sender_id()
-	if sessions.has(id) and actors.has(id):
+	if sessions.has(id) and not sessions[id].get("revoking", false) and actors.has(id):
 		receive_grip(actors[id], round_id, seq, index, attach)
 
 func receive_grip(actor, round_id: String, seq, index, attach) -> bool:
@@ -557,7 +607,7 @@ func drop_command(round_id: String, seq, kind, count) -> void:
 	if not dedicated:
 		return
 	var id := multiplayer.get_remote_sender_id()
-	if sessions.has(id) and actors.has(id):
+	if sessions.has(id) and not sessions[id].get("revoking", false) and actors.has(id):
 		receive_drop(actors[id], round_id, seq, kind, count)
 
 func receive_drop(actor, round_id: String, seq, kind, count) -> bool:
@@ -785,7 +835,7 @@ func input_command(cmd: Dictionary) -> void:
 	if not dedicated:
 		return
 	var id := multiplayer.get_remote_sender_id()
-	if not sessions.has(id) or not actors.has(id):
+	if not sessions.has(id) or sessions[id].get("revoking", false) or not actors.has(id):
 		return
 	var actor = actors[id]
 	if actor.command_tokens < 1:
@@ -812,7 +862,7 @@ func action_command(round_id: String, cmd: Dictionary, loot_target = -1) -> void
 	if not dedicated:
 		return
 	var id := multiplayer.get_remote_sender_id()
-	if not sessions.has(id) or not actors.has(id):
+	if not sessions.has(id) or sessions[id].get("revoking", false) or not actors.has(id):
 		return
 	receive_actions(actors[id], round_id, cmd, loot_target)
 
@@ -1506,6 +1556,7 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 		return
 	token = response.body.token
 	token_origin = api_url
+	ui.logout_button.disabled = false
 	var attempt_token: String = token
 	var join_payload := build_info.duplicate()
 	if bot_client and OS.has_environment("TEST_ROOM_ID"):

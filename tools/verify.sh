@@ -100,6 +100,7 @@ PY
 docker compose run --rm --no-deps -v "$PWD/backend/tests:/app/tests:ro" api python -m pytest -q -p no:cacheprovider tests/test_migrations.py
 docker compose run --rm --no-deps -v "$PWD/backend/tests:/app/tests:ro" api python -m pytest -q -p no:cacheprovider tests/test_rooms.py
 docker compose run --rm --no-deps -v "$PWD/backend/tests:/app/tests:ro" api python -m pytest -q -p no:cacheprovider tests/test_availability.py
+docker compose run --rm --no-deps -v "$PWD/backend/tests:/app/tests:ro" api python -m pytest -q -p no:cacheprovider tests/test_sessions.py
 .venv/bin/python tools/test_room_api.py
 .venv/bin/python tools/test_protocol.py
 timeout 20s ./tools/godot --headless --path client --script ../tests/protocol_client.gd > artifacts/protocol-client-test.log 2>&1
@@ -152,3 +153,4 @@ if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/tac
 .venv/bin/python tools/test_input_timeout.py
 
 .venv/bin/python tools/test_foregrip_network.py
+.venv/bin/python tools/test_session_logout.py

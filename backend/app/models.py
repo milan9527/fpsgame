@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class Base(DeclarativeBase):
@@ -11,6 +11,7 @@ class User(Base):
     __table_args__ = (CheckConstraint('matches >= 0 AND wins >= 0 AND kills >= 0 AND wins <= matches', name='ck_users_stats'),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     username: Mapped[str] = mapped_column(String(24), unique=True, index=True)
+    session_version: Mapped[int] = mapped_column(BigInteger, default=0, server_default=text('0'))
     password: Mapped[str] = mapped_column(String(256))
     created: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     matches: Mapped[int] = mapped_column(Integer, default=0)

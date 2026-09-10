@@ -15,7 +15,7 @@ from .validation import validation_error
 from .availability import dependency_unavailable
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError, OperationalError, TimeoutError as DatabaseTimeout
 from sqlalchemy.orm import Session
 from .models import User, Match, Result
@@ -51,12 +51,47 @@ def limit(key: str, maximum: int, seconds: int):
         raise HTTPException(429, 'Too many requests; try later')
 
 
-def user_token(credentials: HTTPAuthorizationCredentials = Depends(auth)):
+def decode_session(credentials):
     try:
         data = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=['HS256'], audience='iron-meridian', options={'require': ['exp', 'sub', 'aud']})
-        return str(uuid.UUID(data['sub']))
-    except (jwt.PyJWTError, ValueError, KeyError):
+        version = data.get('ver', 0)  # Pre-migration tokens belong to generation zero.
+        if type(version) is not int or version < 0 or version > 9223372036854775806:
+            raise ValueError('Invalid session generation')
+        return str(uuid.UUID(data['sub'])), version
+    except (jwt.PyJWTError, ValueError, KeyError, TypeError):
         raise HTTPException(401, 'Session expired; sign in again')
+
+
+def user_token(request: Request, credentials: HTTPAuthorizationCredentials = Depends(auth), session: Session = Depends(db)):
+    uid, version = decode_session(credentials)
+    # A shared row lock serializes authenticated operations with logout, while
+    # allowing ordinary requests to run concurrently with one another.
+    user = session.scalar(select(User).where(User.id == uid).with_for_update(read=True))
+    if user is None or user.session_version != version:
+        raise HTTPException(401, 'Session expired; sign in again')
+    request.state.session_version = version
+    return uid
+
+
+def validate_ticket_session(data, session):
+    user = session.get(User, data['uid'])
+    if user is None or user.session_version != int(data.get('session_version', 0)):
+        raise HTTPException(401, 'Session expired; sign in again')
+    return data
+
+
+@app.post('/auth/logout-all')
+def logout_all(credentials: HTTPAuthorizationCredentials = Depends(auth), session: Session = Depends(db)):
+    uid, version = decode_session(credentials)
+    # Conditional update avoids shared-lock upgrades and makes concurrent
+    # requests with the same generation idempotently unauthorized after one wins.
+    changed = session.scalar(update(User).where(User.id == uid, User.session_version == version)
+                             .values(session_version=User.session_version + 1).returning(User.session_version))
+    if changed is None:
+        raise HTTPException(401, 'Session expired; sign in again')
+    session.commit()
+    rooms.revoke_reservation(uid, changed)
+    return {'status': 'signed_out'}
 
 
 def server_auth(x_server_key: str = Header(default='')):
@@ -70,7 +105,7 @@ class Credentials(BaseModel):
 
 
 def token(user: User):
-    return {'token': jwt.encode({'sub': user.id, 'aud': 'iron-meridian', 'exp': datetime.now(timezone.utc) + timedelta(hours=12)}, JWT_SECRET, algorithm='HS256'), 'username': user.username, 'user_id': user.id}
+    return {'token': jwt.encode({'sub': user.id, 'ver': user.session_version, 'aud': 'iron-meridian', 'exp': datetime.now(timezone.utc) + timedelta(hours=12)}, JWT_SECRET, algorithm='HS256'), 'username': user.username, 'user_id': user.id}
 
 
 @app.get('/health')
@@ -131,7 +166,7 @@ def check_server_build(body: BuildInfo):
 
 
 @app.post('/matchmaking/join')
-def join(body: BuildInfo, uid: str = Depends(user_token), session: Session = Depends(db)):
+def join(body: BuildInfo, request: Request, uid: str = Depends(user_token), session: Session = Depends(db)):
     require_compatible(body)
     limit('join:' + uid, 10, 60)
     user = session.get(User, uid)
@@ -140,7 +175,7 @@ def join(body: BuildInfo, uid: str = Depends(user_token), session: Session = Dep
     ticket = secrets.token_urlsafe(32)
     key = 'ticket:' + hashlib.sha256(ticket.encode()).hexdigest()
     with cache.pipeline(transaction=True) as pipeline:
-        pipeline.hset(key, mapping={'uid': uid, 'username': user.username, 'protocol': str(BUILD['protocol']), 'content_revision': BUILD['content_revision']})
+        pipeline.hset(key, mapping={'uid': uid, 'username': user.username, 'protocol': str(BUILD['protocol']), 'content_revision': BUILD['content_revision'], 'session_version': request.state.session_version})
         pipeline.expire(key, 45)
         pipeline.execute()
     return {'ticket': ticket, 'host': os.getenv('GAME_PUBLIC_HOST', '127.0.0.1'), 'port': int(os.getenv('GAME_PORT', '27015')), 'expires_in': 45, 'build': BUILD}
@@ -151,25 +186,30 @@ class Ticket(BuildInfo):
 
 
 @app.post('/internal/rooms/heartbeat', dependencies=[Depends(server_auth)])
-def room_heartbeat(body: RoomHeartbeat):
+def room_heartbeat(body: RoomHeartbeat, session: Session = Depends(db)):
     require_compatible(body)
-    return rooms.heartbeat(body)
+    versions = dict(session.execute(select(User.id, User.session_version).where(User.id.in_([str(uid) for uid in body.players]))).all()) if body.players else {}
+    revoked = [uid for uid in body.players if versions.get(str(uid)) != body.session_versions.get(uid, 0)]
+    filtered = body.model_copy(update={'players': [uid for uid in body.players if uid not in revoked]})
+    result = rooms.heartbeat(filtered)
+    result['revoked'] = [str(uid) for uid in revoked]
+    return result
 
 
 @app.post('/matchmaking/rooms/join')
-def room_join(body: RoomJoin, uid: str = Depends(user_token), session: Session = Depends(db)):
+def room_join(body: RoomJoin, request: Request, uid: str = Depends(user_token), session: Session = Depends(db)):
     require_compatible(body)
     limit('room-join:' + uid, 10, 60)
     user = session.get(User, uid)
     if not user:
         raise HTTPException(404, 'Account not found')
-    return rooms.allocate(uid, user.username, body.room_id)
+    return rooms.allocate(uid, user.username, body.room_id, request.state.session_version)
 
 
 @app.post('/internal/rooms/tickets/consume', dependencies=[Depends(server_auth)])
-def room_consume(body: RoomTicket):
+def room_consume(body: RoomTicket, session: Session = Depends(db)):
     require_compatible(body)
-    return rooms.consume(body)
+    return validate_ticket_session(rooms.consume(body), session)
 
 
 @app.post('/matchmaking/rooms/cancel')
@@ -179,7 +219,7 @@ def room_cancel(body: CancelRoomTicket, uid: str = Depends(user_token)):
 
 
 @app.post('/internal/tickets/consume', dependencies=[Depends(server_auth)])
-def consume(body: Ticket):
+def consume(body: Ticket, session: Session = Depends(db)):
     require_compatible(body)
     key = 'ticket:' + hashlib.sha256(body.ticket.encode()).hexdigest()
     data = cache.eval("""
@@ -195,7 +235,7 @@ def consume(body: Ticket):
     result = dict(zip(data[::2], data[1::2]))
     if '__error__' in result:
         raise HTTPException(409, 'Ticket was issued for a different build')
-    return result
+    return validate_ticket_session(result, session)
 
 
 class PlayerResult(BaseModel):

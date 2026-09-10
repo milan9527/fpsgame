@@ -62,11 +62,11 @@ flowchart LR
 离线结果由 `local_profile.gd` 保存为独立、不可覆盖的版本化记录，临时目录原子发布，主/备用副本校验后汇总。UI 区分完成和中止，写入失败保留进程内待保存队列并提供退出保护。它与 PostgreSQL 在线战绩没有同步通道。详见 [本地战绩](LOCAL_RESULTS.md)。
 
 - PostgreSQL：`users`、`matches`、`results`。用户密码 Argon2 哈希；昵称标准化；用户 ID 为 UUID。
-- JWT：12 小时过期，限定 HS256 与 audience；只在客户端进程内保存。
+- JWT：12 小时过期，限定 HS256 与 audience；只在客户端进程内保存。账户版本持久化于数据库，支持退出所有设备，旧票据也会失效，在线会话通过心跳断开，详见 `ACCOUNT_SESSIONS.md`。
 - Redis：45 秒一次性联机票据；Lua 原子消费；原子限速计数。Redis 仅容器内网可达。
 - 战绩：仅持共享服务器密钥的专用服务器可提交；事务写入；唯一 match ID 防重复；按用户 ID 排序获取行锁，避免并发统计丢失。
 - 客户端永远不能自己领取击杀或胜场。一个账户只能同时连接当前实例一次。
-- 数据库通过 Alembic 版本迁移初始化和升级。原始无版本库先严格比对基线再接管；迁移用 PostgreSQL 事务与 advisory lock 串行化，失败会回滚。模型、连接和 HTTP 服务分离，迁移不依赖 Redis 或账户初始化。当前版本 `0002`。详见 `DATABASE_MIGRATIONS.md`。
+- 数据库通过 Alembic 版本迁移初始化和升级。原始无版本库先严格比对基线再接管；迁移用 PostgreSQL 事务与 advisory lock 串行化，失败会回滚。模型、连接和 HTTP 服务分离，迁移不依赖 Redis 或账户初始化。当前版本 `0003`。详见 `DATABASE_MIGRATIONS.md`。
 
 API 文档：运行后 `http://127.0.0.1:8000/docs`。`/health` 同时探测数据库与 Redis。`/profile` 和 `/leaderboard` 提供统计读接口；部署菜单展示排行榜；登录后的个人统计也可在该界面读取。局内按住 Tab 查看本局记分板。
 

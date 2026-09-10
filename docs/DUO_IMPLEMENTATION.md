@@ -83,3 +83,9 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 `tests/duo_spectator.gd` 验证倒地视角、队友选择、输入循环、显式选择限制、整队淘汰、名单移除和回到单人模式；`tests/spectator_rules.gd` 回归单人换人、墙体碰撞、缩放、退出与重置。四客户端救援场景进一步在扶起后淘汰伤员，确认其跟随队友获得胜利；败方两个客户端不能进入胜方视角，数据库仍保存阵亡成员的共享胜利。
 
 证据：`artifacts/duo-spectator-rules.log`、`artifacts/duo-spectator-solo-regression.log`、`artifacts/duo-spectator-network.log`。这是标准客户端的观战规则；当前网络快照仍同步所有角色，不构成针对修改客户端的敌方状态保密机制。
+
+## 队友状态与地图
+
+战斗 HUD 显示队友姓名、生命/倒地剩余秒数/救援进度/淘汰状态和距离。队友缺失时显示不可用，不保留过期位置。小地图和战术地图仅绘制本队其他成员：绿色存活标记、橙色倒地标记、淘汰叉号；战术地图标注姓名，姓名保持在地图边界内。进入单人、新回合或离开时清除标记。队伍文字带深色描边以适应亮天空。
+
+原生验证：`tests/team_hud.gd`，日志 `artifacts/team-hud.log`。原单人地图回归：`artifacts/team-map-solo-regression.log`。真实四客户端救援场景确认队友倒地提示及本队标记筛选，并继续通过胜负/战绩落库验收：`artifacts/team-hud-network.log`。实际渲染截图为 `artifacts/team-hud.png` 和 `artifacts/team-map.png`。尚未实现队友共享主动标点和语音通信。

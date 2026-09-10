@@ -44,9 +44,12 @@ func run() -> void:
 	var requests := 0
 	var request_due := 0
 	var observed_team_view := false
+	var observed_downed_hud := false
 	while game.phase != "finished":
 		assert(Time.get_ticks_msec() < deadline, "Network rescue scenario timed out")
 		await process_frame
+		if game.local_id == helper_id and "DOWNED" in game.ui.team_label.text:
+			observed_downed_hud = true
 		if game.local_id == patient_id and not patient.alive and game.spectator.active:
 			assert(game.spectator.target_id == helper_id)
 			observed_team_view = true
@@ -71,6 +74,9 @@ func run() -> void:
 	assert(patient.rank == 1 and helper.rank == 1 and helper.kills == 2)
 	await process_frame
 	await process_frame
+	assert(game.ui.team_markers.size() == 1 and game.ui.tactical_map.teammates.size() == 1)
+	var marker: Dictionary = game.ui.team_markers[0]
+	assert(marker.id != game.local_id and game.actors[marker.id].team_id == game.actors[game.local_id].team_id)
 	if game.local_id == patient_id:
 		assert(observed_team_view and game.spectator.target_id == helper_id)
 	if game.actors[game.local_id].team_id == 2:
@@ -80,7 +86,7 @@ func run() -> void:
 		if actor.actor_id > 0 and actor.team_id == 2:
 			assert(not actor.alive and actor.rank == 2)
 	if game.local_id == helper_id:
-		assert(requests == 3)
+		assert(requests == 3 and observed_downed_hud)
 	print("RESCUE_NETWORK_CLIENT_PASS peer=%d knock=replicated progress=replicated interrupts=2 revived=replicated team_results=replicated team_spectator=ok" % game.local_id)
 	await create_timer(1).timeout
 	game.request_quit()

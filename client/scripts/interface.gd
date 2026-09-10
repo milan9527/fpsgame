@@ -49,6 +49,8 @@ var loadout_label: Label
 var armor_bar: ProgressBar
 var radar: Control
 var local_position := Vector3.ZERO
+var team_label: Label
+var team_markers: Array = []
 var local_yaw := 0.0
 var radius := 110.0
 var zone_info: Dictionary = {}
@@ -209,6 +211,9 @@ func _ready() -> void:
 	armor_bar = bar(Vector2(40, 829), Color("7ebce4"))
 	prompt = placed_label(hud, Vector2(480, 735), 18, ACCENT)
 	feed = placed_label(hud, Vector2(40, 118), 16)
+	team_label = placed_label(hud, Vector2(40, 275), 17, Color.WHITE)
+	team_label.add_theme_constant_override("outline_size", 4)
+	team_label.add_theme_color_override("font_outline_color", Color("10202b"))
 	network_label = placed_label(hud, Vector2(1130, 230), 15)
 	network_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	network_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -500,9 +505,43 @@ func draw_hud() -> void:
 	var p := radar_center + Vector2(local_position.x, local_position.z) * 0.72
 	hud.draw_circle(p, 4, ACCENT)
 	hud.draw_line(p, p + Vector2(-sin(local_yaw), -cos(local_yaw)) * 13, ACCENT, 2)
+	for member in team_markers:
+		var at: Vector2 = radar_center + (Vector2(member.position.x, member.position.z) * 0.72).limit_length(80)
+		var color := Color("f6a77a") if member.downed else Color("77c9b0")
+		if member.alive:
+			hud.draw_circle(at, 5, color, false, 2)
+		else:
+			hud.draw_line(at - Vector2(4, 4), at + Vector2(4, 4), color, 2)
+			hud.draw_line(at + Vector2(-4, 4), at + Vector2(4, -4), color, 2)
 	if tactical_map.waypoint is Vector2 and not spectating:
 		var target: Vector2 = radar_center + (tactical_map.waypoint * 0.72).limit_length(80)
 		hud.draw_circle(target, 5, tactical_map.MARKER, false, 2)
+
+func update_team(actors: Dictionary, local_id: int) -> void:
+	team_markers.clear()
+	team_label.text = ""
+	team_label.self_modulate = Color("77c9b0")
+	var local = actors.get(local_id)
+	if local != null and local.team_id > 0:
+		team_label.text = "TEAM %d" % local.team_id
+		for member in actors.values():
+			if member.actor_id == local_id or member.team_id != local.team_id:
+				continue
+			team_markers.append({"id": member.actor_id, "name": member.display_name, "position": member.position, "alive": member.alive, "downed": member.downed})
+			var state := "%d HP" % ceili(member.health)
+			if not member.alive:
+				state = "ELIMINATED"
+			elif member.downed:
+				state = "DOWNED / %.0fs" % member.bleed_left
+				team_label.self_modulate = Color("f6a77a")
+			elif member.revive_target != 0:
+				state = "REVIVING / %.1fs" % member.revive_left
+			team_label.text += "\n%s\n%s  /  %dm" % [member.display_name, state, roundi(local.position.distance_to(member.position))]
+		if team_markers.is_empty():
+			team_label.text += "\nTEAMMATE UNAVAILABLE"
+	team_label.visible = not team_label.text.is_empty()
+	tactical_map.teammates = team_markers.duplicate(true)
+	tactical_map.queue_redraw()
 
 func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: float, events: Array, message: String, circle: Dictionary = {}) -> void:
 	weapon_blocked = actor.weapon_blocked

@@ -416,6 +416,8 @@ func clear_actors() -> void:
 		actor.queue_free()
 	actors.clear()
 	teams.configure(actors, match_mode)
+	if ui != null:
+		ui.update_team(actors, local_id)
 
 func reset_round() -> void:
 	clear_actors()
@@ -1429,6 +1431,7 @@ func _process(dt: float) -> void:
 	for id in actors:
 		actors[id].render_frame(dt, online, id == local_id, Input.is_action_pressed("aim"))
 	spectator.update_view(actors, local_id, phase)
+	ui.update_team(actors, local_id)
 	sound.update_actors(actors, world, get_viewport().get_camera_3d())
 	update_smoke_visuals()
 	world.show_loot(loot)

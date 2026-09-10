@@ -12,6 +12,7 @@ var zone_radius := 110.0
 var zone_info: Dictionary = {}
 var time_left := 300.0
 var waypoint = null
+var teammates: Array = []
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -80,6 +81,19 @@ func _draw() -> void:
 	var forward := Vector2(-sin(operator_yaw), -cos(operator_yaw))
 	var right := Vector2(-forward.y, forward.x)
 	draw_colored_polygon(PackedVector2Array([p + forward * 11, p - forward * 7 + right * 6, p - forward * 7 - right * 6]), white)
+	for member in teammates:
+		var at := world_to_map(Vector2(member.position.x, member.position.z))
+		var color := MARKER if member.downed else Color("77c9b0")
+		if member.alive:
+			draw_circle(at, 7, color, false, 2, true)
+		else:
+			draw_line(at - Vector2(5, 5), at + Vector2(5, 5), color, 2)
+			draw_line(at + Vector2(-5, 5), at + Vector2(5, -5), color, 2)
+		var caption := at + Vector2(12, -10)
+		var width := font.get_string_size(member.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+		caption.x = clampf(caption.x, MAP_RECT.position.x + 4, MAP_RECT.end.x - width - 4)
+		caption.y = clampf(caption.y, MAP_RECT.position.y + 18, MAP_RECT.end.y - 4)
+		draw_string(font, caption, member.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, color)
 	if waypoint is Vector2:
 		var target := world_to_map(waypoint)
 		draw_dashed_line(p, target, MARKER, 1.5, 7)
@@ -88,7 +102,7 @@ func _draw() -> void:
 		draw_line(target - Vector2(0, 11), target + Vector2(0, 11), MARKER, 2)
 	if not zone_info.is_empty():
 		draw_arc(world_to_map(zone_info.next_center), zone_info.next_radius / 240 * 640, 0, TAU, 128, Color.WHITE, 2, true)
-	var lines := ["NORTH  /  -Z", "", "%s / ESC     CLOSE MAP" % Bindings.key_label("map"), "LEFT CLICK  SET WAYPOINT", "RIGHT CLICK CLEAR WAYPOINT", "", "BLUE RING   CURRENT ZONE", "WHITE RING  NEXT ZONE", "STAGE %d / %s %ds" % [zone_info.get("stage", 1), "SHRINK" if zone_info.get("moving", false) else "HOLD", ceili(zone_info.get("remaining", 0))], "PALE BLOCKS BUILDINGS", "GRAY STRIPS ROADS", "GRID CELL   40 m", "", "ZONE RADIUS  %d m" % zone_radius, "ROUND TIME   %02d:%02d" % [int(time_left) / 60, int(time_left) % 60], "", "WORLD CONTINUES WHILE OPEN"]
+	var lines := ["NORTH  /  -Z", "", "%s / ESC     CLOSE MAP" % Bindings.key_label("map"), "LEFT CLICK  SET WAYPOINT", "RIGHT CLICK CLEAR WAYPOINT", "", "BLUE RING   CURRENT ZONE", "WHITE RING  NEXT ZONE", "STAGE %d / %s %ds" % [zone_info.get("stage", 1), "SHRINK" if zone_info.get("moving", false) else "HOLD", ceili(zone_info.get("remaining", 0))], "PALE BLOCKS BUILDINGS", "GRAY STRIPS ROADS", "GRID CELL   40 m", "GREEN TEAM / AMBER DOWNED" if not teammates.is_empty() else "", "ZONE RADIUS  %d m" % zone_radius, "ROUND TIME   %02d:%02d" % [int(time_left) / 60, int(time_left) % 60], "", "WORLD CONTINUES WHILE OPEN"]
 	if waypoint is Vector2:
 		lines.append("WAYPOINT     %d m" % roundi(operator_position.distance_to(waypoint)))
 	for index in range(lines.size()):

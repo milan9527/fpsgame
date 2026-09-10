@@ -4,6 +4,8 @@
 
 ## 已实际实现
 
+- 主动取消治疗：再次按治疗键或使用背包按钮取消，保留未消耗的医疗包；可靠的独立取消意图防止迟到消息误开第二次治疗。机器人避险使用同一规则。详见 [医疗包](HEALING.md)。
+
 - 机器人近距离破片手雷避险：识别暴露风险、查询导航逃生路线、暂停烟雾驻留并跑离爆心，保留正常物理和伤害规则。详见 [机器人手雷避险](BOT_HAZARDS.md)。
 
 - 机器人烟雾自救与投掷冷却：实际寻找/拾取烟雾，在缺少实体掩体时投掷、等待烟雾遮挡再治疗，进圈优先；使用正常库存与权威物理。详见 [机器人投掷物](BOT_UTILITIES.md)。
@@ -292,3 +294,9 @@
 新增近距离破片手雷识别、实体爆炸遮挡检查、导航逃生点及路径筛选、已知危险短程跟踪和缓存路线重算。有效逃生路线覆盖交火移动与烟雾驻留，停火并请求疾跑；爆炸消失或被实体完全遮挡后恢复普通战术。治疗减速、碰撞和伤害仍然有效；算法有候选/路径预算和圈界限制，不保证所有复杂场景都能避开爆炸。
 
 规则测试与打包后的新增/移动危险重算测试通过：机器人实际跑离两枚手雷，爆炸后生命保持 100。专服与真实客户端的逃生位置、投掷物、生命同步通过；烟雾自救回归和完整对局落库通过。证据：`artifacts/bot-hazards-rules.log`、`artifacts/packed-bot-hazards-final.log`、`artifacts/bot-hazards-network.log`、`artifacts/packed-bot-utilities.log`、`artifacts/bot-hazards-full-round.log`。详见 `docs/BOT_HAZARDS.md`。
+
+### 主动取消治疗（0.34 / 协议 15）
+
+治疗键与背包支持主动取消，HUD 显示绑定按键。取消不回血、不消耗医疗包，恢复正常移动能力。独立 `cancel_heal` 可靠意图与严格输入结构、回合隔离、操作序号及限流结合：迟到取消不会开启第二次治疗，旧取消不能打断新治疗；开始与取消同时为真的指令被拒绝。机器人在手雷逃生时使用相同取消方法，并避免立即重新治疗。
+
+规则、打包规则、真实专服的取消/完成/迟到/重放场景、机器人避险回归、完整对局落库及旧协议拦截通过；Linux 发行包玩法门禁通过。证据：`artifacts/heal-cancel-rules.log`、`artifacts/packed-heal-cancel.log`、`artifacts/heal-cancel-network.log`、`artifacts/packed-bot-hazards.log`、`artifacts/heal-cancel-full-round.log`、`artifacts/heal-cancel-protocol.log`、`artifacts/heal-cancel-package.log`。数据库和存档结构不变，旧网络协议客户端需要更新。

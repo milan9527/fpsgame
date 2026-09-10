@@ -170,3 +170,7 @@ timeout 30s ./tools/godot --headless --path client --script ../tests/bot_hazards
 rg -q BOT_HAZARDS_RULES_PASS artifacts/bot-hazards-rules.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/bot-hazards-rules.log; then cat artifacts/bot-hazards-rules.log; exit 1; fi
 .venv/bin/python tools/test_bot_hazards_network.py
+timeout 25s ./tools/godot --headless --path client --script ../tests/heal_cancel_rules.gd > artifacts/heal-cancel-rules.log 2>&1
+rg -q HEAL_CANCEL_RULES_PASS artifacts/heal-cancel-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/heal-cancel-rules.log; then cat artifacts/heal-cancel-rules.log; exit 1; fi
+.venv/bin/python tools/test_heal_cancel_network.py

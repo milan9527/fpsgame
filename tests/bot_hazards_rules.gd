@@ -64,8 +64,12 @@ func run() -> void:
 	actor.navigator.repath_left = 10
 	actor.crouch = true
 	actor.aiming = true
+	actor.health = 30
+	actor.heal()
 	game.bot_input(actor, 1.0 / 60)
 	assert(actor.sprint and not actor.shooting and not actor.aiming and not actor.crouch)
+	assert(actor.heal_left == 0 and actor.medkits == 2, "Bots cancel treatment with the same no-consumption rule as players")
+	actor.health = 100
 	assert(actor.navigator.utilities.smoke_hold == 0 and actor.navigator.goal == escape)
 	var start: Vector3 = actor.position
 	for tick in range(180):

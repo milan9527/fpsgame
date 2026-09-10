@@ -547,7 +547,7 @@ func inventory_action(action: String, index := -1, supply_id := -1) -> void:
 	if action == "weapon" and index >= 0 and index < 3:
 		cmd.weapon = index
 	elif action in ["reload", "heal", "loot"]:
-		cmd[action] = true
+		cmd["cancel_heal" if action == "heal" and actor.heal_left > 0 else action] = true
 	else:
 		return
 	if online:
@@ -789,7 +789,7 @@ func _physics_process(dt: float) -> void:
 
 func local_command(actor) -> Dictionary:
 	sequence += 1
-	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "loot": false, "throw": false, "smoke_throw": false, "weapon": -1, "lean": 0.0}
+	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "cancel_heal": false, "loot": false, "throw": false, "smoke_throw": false, "weapon": -1, "lean": 0.0}
 	if ui.controls.visible or ui.pause_panel.visible or ui.inventory.visible or ui.tactical_map.visible or not actor.alive:
 		action_latch.clear()
 		return cmd
@@ -806,11 +806,14 @@ func local_command(actor) -> Dictionary:
 		cmd.ads = false
 	for action in ["jump", "reload", "heal", "loot", "throw", "smoke_throw"]:
 		cmd[action] = Input.is_action_just_pressed(action)
+	if cmd.heal and actor.heal_left > 0:
+		cmd.heal = false
+		cmd.cancel_heal = true
 	for i in range(3):
 		if Input.is_action_just_pressed("weapon" + str(i + 1)):
 			cmd.weapon = i
 	if online:
-		for action in ["jump", "reload", "heal", "loot", "throw", "smoke_throw"]:
+		for action in ["jump", "reload", "heal", "cancel_heal", "loot", "throw", "smoke_throw"]:
 			if cmd[action]:
 				action_latch[action] = true
 			cmd[action] = action_latch.get(action, false)
@@ -851,11 +854,11 @@ func input_command(cmd: Dictionary) -> void:
 	apply_command(actor, without_actions(cmd))
 
 func has_actions(cmd: Dictionary) -> bool:
-	return cmd.jump or cmd.reload or cmd.heal or cmd.loot or cmd.throw or cmd.smoke_throw or cmd.weapon >= 0
+	return cmd.jump or cmd.reload or cmd.heal or cmd.cancel_heal or cmd.loot or cmd.throw or cmd.smoke_throw or cmd.weapon >= 0
 
 func without_actions(cmd: Dictionary) -> Dictionary:
 	var movement := cmd.duplicate()
-	for action in ["jump", "reload", "heal", "loot", "throw", "smoke_throw"]:
+	for action in ["jump", "reload", "heal", "cancel_heal", "loot", "throw", "smoke_throw"]:
 		movement[action] = false
 	movement.weapon = -1
 	return movement
@@ -903,7 +906,7 @@ func expire_held_input(actor, now: int) -> void:
 	actor.crouch = false
 
 func valid_command(cmd: Dictionary) -> bool:
-	if cmd.size() != 17:
+	if cmd.size() != 18:
 		return false
 	for key in ["seq", "x", "z", "yaw", "pitch", "weapon", "lean"]:
 		if not cmd.has(key) or not (cmd[key] is float or cmd[key] is int):
@@ -912,10 +915,10 @@ func valid_command(cmd: Dictionary) -> bool:
 			return false
 	if cmd.seq != floorf(cmd.seq) or cmd.seq < 0 or cmd.seq > 2147483647 or cmd.weapon != floorf(cmd.weapon):
 		return false
-	for key in ["fire", "sprint", "crouch", "ads", "jump", "reload", "heal", "loot", "throw", "smoke_throw"]:
+	for key in ["fire", "sprint", "crouch", "ads", "jump", "reload", "heal", "cancel_heal", "loot", "throw", "smoke_throw"]:
 		if not cmd.has(key) or not cmd[key] is bool:
 			return false
-	return absf(cmd.lean) <= 1 and absf(cmd.x) <= 1 and absf(cmd.z) <= 1 and absf(cmd.yaw) <= PI + 0.01 and absf(cmd.pitch) <= 1.46 and cmd.weapon >= -1 and cmd.weapon <= 2
+	return not (cmd.heal and cmd.cancel_heal) and absf(cmd.lean) <= 1 and absf(cmd.x) <= 1 and absf(cmd.z) <= 1 and absf(cmd.yaw) <= PI + 0.01 and absf(cmd.pitch) <= 1.46 and cmd.weapon >= -1 and cmd.weapon <= 2
 
 func apply_command(actor, cmd: Dictionary) -> void:
 	actor.move_input = Vector2(cmd.x, cmd.z).limit_length()
@@ -932,6 +935,8 @@ func apply_actions(actor, cmd: Dictionary, loot_target := -1, explicit_pickup :=
 	if phase != "live" or not actor.alive:
 		return
 	actor.jump_requested = actor.jump_requested or cmd.jump
+	if cmd.cancel_heal:
+		actor.cancel_heal()
 	if cmd.reload:
 		actor.reload_weapon()
 	if cmd.heal:
@@ -1034,6 +1039,7 @@ func bot_input(actor, dt: float) -> void:
 		actor.sprint = true
 		actor.shooting = false
 		actor.aiming = false
+		actor.cancel_heal()
 		if actor.navigator.goal.distance_to(escape) > 0.5:
 			actor.navigator.repath_left = 0
 	if actor.sprint:
@@ -1061,7 +1067,7 @@ func bot_input(actor, dt: float) -> void:
 	actor.navigator.utilities.update(self, actor, dt, cover_point.is_finite(), actor.sprint)
 	if actor.ammo == 0:
 		actor.reload_weapon()
-	if actor.health < 40 and actor.target_id == 0 and actor.navigator.utilities.smoke_hold <= 0:
+	if actor.health < 40 and actor.target_id == 0 and actor.navigator.utilities.smoke_hold <= 0 and not escape.is_finite():
 		actor.heal()
 	pickup(actor)
 	if actor.grips > 0 and actor.grip_slots[actor.weapon] == 0:

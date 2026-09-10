@@ -358,6 +358,10 @@ func heal() -> void:
 	if alive and throw_left <= 0 and medkits > 0 and health < 100 and heal_left <= 0 and reload_left <= 0:
 		heal_left = 3.5
 
+func cancel_heal() -> void:
+	# Kits and health change only on completion, so cancellation needs no refund.
+	heal_left = 0
+
 func switch_weapon(index: int) -> void:
 	if not alive or throw_left > 0 or index < 0 or index > 2 or index == weapon or reload_left > 0:
 		return

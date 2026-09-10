@@ -112,7 +112,8 @@ func refresh(actor, supplies: Array) -> void:
 			weapons[index].text += "  + GRIP"
 		weapons[index].disabled = index == actor.weapon or actor.reload_left > 0 or actor.throw_left > 0
 	reload_button.disabled = actor.reserve <= 0 or actor.ammo >= actor.CAPACITY[actor.weapon] or actor.heal_left > 0 or actor.reload_left > 0 or actor.throw_left > 0
-	heal_button.disabled = actor.medkits <= 0 or actor.health >= 100 or actor.reload_left > 0 or actor.heal_left > 0 or actor.throw_left > 0
+	heal_button.text = "CANCEL MEDKIT" if actor.heal_left > 0 else "USE MEDKIT"
+	heal_button.disabled = not actor.alive or (actor.heal_left <= 0 and (actor.medkits <= 0 or actor.health >= 100 or actor.reload_left > 0 or actor.throw_left > 0))
 	grip_button.text = ("REMOVE FOREGRIP" if actor.grip_slots[actor.weapon] == 1 else "INSTALL FOREGRIP / 20% LESS KICK") + "  /  %d SPARE" % actor.grips
 	grip_button.disabled = actor.reload_left > 0 or actor.heal_left > 0 or actor.throw_left > 0 or (actor.grips >= 3 if actor.grip_slots[actor.weapon] == 1 else actor.grips <= 0)
 	var kind := drop_kind.get_selected_id()

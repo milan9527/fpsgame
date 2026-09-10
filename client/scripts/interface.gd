@@ -524,7 +524,7 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 	elif actor.reload_left > 0:
 		prompt.text = "RELOADING   %.1fs" % actor.reload_left
 	elif actor.heal_left > 0:
-		prompt.text = "APPLYING MEDKIT   %.1fs" % actor.heal_left
+		prompt.text = "APPLYING MEDKIT   %.1fs   /   %s CANCEL" % [actor.heal_left, Bindings.key_label("heal")]
 	elif Vector2(actor.position.x, actor.position.z).distance_to(circle.get("center", Vector2.ZERO)) > zone:
 		prompt.text = "WARNING  /  RETURN TO THE SAFE ZONE"
 	elif actor.weapon_blocked and not spectating:

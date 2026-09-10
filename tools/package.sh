@@ -45,6 +45,11 @@ if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/pac
 cp docs/BOT_COVER.md artifacts/IronMeridian-Linux/docs/BOT_COVER.md
 cp docs/BOT_UTILITIES.md artifacts/IronMeridian-Linux/docs/BOT_UTILITIES.md
 cp docs/BOT_HAZARDS.md artifacts/IronMeridian-Linux/docs/BOT_HAZARDS.md
+cp docs/HEALING.md artifacts/IronMeridian-Linux/docs/HEALING.md
+cp docs/HEALING.md artifacts/IronMeridian-Linux/HEALING.md
+timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/heal_cancel_rules.gd" > artifacts/packed-heal-cancel.log 2>&1
+rg -q HEAL_CANCEL_RULES_PASS artifacts/packed-heal-cancel.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-heal-cancel.log; then cat artifacts/packed-heal-cancel.log; exit 1; fi
 timeout 30s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/bot_hazards_rules.gd" > artifacts/packed-bot-hazards.log 2>&1
 rg -q BOT_HAZARDS_RULES_PASS artifacts/packed-bot-hazards.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-bot-hazards.log; then cat artifacts/packed-bot-hazards.log; exit 1; fi

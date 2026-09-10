@@ -47,6 +47,7 @@ var net_tick := 0.0
 var local_id := 1
 var sequence := 0
 var action_latch: Dictionary = {}
+var inventory_pointer_guard := false
 var token := ""
 var token_origin := ""
 var ticket := ""
@@ -139,6 +140,9 @@ func _ready() -> void:
 			sound.volume = 0.65
 		ui.volume_changed.connect(func(v): sound.volume = v)
 		ui.pause_changed.connect(change_pause)
+		ui.inventory_changed.connect(func(_enabled): action_latch.clear(); inventory_pointer_guard = true)
+		ui.inventory.pickup_requested.connect(inventory_pickup)
+		ui.inventory.equipment_requested.connect(inventory_equipment)
 		ui.solo_requested.connect(start_solo)
 		ui.leaderboard_requested.connect(show_leaderboard)
 		ui.online_requested.connect(sign_in)
@@ -187,7 +191,7 @@ func request_quit(code := 0, discard_local := false) -> void:
 	get_tree().quit(code)
 
 func setup_input() -> void:
-	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "scoreboard": KEY_TAB, "spectate_previous": KEY_Q, "spectate_next": KEY_E}
+	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "inventory": KEY_B, "scoreboard": KEY_TAB, "spectate_previous": KEY_Q, "spectate_next": KEY_E}
 	for action in keys:
 		InputMap.add_action(action)
 		var e := InputEventKey.new()
@@ -327,10 +331,21 @@ func _unhandled_input(event: InputEvent) -> void:
 	if dedicated or not running:
 		return
 	if event.is_action_pressed("pause"):
+		if ui.inventory.visible:
+			ui.set_inventory(false)
+			get_viewport().set_input_as_handled()
+			return
 		ui.set_pause(not ui.pause_panel.visible)
+		return
 	if not actors.has(local_id):
 		return
 	var actor = actors[local_id]
+	if event.is_action_pressed("inventory") and not event.is_echo() and actor.alive and phase == "live" and not ui.pause_panel.visible:
+		ui.set_inventory(not ui.inventory.visible)
+		get_viewport().set_input_as_handled()
+		return
+	if ui.inventory.visible:
+		return
 	if not actor.alive:
 		if not ui.pause_panel.visible:
 			if event.is_action_pressed("spectate_next"):
@@ -355,6 +370,31 @@ func change_pause(enabled: bool) -> void:
 	ui.pause_feedback(get_tree().paused)
 	ui.pause_description.text = "Operation paused. Resume when ready." if not online else "Online operation continues. You remain vulnerable."
 	action_latch.clear()
+
+func inventory_action(action: String, index := -1, supply_id := -1) -> void:
+	if dedicated or not running or phase != "live" or not ui.inventory.visible or ui.pause_panel.visible or not actors.has(local_id):
+		return
+	var actor = actors[local_id]
+	if not actor.alive:
+		return
+	var cmd := local_command(actor)
+	if action == "weapon" and index >= 0 and index < 3:
+		cmd.weapon = index
+	elif action in ["reload", "heal", "loot"]:
+		cmd[action] = true
+	else:
+		return
+	if online:
+		if multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+			action_command.rpc_id(1, network_round_id, cmd, supply_id)
+	else:
+		receive_actions(actor, match_id, cmd, supply_id)
+
+func inventory_pickup(id: int) -> void:
+	inventory_action("loot", -1, id)
+
+func inventory_equipment(action: String, index: int) -> void:
+	inventory_action(action, index)
 
 func _physics_process(dt: float) -> void:
 	if not running or get_tree().paused:
@@ -482,7 +522,7 @@ func _physics_process(dt: float) -> void:
 func local_command(actor) -> Dictionary:
 	sequence += 1
 	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "loot": false, "throw": false, "weapon": -1}
-	if ui.pause_panel.visible or not actor.alive:
+	if ui.pause_panel.visible or ui.inventory.visible or not actor.alive:
 		action_latch.clear()
 		return cmd
 	var movement := Input.get_vector("left", "right", "forward", "back")
@@ -491,6 +531,10 @@ func local_command(actor) -> Dictionary:
 	cmd.ads = Input.is_action_pressed("aim")
 	for action in ["fire", "sprint", "crouch"]:
 		cmd[action] = Input.is_action_pressed(action)
+	if inventory_pointer_guard:
+		inventory_pointer_guard = Input.is_action_pressed("fire") or Input.is_action_pressed("aim")
+		cmd.fire = false
+		cmd.ads = false
 	for action in ["jump", "reload", "heal", "loot", "throw"]:
 		cmd[action] = Input.is_action_just_pressed(action)
 	for i in range(3):
@@ -961,9 +1005,18 @@ func _process(dt: float) -> void:
 	sound.update_actors(actors, world, get_viewport().get_camera_3d())
 	world.show_loot(loot)
 	world.set_zone(zone)
-	ui.update_scoreboard(actors.values(), Input.is_action_pressed("scoreboard") and not ui.pause_panel.visible)
+	ui.update_scoreboard(actors.values(), Input.is_action_pressed("scoreboard") and not ui.pause_panel.visible and not ui.inventory.visible)
 	if actors.has(local_id):
 		var actor = actors[local_id]
+		if ui.inventory.visible:
+			if not actor.alive or phase != "live":
+				ui.set_inventory(false)
+			else:
+				var supplies: Array = []
+				for id in loot:
+					if supply_accessible(actor, loot[id]):
+						supplies.append({"id": id, "kind": loot[id].kind, "amount": SupplyRules.amount(loot[id]), "distance": actor.position.distance_to(loot[id].p), "usable": SupplyRules.capacity(actor, loot[id].kind) > 0})
+				ui.inventory.refresh(actor, supplies)
 		var supply := supply_target(actor) if not spectator.active else {}
 		world.highlight_supply(int(supply.get("id", -1)))
 		ui.supply_prompt = ""

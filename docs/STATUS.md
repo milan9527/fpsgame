@@ -1,8 +1,10 @@
-# 开发状态 — 2026-09-09
+# 开发状态 — 2026-09-10
 
 **Goal 保持 active；用户要求的完整商业级游戏尚未完成。当前交付是已运行、已联调、有完整单局循环的开发版本，不应称为《和平精英》级成品。**
 
 ## 已实际实现
+
+- B 键战场背包：库存与三枪弹匣、明确选择附近物资、切枪/换弹/治疗、单机/在线权威操作、输入隔离及关闭生命周期。详见 [背包](INVENTORY.md)，尚无完整物品与配件系统。
 
 - 淘汰库存转移、弹匣弹药回收、按类别堆放与部分拾取；清空尸体库存防重复生成，详见 [淘汰物资](DEATH_LOOT.md)。
 
@@ -125,6 +127,9 @@
 | 淘汰实际库存转移、弹匣回收、重复/空库存/编号/部分取用/回合清理 | 通过（源码、实际 OpenGL 与打包版） | `artifacts/death-loot-render.log`、`artifacts/packed-death-loot.log` |
 | 真实鉴权客户端淘汰物资余量同步、拾取去重与实体移除 | 通过 | `artifacts/death-loot-network.log` |
 | 淘汰物资版本整局落库与兼容检查 | 通过 | `artifacts/death-loot-full-round.log`、`artifacts/death-loot-protocol.log` |
+| 背包按钮、指定拾取、余量、切枪/换弹/治疗、输入隔离及关闭生命周期 | 通过（实际 OpenGL 及打包版） | `artifacts/inventory-rules.log`、`artifacts/packed-inventory.log` |
+| 图形窗口真实鉴权客户端背包选择/切枪/余量同步及鼠标捕获 | 通过 | `artifacts/inventory-network.log` |
+| 背包版本双客户端、整局落库与兼容检查 | 通过 | `artifacts/inventory-online.log`、`artifacts/inventory-full-round.log`、`artifacts/inventory-protocol.log` |
 | 补给目标提示与高亮画面 | 已检查 | `artifacts/supply-prompt.png` |
 
 20 倍速测试用于验证完整流程，不代表实时性能、弱网适应性或长期稳定性。双客户端验证不等于 16 真人并发验证。

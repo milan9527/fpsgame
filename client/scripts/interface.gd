@@ -10,6 +10,8 @@ signal local_history_requested
 signal volume_changed(value: float)
 signal sensitivity_changed(value: float)
 signal pause_changed(enabled: bool)
+signal inventory_changed(enabled: bool)
+var inventory
 var pause_description: Label
 var feedback_pause_time := -1
 var menu: Control
@@ -162,6 +164,10 @@ func _ready() -> void:
 	result_label = placed_label(hud, Vector2(430, 290), 38, ACCENT)
 	spectator_label = placed_label(hud, Vector2(430, 140), 22, ACCENT)
 	hud.visible = false
+	inventory = preload("res://scripts/inventory_panel.gd").new()
+	inventory.theme = theme
+	add_child(inventory)
+	inventory.close_requested.connect(func(): set_inventory(false))
 	pause_panel = PanelContainer.new()
 	pause_panel.position = Vector2(480, 290)
 	pause_panel.size = Vector2(460, 250)
@@ -291,6 +297,7 @@ func save_settings() -> void:
 	settings.save("user://settings.cfg")
 
 func show_menu(message := "") -> void:
+	set_inventory(false)
 	menu.visible = true
 	leaderboard_panel.visible = false
 	hide_local_history()
@@ -304,6 +311,7 @@ func show_menu(message := "") -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func show_game() -> void:
+	set_inventory(false)
 	feedback_pause_time = -1
 	pause_panel.visible = false
 	hit_until = 0
@@ -317,9 +325,16 @@ func show_game() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func set_pause(enabled: bool) -> void:
+	if enabled:
+		set_inventory(false)
 	pause_panel.visible = enabled
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if enabled else Input.MOUSE_MODE_CAPTURED
 	pause_changed.emit(enabled)
+
+func set_inventory(enabled: bool) -> void:
+	inventory.visible = enabled
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if enabled else Input.MOUSE_MODE_CAPTURED
+	inventory_changed.emit(enabled)
 
 func pause_feedback(enabled: bool) -> void:
 	var now := Time.get_ticks_msec()

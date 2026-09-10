@@ -73,3 +73,11 @@ Linux 客户端以 OpenGL Compatibility 渲染。开发主机通过软件 OpenGL
 API 的请求模型校验失败返回 HTTP 422，`detail` 是可直接展示的简短提示，`errors` 为最多 20 个去重的 `{field, message}` 项。用户名与密码提示使用固定规则文本；错误响应不包含提交值、请求体、Pydantic 的 `input`/`ctx` 或解析异常上下文，并设置 `Cache-Control: no-store`。非法 JSON 也使用固定提示。字段名采用服务端白名单，不回显任意请求键。
 
 该格式替代 FastAPI 默认的校验错误数组，现有客户端直接显示 `detail` 字符串。内部工具如依赖默认数组格式，需要改用 `errors`。业务错误的 HTTP 状态和内容保持原样。`backend/tests/test_validation_privacy.py` 使用实际 HTTP 服务验证，需运行环境提供 `SERVER_SECRET` 以覆盖专服模型级校验；不要将该值写入命令日志。
+
+## 依赖暂时不可用
+
+Redis 连接失败/读取超时、PostgreSQL 操作连接错误和 SQLAlchemy 连接池等待超时返回 HTTP 503，响应为固定的在线服务暂不可用提示，并包含 `Retry-After: 3`、`Cache-Control: no-store`。日志仅记录异常类别，不输出异常字符串中的连接信息或 SQL 参数。其他编程错误没有被统一掩盖成 503。
+
+Redis 连接和读取超时均为 2 秒，不自动重试读取超时；数据库连接建立和连接池等待上限各为 3 秒。这些是各阶段超时，不是完整请求的延迟承诺，也没有给全部 SQL 查询设置执行时限。玩家可稍后重试；专服继续使用现有心跳与结算重试机制。
+
+`backend/tests/test_availability.py` 在单独 API 测试进程中使用真实拒绝连接的 TCP 端口、不回应的 TCP 服务以及只有一个连接的临时连接池验证 503；释放池连接后再次访问健康接口必须恢复成功。测试不停止正式数据库/缓存，不改变正式实例的故障状态。这些检查不等同于跨主机网络分区或整个部署的灾难恢复验证。

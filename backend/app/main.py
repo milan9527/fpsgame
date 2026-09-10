@@ -12,10 +12,11 @@ from argon2.exceptions import VerificationError, InvalidHashError
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from .validation import validation_error
+from .availability import dependency_unavailable
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, TimeoutError as DatabaseTimeout
 from sqlalchemy.orm import Session
 from .models import User, Match, Result
 from .database import engine
@@ -24,7 +25,7 @@ from .rooms import CancelRoomTicket, RoomDirectory, RoomHeartbeat, RoomJoin, Roo
 
 JWT_SECRET = os.environ['JWT_SECRET']
 SERVER_SECRET = os.environ['SERVER_SECRET']
-cache = redis.Redis.from_url(os.environ['REDIS_URL'], decode_responses=True)
+cache = redis.Redis.from_url(os.environ['REDIS_URL'], decode_responses=True, socket_connect_timeout=2, socket_timeout=2, retry_on_timeout=False)
 rooms = RoomDirectory(cache)
 passwords = PasswordHasher(time_cost=2, memory_cost=19456, parallelism=1)
 # One real verification for unknown accounts keeps timing comparable.
@@ -33,6 +34,8 @@ DUMMY_HASH = passwords.hash(secrets.token_urlsafe(32))
 
 app = FastAPI(title='Iron Meridian Services', version='0.1.0')
 app.add_exception_handler(RequestValidationError, validation_error)
+for dependency_error in (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError, OperationalError, DatabaseTimeout):
+    app.add_exception_handler(dependency_error, dependency_unavailable)
 auth = HTTPBearer()
 
 

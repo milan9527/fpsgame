@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from .models import User, Match, Result
 from .database import engine
 from .protocol import BUILD, BuildInfo, require_compatible
-from .rooms import RoomDirectory, RoomHeartbeat, RoomJoin, RoomTicket
+from .rooms import CancelRoomTicket, RoomDirectory, RoomHeartbeat, RoomJoin, RoomTicket
 
 JWT_SECRET = os.environ['JWT_SECRET']
 SERVER_SECRET = os.environ['SERVER_SECRET']
@@ -164,6 +164,12 @@ def room_join(body: RoomJoin, uid: str = Depends(user_token), session: Session =
 def room_consume(body: RoomTicket):
     require_compatible(body)
     return rooms.consume(body)
+
+
+@app.post('/matchmaking/rooms/cancel')
+def room_cancel(body: CancelRoomTicket, uid: str = Depends(user_token)):
+    limit('room-cancel:' + uid, 30, 60)
+    return rooms.cancel(uid, body.ticket)
 
 
 @app.post('/internal/tickets/consume', dependencies=[Depends(server_auth)])

@@ -155,3 +155,54 @@ def test_http_auth_schema_and_compatibility(directory, monkeypatch):
     uid = uuid.uuid4()
     with pytest.raises(ValidationError):
         heartbeat(capacity=1, players=[uid, uid])
+
+
+def test_cancel_releases_only_owned_unused_reservation(directory):
+    directory.heartbeat(heartbeat(capacity=1))
+    uid = str(uuid.uuid4())
+    result = directory.allocate(uid, 'operator')
+    rejected(403, lambda: directory.cancel(str(uuid.uuid4()), result['ticket']))
+    assert directory.cancel(uid, result['ticket'])['status'] == 'cancelled'
+    assert directory.cancel(uid, result['ticket'])['status'] == 'inactive'
+    rejected(401, lambda: directory.consume(consume_body(result)))
+    second = directory.allocate(uid, 'operator')
+    directory.consume(consume_body(second))
+    assert directory.cancel(uid, second['ticket'])['status'] == 'inactive'
+    rejected(409, lambda: directory.allocate(uid, 'operator'))
+    rejected(503, lambda: directory.allocate(str(uuid.uuid4()), 'other'))
+
+
+def test_cancel_old_generation_cannot_remove_new_lease(directory):
+    room = heartbeat(capacity=1)
+    directory.heartbeat(room)
+    uid = str(uuid.uuid4())
+    old = directory.allocate(uid, 'operator')
+    directory.heartbeat(room.model_copy(update={'revision': 2, 'generation': uuid.uuid4()}))
+    new = directory.allocate(uid, 'operator')
+    assert directory.cancel(uid, old['ticket'])['status'] == 'cancelled'
+    rejected(503, lambda: directory.allocate(str(uuid.uuid4()), 'other'))
+    assert directory.consume(consume_body(new))['uid'] == uid
+
+
+def test_cancel_consume_race_preserves_admission_invariant(directory):
+    directory.heartbeat(heartbeat(capacity=1))
+    uid = str(uuid.uuid4())
+    for _ in range(12):
+        result = directory.allocate(uid, 'operator')
+        def consume():
+            try:
+                return directory.consume(consume_body(result))
+            except HTTPException as error:
+                return error.status_code
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            consumed = executor.submit(consume)
+            cancelled = executor.submit(directory.cancel, uid, result['ticket'])
+            admission, cancellation = consumed.result(), cancelled.result()
+        if isinstance(admission, dict):
+            assert cancellation['status'] == 'inactive'
+            rejected(409, lambda: directory.allocate(uid, 'operator'))
+        else:
+            assert admission == 401 and cancellation['status'] == 'cancelled'
+            assert not cache.exists(directory.prefix + 'user:' + uid)
+        # Reset only this test's lease before the next independent race.
+        cache.delete(directory.prefix + 'user:' + uid, directory.prefix + 'held:a')

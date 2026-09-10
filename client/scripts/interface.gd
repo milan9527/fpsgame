@@ -10,6 +10,8 @@ signal local_history_requested
 signal volume_changed(value: float)
 signal sensitivity_changed(value: float)
 signal pause_changed(enabled: bool)
+signal connection_cancel_requested
+var connection_cancel: Button
 signal inventory_changed(enabled: bool)
 var inventory
 var pause_description: Label
@@ -123,7 +125,14 @@ func _ready() -> void:
 	password = field(right, "Password (at least 10 characters)", "")
 	password.secret = true
 	endpoint = field(right, "API URL", settings.get_value("network", "endpoint", "http://127.0.0.1:8000"))
-	button(right, "SIGN IN & DEPLOY", func(): online(false))
+	var connection_row := HBoxContainer.new()
+	right.add_child(connection_row)
+	button(connection_row, "SIGN IN & DEPLOY", func(): online(false))
+	connection_cancel = Button.new()
+	connection_cancel.text = "CANCEL"
+	connection_cancel.disabled = true
+	connection_cancel.pressed.connect(func(): connection_cancel_requested.emit())
+	connection_row.add_child(connection_cancel)
 	button(right, "CREATE ACCOUNT & DEPLOY", func(): online(true))
 	status = label(right, "Offline operations need no account or connection.", 15, Color("9aafb4"))
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -285,6 +294,7 @@ func online(register: bool) -> void:
 	if busy:
 		return
 	busy = true
+	connection_cancel.disabled = false
 	status.text = "Connecting to operations service…"
 	save_settings()
 	online_requested.emit(username.text, password.text, register, endpoint.text.trim_suffix("/"))
@@ -305,6 +315,7 @@ func show_menu(message := "") -> void:
 	hud.visible = false
 	pause_panel.visible = false
 	busy = false
+	connection_cancel.disabled = true
 	password.text = ""
 	if not message.is_empty():
 		status.text = message
@@ -321,6 +332,7 @@ func show_game() -> void:
 	hide_local_history()
 	hud.visible = true
 	busy = false
+	connection_cancel.disabled = true
 	password.text = ""
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 

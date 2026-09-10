@@ -16,6 +16,7 @@ cp docs/DEATH_LOOT.md artifacts/IronMeridian-Linux/docs/DEATH_LOOT.md
 cp docs/INVENTORY.md artifacts/IronMeridian-Linux/docs/INVENTORY.md
 cp docs/DROPPING.md artifacts/IronMeridian-Linux/docs/DROPPING.md
 cp docs/ROOM_DIRECTORY.md artifacts/IronMeridian-Linux/docs/ROOM_DIRECTORY.md
+cp docs/CONNECTION_LIFECYCLE.md artifacts/IronMeridian-Linux/docs/CONNECTION_LIFECYCLE.md
 cp LICENSE artifacts/IronMeridian-Linux/LICENSE
 cat > artifacts/IronMeridian-Linux/play.sh <<'SH'
 #!/usr/bin/env bash
@@ -35,6 +36,9 @@ timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests
 rg -q INVENTORY_RULES_PASS artifacts/packed-inventory.log
 timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/drop_rules.gd" > artifacts/packed-drop.log 2>&1
 rg -q DROP_RULES_PASS artifacts/packed-drop.log
+timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/cancel_connection_rules.gd" > artifacts/packed-cancel-connection.log 2>&1
+rg -q CANCEL_CONNECTION_RULES_PASS artifacts/packed-cancel-connection.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-cancel-connection.log; then cat artifacts/packed-cancel-connection.log; exit 1; fi
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-drop.log; then cat artifacts/packed-drop.log; exit 1; fi
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-inventory.log; then cat artifacts/packed-inventory.log; exit 1; fi
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-death-loot.log; then cat artifacts/packed-death-loot.log; exit 1; fi

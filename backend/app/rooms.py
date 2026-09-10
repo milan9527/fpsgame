@@ -6,7 +6,7 @@ import uuid
 from typing import Literal
 
 from fastapi import HTTPException
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 from .protocol import BuildInfo, BUILD
 
 
@@ -36,6 +36,10 @@ class RoomTicket(BuildInfo):
     room_id: str = Field(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
     instance_id: uuid.UUID
     generation: uuid.UUID
+    ticket: str = Field(min_length=20, max_length=128)
+
+
+class CancelRoomTicket(BaseModel):
     ticket: str = Field(min_length=20, max_length=128)
 
 
@@ -141,6 +145,22 @@ redis.call('DEL',key)
 return {'ok',raw}
 """
 
+CANCEL = """
+local p=ARGV[1]; local key=p..'ticket:'..ARGV[2]
+local raw=redis.call('GET',key)
+if not raw then return 'inactive' end
+local ticket=cjson.decode(raw)
+if ticket.uid~=ARGV[3] then return 'owner' end
+local owner=ticket.room_id..'/'..ticket.instance_id..'/'..ticket.generation
+-- An old generation must never release a newer reservation for the same user.
+if redis.call('GET',p..'user:'..ticket.uid)==owner then
+    redis.call('ZREM',p..'held:'..ticket.room_id,ticket.uid)
+    redis.call('DEL',p..'user:'..ticket.uid)
+end
+redis.call('DEL',key)
+return 'cancelled'
+"""
+
 
 class RoomDirectory:
     def __init__(self, cache, prefix='im:rooms:'):
@@ -176,3 +196,10 @@ class RoomDirectory:
         if result[0] != 'ok':
             raise HTTPException(409, 'Ticket room binding or room availability changed')
         return json.loads(result[1])
+
+    def cancel(self, uid: str, ticket: str):
+        digest = hashlib.sha256(ticket.encode()).hexdigest()
+        result = self.cache.eval(CANCEL, 0, self.prefix, digest, uid)
+        if result == 'owner':
+            raise HTTPException(403, 'Reservation belongs to another account')
+        return {'status': result}

@@ -96,3 +96,7 @@ TEST_AUDIO=1 .venv/bin/python tools/test_full_round.py
 
 .venv/bin/python tools/test_multiroom.py
 .venv/bin/python tools/test_room_failure.py
+timeout 25s ./tools/godot --headless --path client --script ../tests/cancel_connection_rules.gd > artifacts/cancel-connection-rules.log 2>&1
+rg -q CANCEL_CONNECTION_RULES_PASS artifacts/cancel-connection-rules.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/cancel-connection-rules.log; then cat artifacts/cancel-connection-rules.log; exit 1; fi
+.venv/bin/python tools/test_cancel_connection.py

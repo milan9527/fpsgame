@@ -94,6 +94,10 @@ var room_heartbeat_due := 0
 var room_heartbeat_success := -100000
 var room_heartbeat_signature := ""
 var room_heartbeat_attempt := -100000
+var connection_attempt := 0
+var admission_ticket := ""
+var admission_origin := ""
+var admission_token := ""
 
 func _ready() -> void:
 	var manifest = JSON.parse_string(FileAccess.get_file_as_string("res://protocol.json"))
@@ -149,6 +153,7 @@ func _ready() -> void:
 			sound.volume = 0.65
 		ui.volume_changed.connect(func(v): sound.volume = v)
 		ui.pause_changed.connect(change_pause)
+		ui.connection_cancel_requested.connect(func(): leave("Connection cancelled."))
 		ui.inventory_changed.connect(func(_enabled): action_latch.clear(); inventory_pointer_guard = true)
 		ui.inventory.pickup_requested.connect(inventory_pickup)
 		ui.inventory.equipment_requested.connect(inventory_equipment)
@@ -187,6 +192,8 @@ func request_quit(code := 0, discard_local := false) -> void:
 		ui.local_exit_button.visible = true
 		return
 	shutdown_requested = true
+	connection_attempt += 1
+	await cancel_admission()
 	get_tree().paused = false
 	running = false
 	if sound != null:
@@ -283,6 +290,10 @@ func report_room() -> bool:
 	return true
 
 func start_solo() -> void:
+	connection_attempt += 1
+	cancel_admission()
+	if online:
+		multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	get_tree().paused = false
 	save_local_operation()
 	flush_local_results()
@@ -1169,7 +1180,7 @@ func peer_connected(id: int) -> void:
 func leave_operation() -> void:
 	if dedicated:
 		var id := multiplayer.get_remote_sender_id()
-		if sessions.has(id) and peer_ready(id):
+		if (sessions.has(id) or pending.has(id)) and peer_ready(id):
 			multiplayer.multiplayer_peer.disconnect_peer(id)
 
 func peer_disconnected(id: int) -> void:
@@ -1197,6 +1208,8 @@ func release_empty_room() -> void:
 	print("ROOM_IDLE room=" + room_id)
 
 func connected() -> void:
+	if not online or shutdown_requested or admission_ticket.is_empty():
+		return
 	local_id = multiplayer.get_unique_id()
 	authenticate.rpc_id(1, ticket)
 	ticket = ""
@@ -1243,6 +1256,10 @@ func authenticate(value: String) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func accepted(id: String) -> void:
+	if not online or shutdown_requested:
+		return
+	admission_ticket = ""
+	admission_token = ""
 	network_round_id = id
 	running = true
 	authenticated_at = Time.get_ticks_msec()
@@ -1299,8 +1316,14 @@ func snapshot(packet: PackedByteArray) -> void:
 	events = payload.events
 
 func sign_in(username: String, password: String, register: bool, endpoint: String) -> void:
+	connection_attempt += 1
+	var attempt_id := connection_attempt
+	ui.busy = true
+	ui.connection_cancel.disabled = false
 	api_url = endpoint
 	var preflight: Dictionary = await http_call("/protocol", {}, false, HTTPClient.METHOD_GET)
+	if attempt_id != connection_attempt:
+		return
 	if preflight.code != 200:
 		ui.show_menu("Server update required: build information unavailable." if preflight.code == 404 else "Operations service unavailable. Check the API address and retry.")
 		if bot_client:
@@ -1315,6 +1338,8 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 			request_quit(1)
 		return
 	var response: Dictionary = await http_call("/auth/register" if register else "/auth/login", {"username": username, "password": password})
+	if attempt_id != connection_attempt:
+		return
 	if response.code != 200 and response.code != 201:
 		ui.show_menu("Account request failed: " + error_message(response))
 		if bot_client:
@@ -1322,6 +1347,7 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 		return
 	token = response.body.token
 	token_origin = api_url
+	var attempt_token: String = token
 	var join_payload := build_info.duplicate()
 	if bot_client and OS.has_environment("TEST_ROOM_ID"):
 		join_payload.room_id = OS.get_environment("TEST_ROOM_ID")
@@ -1329,7 +1355,13 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 		join_payload.room_id = "room-" + OS.get_environment("TEST_GAME_PORT")
 	ui.status.text = "Finding an available operation…"
 	for attempt in range(4):
+		if attempt_id != connection_attempt:
+			return
 		response = await http_call("/matchmaking/rooms/join", join_payload)
+		if attempt_id != connection_attempt:
+			if response.code == 200:
+				cancel_ticket(str(response.body.get("ticket", "")), endpoint, attempt_token)
+			return
 		if response.code == 200:
 			break
 		if response.code != 503 and not (response.code == 409 and str(response.body.get("detail", "")).begins_with("Already connected")):
@@ -1342,9 +1374,13 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 			request_quit(1)
 		return
 	if not compatible_build(response.body.get("build", {})):
+		cancel_ticket(str(response.body.get("ticket", "")), endpoint, attempt_token)
 		ui.show_menu("Matchmaking returned an incompatible game build.")
 		return
 	ticket = response.body.ticket
+	admission_ticket = ticket
+	admission_origin = endpoint
+	admission_token = attempt_token
 	room_id = response.body.room_id
 	var peer := ENetMultiplayerPeer.new()
 	var target_port: int = int(response.body.port)
@@ -1352,6 +1388,7 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 		target_port = int(OS.get_environment("TEST_GAME_PORT"))
 	var error := peer.create_client(response.body.host, target_port)
 	if error != OK:
+		cancel_admission()
 		ui.show_menu("Network error: " + str(error))
 		return
 	online = true
@@ -1359,9 +1396,29 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 	ui.status.text = "Authenticating game connection…"
 	# A stalled handshake must return control to the user.
 	get_tree().create_timer(12).timeout.connect(func():
-		if online and not running:
+		if attempt_id == connection_attempt and online and not running:
 			leave("Game connection timed out; please retry")
 	)
+
+func cancel_ticket(value: String, origin: String, bearer: String) -> void:
+	if value.is_empty() or bearer.is_empty():
+		return
+	var request := HTTPRequest.new()
+	request.timeout = 2
+	add_child(request)
+	var headers := PackedStringArray(["Content-Type: application/json", "Authorization: Bearer " + bearer])
+	if request.request(origin + "/matchmaking/rooms/cancel", headers, HTTPClient.METHOD_POST, JSON.stringify({"ticket": value})) == OK:
+		await request.request_completed
+	request.queue_free()
+
+func cancel_admission() -> void:
+	var value := admission_ticket
+	var origin := admission_origin
+	var bearer := admission_token
+	admission_ticket = ""
+	admission_token = ""
+	ticket = ""
+	await cancel_ticket(value, origin, bearer)
 
 func http_call(path: String, body: Dictionary, internal := false, method := HTTPClient.METHOD_POST) -> Dictionary:
 	var request := HTTPRequest.new()
@@ -1388,6 +1445,8 @@ func leave(message := "") -> void:
 	if dedicated or shutdown_requested:
 		return
 	save_local_operation()
+	connection_attempt += 1
+	cancel_admission()
 	get_tree().paused = false
 	running = false
 	online = false

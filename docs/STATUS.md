@@ -4,6 +4,8 @@
 
 ## 已实际实现
 
+- 连接取消按钮、未消费预留的账户级原子撤销、迟到响应与旧握手定时器隔离；消费/取消竞争及旧回合保护。详见 [连接生命周期](CONNECTION_LIFECYCLE.md)。
+
 - Godot 房间目录匹配与专服心跳；两个持久专服独立回合、票据绑定、容量预留、名单隔离、空房间回收及失联过期。当前固定两实例，详见 [房间目录](ROOM_DIRECTORY.md)。
 
 - 背包按数量丢弃储备弹药/医疗包/手雷、权威生成与近距离同类合并、其他角色回收及治疗库存保护；协议 7 可靠去重与限流。详见 [丢弃物资](DROPPING.md)。
@@ -145,6 +147,10 @@
 | 新房间入口双客户端枪战、背包拾取丢弃、完整回合落库与版本检查 | 通过 | `artifacts/multiroom-online.log`、`artifacts/multiroom-drop-network.log`、`artifacts/multiroom-full-round.log`、`artifacts/multiroom-protocol.log` |
 | 新匹配入口 70–90 ms 单向延迟与 10% 丢包、可靠退出与断开确认 | 通过（有限时长） | `artifacts/multiroom-loss.log` |
 | PostgreSQL 备份目录和两个独立结算队列 | 通过（未做恢复演练） | `artifacts/multiroom-backup.log` |
+| 取消预留归属、消费竞争、旧回合及立即再分配 | 通过（真实 Redis 10 项测试与 HTTP） | `artifacts/cancel-rooms-tests.log`、`artifacts/cancel-http.log` |
+| 取消后的迟到响应与单机隔离、原请求凭据来源 | 通过（源码及打包版） | `artifacts/cancel-connection-rules.log`、`artifacts/packed-cancel-connection.log` |
+| 真实图形客户端取消无法连接的目标并立即重新分配 | 通过 | `artifacts/cancel-network.log` |
+| 取消版本双客户端正常入场、整局落库与兼容检查 | 通过 | `artifacts/cancel-online.log`、`artifacts/cancel-full-round.log`、`artifacts/cancel-protocol.log` |
 | 补给目标提示与高亮画面 | 已检查 | `artifacts/supply-prompt.png` |
 
 20 倍速测试用于验证完整流程，不代表实时性能、弱网适应性或长期稳定性。双客户端验证不等于 16 真人并发验证。

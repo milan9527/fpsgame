@@ -31,6 +31,16 @@ try:
         ticket = response.json()
         assert ticket['port'] == room['port'] and ticket['room_id'] == room['room_id']
         assert httpx.post(BASE + '/matchmaking/rooms/join', json=build, headers=auth).status_code == 409
+        cancel_body = {'ticket': ticket['ticket']}
+        assert httpx.post(BASE + '/matchmaking/rooms/cancel', json=cancel_body).status_code == 403
+        other = next(person for person in accounts if person['user_id'] != user['user_id'])
+        assert httpx.post(BASE + '/matchmaking/rooms/cancel', json=cancel_body,
+                          headers={'Authorization': 'Bearer ' + other['token']}).status_code == 403
+        assert httpx.post(BASE + '/matchmaking/rooms/cancel', json=cancel_body, headers=auth).json()['status'] == 'cancelled'
+        assert httpx.post(BASE + '/matchmaking/rooms/cancel', json=cancel_body, headers=auth).json()['status'] == 'inactive'
+        response = httpx.post(BASE + '/matchmaking/rooms/join', json=dict(build, room_id=room['room_id']), headers=auth)
+        assert response.status_code == 200, response.text
+        ticket = response.json()
         tickets.append(dict(build, **{key: ticket[key] for key in
                                       ('ticket', 'room_id', 'instance_id', 'generation')}))
     wrong_room = dict(tickets[0], room_id=rooms[1]['room_id'])
@@ -42,7 +52,7 @@ try:
     assert sorted(reply.status_code for reply in replies) == [200, 401]
     assert next(reply.json()['uid'] for reply in replies if reply.status_code == 200) == accounts[0]['user_id']
     assert httpx.post(BASE + '/internal/rooms/tickets/consume', json=tickets[1], headers=server).status_code == 200
-    print('ROOM_API_PASS authenticated=ok distinct_endpoints=ok user_lease=ok binding=ok once_only=ok')
+    print('ROOM_API_PASS authenticated=ok distinct_endpoints=ok user_lease=ok binding=ok once_only=ok cancellation=ok owner=ok reallocate=ok')
 finally:
     # Remove reservations and close only the synthetic rooms created by this test.
     for room in rooms:

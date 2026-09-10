@@ -42,14 +42,14 @@ def legacy(connection):
 
 
 def rows(connection):
-    return {table: connection.execute(text(('SELECT id,username,password,created,matches,wins,kills FROM users ORDER BY id' if table == 'users' else 'SELECT * FROM ' + table + ' ORDER BY id'))).all() for table in ('users', 'matches', 'results')}
+    return {table: connection.execute(text(('SELECT id,username,password,created,matches,wins,kills FROM users ORDER BY id' if table == 'users' else ('SELECT id,created FROM matches ORDER BY id' if table == 'matches' else 'SELECT id,match_id,user_id,kills,rank FROM results ORDER BY id')))).all() for table in ('users', 'matches', 'results')}
 
 
 def test_fresh_and_repeat(database):
     with database.begin() as connection:
-        assert upgrade(connection) == '0003'
+        assert upgrade(connection) == '0004'
     with database.begin() as connection:
-        assert upgrade(connection) == '0003'
+        assert upgrade(connection) == '0004'
         assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
         assert {c['name'] for c in inspect(connection).get_check_constraints('users')} == {'ck_users_stats'}
 
@@ -59,13 +59,15 @@ def test_legacy_data_survives_upgrade_and_downgrade(database):
         legacy(connection)
         before = rows(connection)
     with database.begin() as connection:
-        assert upgrade(connection) == '0003'
+        assert upgrade(connection) == '0004'
         assert rows(connection) == before
         assert connection.scalar(text('SELECT session_version FROM users')) == 0
+        assert connection.scalar(text('SELECT mode FROM matches')) == 'solo'
+        assert connection.scalar(text('SELECT team_id FROM results')) == 0
         command.downgrade(configuration(connection), '0001')
         assert rows(connection) == before
     with database.begin() as connection:
-        assert upgrade(connection) == '0003'
+        assert upgrade(connection) == '0004'
         assert rows(connection) == before
         with pytest.raises(IntegrityError), connection.begin_nested():
             connection.execute(text('UPDATE users SET wins = matches + 1'))
@@ -80,7 +82,7 @@ def test_two_migrators_are_serialized(database):
         with database.begin() as connection:
             return upgrade(connection)
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        assert list(executor.map(run, range(2))) == ['0003', '0003']
+        assert list(executor.map(run, range(2))) == ['0004', '0004']
 
 
 def test_drift_is_rejected_without_stamping(database):
@@ -118,3 +120,15 @@ def test_unknown_version_is_not_overwritten(database):
             upgrade(connection)
     with database.connect() as connection:
         assert connection.scalar(text('SELECT version_num FROM alembic_version')) == 'unknown_future'
+
+
+def test_duo_downgrade_refuses_data_loss(database):
+    with database.begin() as connection:
+        upgrade(connection)
+        connection.execute(text("INSERT INTO matches(id,mode,created) VALUES (:id,'duo',now())"), {'id': str(uuid.uuid4())})
+    with pytest.raises(RuntimeError, match='Cannot downgrade team results'):
+        with database.begin() as connection:
+            command.downgrade(configuration(connection), '0003')
+    with database.connect() as connection:
+        assert connection.scalar(text('SELECT mode FROM matches')) == 'duo'
+        assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '0004'

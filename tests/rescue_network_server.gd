@@ -59,8 +59,12 @@ class RescueServer:
 			assert(not enemy.alive and patient.kills == 2)
 			finish_round()
 			assert(patient.rank == 1 and helper.rank == 1 and enemy.rank == 2 and enemy_ally.rank == 2)
-			assert(result_outbox.is_empty(), "Duo persistence is not implemented yet")
-			print("RESCUE_NETWORK_SERVER_PASS knock=ok two_damage_interrupts=ok revive=ok wipe=ok team_victory=ok")
+			assert(result_outbox.size() == 1 and result_outbox[0].mode == "duo")
+			# Exercise disk serialization and reload before the normal sender.
+			result_outbox.clear()
+			load_outbox()
+			assert(result_outbox.size() == 1)
+			print("RESCUE_NETWORK_SERVER_PASS match_id=%s knock=ok two_damage_interrupts=ok revive=ok wipe=ok team_victory=ok" % match_id)
 			stage = 5
 func _initialize() -> void:
 	call_deferred("run")

@@ -483,7 +483,7 @@ func begin_round() -> void:
 	for id in actors:
 		var actor = actors[id]
 		if not actor.is_bot:
-			participants[id] = {"user_id": actor.user_id, "kills": 0, "rank": 0}
+			participants[id] = {"user_id": actor.user_id, "kills": 0, "rank": 0, "team_id": actor.team_id}
 	phase = "live"
 	elapsed = 0
 	phase_time = ROUND_SECONDS
@@ -1378,13 +1378,13 @@ func finish_round() -> void:
 	if match_mode == "duo":
 		winner = "TEAM %d" % teams.winner()
 	add_event("Operation complete / " + winner)
-	if dedicated and match_mode == "solo":
+	if dedicated:
 		var players: Array = []
 		for entry in participants.values():
 			if entry.user_id != "" and entry.rank > 0:
 				players.append(entry)
 		if not players.is_empty():
-			result_outbox.append({"match_id": match_id, "players": players})
+			result_outbox.append({"match_id": match_id, "mode": match_mode, "players": players})
 			save_outbox()
 	elif not online:
 		save_local_operation()
@@ -1841,7 +1841,12 @@ func load_outbox() -> void:
 
 func submit_result() -> void:
 	submitting = true
-	var response: Dictionary = await http_call("/internal/results", result_outbox[0], true)
+	var payload: Dictionary = result_outbox[0].duplicate(true)
+	# Godot's JSON parser loads persisted numbers as floats. Team identifiers
+	# remain integers on the API wire, including retries after a process restart.
+	for player in payload.players:
+		player.team_id = int(player.get("team_id", 0))
+	var response: Dictionary = await http_call("/internal/results", payload, true)
 	if response.code == 200:
 		result_outbox.pop_front()
 		save_outbox()

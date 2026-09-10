@@ -3,6 +3,7 @@ import hashlib
 import os
 import secrets
 import uuid
+from typing import Literal
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -15,7 +16,7 @@ from .validation import validation_error
 from .availability import dependency_unavailable
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
-from sqlalchemy import select, text, update
+from sqlalchemy import case, func, select, text, update
 from sqlalchemy.exc import IntegrityError, OperationalError, TimeoutError as DatabaseTimeout
 from sqlalchemy.orm import Session
 from .models import User, Match, Result
@@ -142,11 +143,18 @@ def login(body: Credentials, request: Request, session: Session = Depends(db)):
 
 
 @app.get('/profile')
-def profile(uid: str = Depends(user_token), session: Session = Depends(db)):
+def profile(mode: Literal['solo', 'duo'] | None = None, uid: str = Depends(user_token), session: Session = Depends(db)):
     user = session.get(User, uid)
     if not user:
         raise HTTPException(404, 'Account not found')
-    return {'username': user.username, 'matches': user.matches, 'wins': user.wins, 'kills': user.kills}
+    if mode is None:
+        return {'username': user.username, 'matches': user.matches, 'wins': user.wins, 'kills': user.kills}
+    matches, wins, kills = session.execute(
+        select(func.count(Result.id), func.coalesce(func.sum(case((Result.rank == 1, 1), else_=0)), 0),
+               func.coalesce(func.sum(Result.kills), 0))
+        .join(Match, Match.id == Result.match_id).where(Result.user_id == uid, Match.mode == mode)
+    ).one()
+    return {'username': user.username, 'mode': mode, 'matches': matches, 'wins': wins, 'kills': kills}
 
 
 @app.get('/leaderboard')
@@ -242,10 +250,12 @@ class PlayerResult(BaseModel):
     user_id: uuid.UUID
     kills: int = Field(ge=0, le=100)
     rank: int = Field(ge=1, le=64)
+    team_id: int = Field(default=0, ge=0, le=32, strict=True)
 
 
 class MatchResult(BaseModel):
     match_id: uuid.UUID
+    mode: Literal['solo', 'duo'] = 'solo'
     players: list[PlayerResult] = Field(min_length=1, max_length=32)
 
 
@@ -253,12 +263,38 @@ class MatchResult(BaseModel):
 def results(body: MatchResult, session: Session = Depends(db)):
     if len({p.user_id for p in body.players}) != len(body.players):
         raise HTTPException(422, 'Duplicate player')
-    if len({p.rank for p in body.players}) != len(body.players):
-        raise HTTPException(422, 'Duplicate rank')
+    if body.mode == 'solo':
+        if any(p.team_id != 0 for p in body.players):
+            raise HTTPException(422, 'Solo results cannot contain teams')
+        if len({p.rank for p in body.players}) != len(body.players):
+            raise HTTPException(422, 'Duplicate rank')
+    else:
+        teams = {}
+        placements = {}
+        for p in body.players:
+            if p.team_id == 0 or p.rank > 32:
+                raise HTTPException(422, 'Invalid duo team or placement')
+            teammates = teams.setdefault(p.team_id, [])
+            teammates.append(p)
+            if len(teammates) > 2 or any(other.rank != p.rank for other in teammates):
+                raise HTTPException(422, 'Inconsistent duo team')
+            if p.rank in placements and placements[p.rank] != p.team_id:
+                raise HTTPException(422, 'Different teams cannot share a placement')
+            placements[p.rank] = p.team_id
     match_id = str(body.match_id)
-    if session.get(Match, match_id):
+    def recorded():
+        existing = session.get(Match, match_id)
+        if existing is None:
+            return None
+        expected = sorted((str(p.user_id), p.kills, p.rank, p.team_id) for p in body.players)
+        actual = sorted((p.user_id, p.kills, p.rank, p.team_id) for p in session.scalars(select(Result).where(Result.match_id == match_id)))
+        if existing.mode != body.mode or actual != expected:
+            raise HTTPException(409, 'Match already recorded with different results')
         return {'status': 'already_recorded'}
-    session.add(Match(id=match_id))
+    previous = recorded()
+    if previous:
+        return previous
+    session.add(Match(id=match_id, mode=body.mode))
     try:
         session.flush()
         # Deterministic locking prevents lost updates and deadlocks across matches.
@@ -269,11 +305,12 @@ def results(body: MatchResult, session: Session = Depends(db)):
             user.matches += 1
             user.kills += p.kills
             user.wins += int(p.rank == 1)
-            session.add(Result(match_id=match_id, user_id=user.id, kills=p.kills, rank=p.rank))
+            session.add(Result(match_id=match_id, user_id=user.id, kills=p.kills, rank=p.rank, team_id=p.team_id))
         session.commit()
     except IntegrityError:
         session.rollback()
-        if session.get(Match, match_id):
-            return {'status': 'already_recorded'}
+        previous = recorded()
+        if previous:
+            return previous
         raise
     return {'status': 'recorded'}

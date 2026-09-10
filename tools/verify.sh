@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+timeout 30s ./tools/godot --headless --path client --script ../tests/checkpoint_rules.gd > artifacts/checkpoint-rules.log 2>&1
+rg -q CHECKPOINT_RULES_PASS artifacts/checkpoint-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/checkpoint-rules.log; then cat artifacts/checkpoint-rules.log; exit 1; fi
+.venv/bin/python tools/test_checkpoint_process.py > artifacts/checkpoint-process.log 2>&1
 timeout 30s ./tools/godot --headless --path client --script ../tests/bindings_rules.gd > artifacts/bindings-rules.log 2>&1
 rg -q BINDINGS_RULES_PASS artifacts/bindings-rules.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/bindings-rules.log; then cat artifacts/bindings-rules.log; exit 1; fi

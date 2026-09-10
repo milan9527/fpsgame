@@ -10,6 +10,10 @@ signal local_history_requested
 signal volume_changed(value: float)
 signal sensitivity_changed(value: float)
 signal pause_changed(enabled: bool)
+signal checkpoint_save_requested
+signal checkpoint_resume_requested
+var checkpoint_save_button: Button
+var checkpoint_resume_button: Button
 signal connection_cancel_requested
 var connection_cancel: Button
 signal inventory_changed(enabled: bool)
@@ -104,13 +108,13 @@ func _ready() -> void:
 	margin.add_child(row)
 	var left := VBoxContainer.new()
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.add_theme_constant_override("separation", 20)
+	left.add_theme_constant_override("separation", 12)
 	row.add_child(left)
 	label(left, "M E R I D I A N   /   F I E L D   O P E R A T I O N S", 16, ACCENT)
 	var spacer := Control.new()
-	spacer.custom_minimum_size.y = 80
+	spacer.custom_minimum_size.y = 20
 	left.add_child(spacer)
-	label(left, "IRON\nMERIDIAN", 76, Color("eef3ea"))
+	label(left, "IRON\nMERIDIAN", 64, Color("eef3ea"))
 	label(left, "THE LAST SIGNAL", 25, ACCENT)
 	label(left, "Enter the exclusion zone.\nScavenge. Adapt. Be the last operator standing.", 20)
 	label(left, "01  /  ASH VALLEY\n16 operators · shrinking combat zone\nOriginal tactical survival FPS", 16, Color("8ca6ad"))
@@ -118,6 +122,10 @@ func _ready() -> void:
 	left.add_child(history_buttons)
 	button(history_buttons, "SERVICE LEADERBOARD", func(): leaderboard_requested.emit(endpoint.text.trim_suffix("/")))
 	button(history_buttons, "LOCAL OPERATIONS", func(): local_history_requested.emit())
+	checkpoint_resume_button = Button.new()
+	checkpoint_resume_button.text = "CONTINUE SAVED OPERATION"
+	checkpoint_resume_button.pressed.connect(func(): checkpoint_resume_requested.emit())
+	left.add_child(checkpoint_resume_button)
 	button(left, "KEYBOARD CONTROLS", func(): controls.open())
 	var bottom := Control.new()
 	bottom.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -200,9 +208,15 @@ func _ready() -> void:
 	pause_panel.add_child(pause_box)
 	label(pause_box, "FIELD MENU", 28, ACCENT)
 	pause_description = label(pause_box, "Operation paused.", 16)
+	pause_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	button(pause_box, "KEYBOARD CONTROLS", func(): controls.open())
 	button(pause_box, "RESUME", func(): set_pause(false))
-	button(pause_box, "RETURN TO DEPLOYMENT", func(): leave_requested.emit())
+	checkpoint_save_button = Button.new()
+	checkpoint_save_button.text = "SAVE OPERATION & RETURN"
+	checkpoint_save_button.pressed.connect(func(): checkpoint_save_requested.emit())
+	pause_box.add_child(checkpoint_save_button)
+	checkpoint_save_button.hide()
+	button(pause_box, "ABANDON / RETURN TO DEPLOYMENT", func(): leave_requested.emit())
 	pause_panel.visible = false
 	leaderboard_panel = PanelContainer.new()
 	leaderboard_panel.position = Vector2(320, 100)

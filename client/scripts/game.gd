@@ -31,6 +31,7 @@ var loot: Dictionary = {}
 var next_loot_id := 48
 const Bindings = preload("res://scripts/control_bindings.gd")
 var bindings = Bindings.new()
+var checkpoint = preload("res://scripts/solo_checkpoint.gd").new()
 var grenades: Dictionary = {}
 const FallRules = preload("res://scripts/fall_rules.gd")
 const SmokeRules = preload("res://scripts/smoke_rules.gd")
@@ -173,6 +174,9 @@ func _ready() -> void:
 		ui.inventory.equipment_requested.connect(inventory_equipment)
 		ui.inventory.drop_requested.connect(inventory_drop)
 		ui.solo_requested.connect(start_solo)
+		ui.checkpoint_save_requested.connect(suspend_solo)
+		ui.checkpoint_resume_requested.connect(resume_solo)
+		refresh_checkpoint_menu()
 		ui.leaderboard_requested.connect(show_leaderboard)
 		ui.online_requested.connect(sign_in)
 		ui.leave_requested.connect(func(): leave())
@@ -453,6 +457,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func change_pause(enabled: bool) -> void:
 	get_tree().paused = enabled and running and not online and not dedicated
 	ui.pause_feedback(get_tree().paused)
+	ui.checkpoint_save_button.visible = enabled and not online and phase == "live" and actors.has(local_id) and actors[local_id].alive
+	ui.checkpoint_save_button.text = "REPLACE SAVED OPERATION & RETURN" if FileAccess.file_exists(checkpoint.path) or FileAccess.file_exists(checkpoint.path + ".bak") else "SAVE OPERATION & RETURN"
 	ui.pause_description.text = "Operation paused. Resume when ready." if not online else "Online operation continues. You remain vulnerable."
 	action_latch.clear()
 
@@ -1515,6 +1521,7 @@ func leave(message := "") -> void:
 	phase = "standby"
 	lobby_camera.current = true
 	ui.show_menu(message)
+	refresh_checkpoint_menu()
 	if bot_client:
 		push_error(message)
 		request_quit(1)
@@ -1859,3 +1866,111 @@ func apply_landing(actor) -> void:
 	var amount := FallRules.damage_for_speed(impact)
 	if phase == "live" and amount > 0:
 		damage(actor, amount, 0, false, false, "FALL", actor.position, true)
+
+func checkpoint_is_finalized(id: String) -> bool:
+	if local_profile != null and DirAccess.dir_exists_absolute(local_profile.root_path.path_join("records").path_join(id)):
+		return true
+	return local_outbox.any(func(record): return record.id == id)
+
+func refresh_checkpoint_menu() -> void:
+	if ui != null:
+		var exists := FileAccess.file_exists(checkpoint.path) or FileAccess.file_exists(checkpoint.path + ".bak")
+		var state: Dictionary = checkpoint.load_state(build_info.content_revision) if exists else {}
+		ui.checkpoint_resume_button.disabled = not exists or (not state.is_empty() and checkpoint_is_finalized(state.id))
+
+func snapshot_solo() -> Dictionary:
+	var states: Array = []
+	for actor in actors.values():
+		var state: Dictionary = actor.pack()
+		state.extra = {}
+		for field in checkpoint.EXTRA:
+			state.extra[field] = actor.get(field)
+		states.append(state)
+	var projectiles: Array = []
+	for grenade in grenades.values():
+		var state: Dictionary = grenade.pack()
+		state.linear = grenade.linear_velocity
+		state.angular = grenade.angular_velocity
+		projectiles.append(state)
+	return {"version": 1, "content": build_info.content_revision, "id": match_id, "elapsed": elapsed, "zone_tick": zone_tick, "centers": zone_plan.centers.duplicate(), "rng_seed": rng.seed, "rng_state": rng.state, "actors": states, "loot": loot.duplicate(true), "grenades": projectiles, "clouds": smoke_clouds.duplicate(true), "events": events.duplicate(), "next_loot": next_loot_id, "next_grenade": next_grenade_id, "waypoint": ui.tactical_map.waypoint}
+
+func suspend_solo() -> bool:
+	if dedicated or online or not running or phase != "live" or not actors.has(local_id) or not actors[local_id].alive:
+		return false
+	ui.set_pause(true)
+	if not checkpoint.save_state(snapshot_solo(), build_info.content_revision):
+		ui.pause_description.text = checkpoint.last_error
+		return false
+	# A suspended operation is neither completed nor abandoned.
+	local_recorded_id = match_id
+	leave("Operation saved. Continue it from this device.")
+	return true
+
+func resume_solo() -> bool:
+	if dedicated or running:
+		return false
+	var state: Dictionary = checkpoint.load_state(build_info.content_revision)
+	var recovery_message: String = checkpoint.last_error
+	if state.is_empty():
+		ui.status.text = checkpoint.last_error
+		return false
+	if checkpoint_is_finalized(state.id):
+		ui.status.text = "This saved operation has already been completed or abandoned. Start a new operation."
+		return false
+	connection_attempt += 1
+	cancel_admission()
+	get_tree().paused = false
+	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	online = false
+	clear_actors()
+	world.prepare_navigation()
+	local_id = 1
+	sessions = {1: {"username": "YOU", "uid": ""}}
+	match_id = state.id
+	local_recorded_id = ""
+	elapsed = state.elapsed
+	phase_time = ROUND_SECONDS - elapsed
+	phase = "live"
+	zone_tick = state.zone_tick
+	zone_plan.centers.assign(state.centers)
+	zone_state = zone_plan.sample(elapsed)
+	zone = zone_state.radius
+	zone_center = zone_state.center
+	rng.seed = state.rng_seed
+	rng.state = state.rng_state
+	for data in state.actors:
+		var actor = spawn_actor(data.id, data.n, data.b, data.p)
+		actor.unpack(data, false)
+		for field in checkpoint.EXTRA:
+			actor.set(field, data.extra[field])
+		actor.update_weapon_visuals(true)
+	participants = {1: {"user_id": "", "kills": actors[1].kills, "rank": 0}}
+	loot = state.loot
+	next_loot_id = state.next_loot
+	next_grenade_id = state.next_grenade
+	smoke_clouds = state.clouds
+	for data in state.grenades:
+		var grenade = Grenade.new()
+		grenade.process_mode = Node.PROCESS_MODE_PAUSABLE
+		grenade.grenade_id = data.id
+		grenade.owner_id = data.owner
+		grenade.kind = data.kind
+		grenade.fuse = data.f
+		grenade.position = data.p
+		add_child(grenade)
+		grenade.linear_velocity = data.linear
+		grenade.angular_velocity = data.angular
+		grenades[data.id] = grenade
+	events.assign(state.events)
+	last_eliminated_name = ""
+	world.show_loot(loot)
+	world.set_zone(zone, zone_center)
+	running = true
+	ui.show_game()
+	ui.tactical_map.waypoint = state.waypoint
+	_process(0) # Populate restored visuals and HUD before freezing the first frame.
+	# Resume in the pause menu so the player can orient before timers advance.
+	ui.set_pause(true)
+	if recovery_message != "":
+		ui.pause_description.text = recovery_message + " Resume when ready."
+	return true

@@ -71,7 +71,7 @@ def main():
     thread = threading.Thread(target=relay, daemon=True)
     thread.start()
     try:
-        env = dict(os.environ, TEST_GAME_PORT="27017", TEST_AUDIO="1")
+        env = dict(os.environ, TEST_GAME_PORT="27017", TEST_ROOM_ID="room-27015", TEST_AUDIO="1")
         result = subprocess.run([str(ROOT / ".venv/bin/python"), "tools/test_online.py"],
                                 cwd=ROOT, env=env, capture_output=True, text=True, timeout=65)
         print(result.stdout)

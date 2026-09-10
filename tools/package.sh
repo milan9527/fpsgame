@@ -15,6 +15,7 @@ cp docs/AMMUNITION.md artifacts/IronMeridian-Linux/docs/AMMUNITION.md
 cp docs/DEATH_LOOT.md artifacts/IronMeridian-Linux/docs/DEATH_LOOT.md
 cp docs/INVENTORY.md artifacts/IronMeridian-Linux/docs/INVENTORY.md
 cp docs/DROPPING.md artifacts/IronMeridian-Linux/docs/DROPPING.md
+cp docs/ROOM_DIRECTORY.md artifacts/IronMeridian-Linux/docs/ROOM_DIRECTORY.md
 cp LICENSE artifacts/IronMeridian-Linux/LICENSE
 cat > artifacts/IronMeridian-Linux/play.sh <<'SH'
 #!/usr/bin/env bash

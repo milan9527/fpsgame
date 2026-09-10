@@ -17,7 +17,7 @@ with server_path.open("w") as output:
                                "--script", "../tests/supply_network_server.gd", "--", "--server"],
                               cwd=ROOT, env=server_env, stdout=output, stderr=subprocess.STDOUT)
     try:
-        for _ in range(100):
+        for _ in range(250):
             if "SERVER_READY" in server_path.read_text():
                 break
             assert server.poll() is None, server_path.read_text()

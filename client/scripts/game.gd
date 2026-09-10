@@ -85,6 +85,15 @@ var test_menu_done := false
 var test_menu_time := 0.0
 var authenticated_at := 0
 var build_info: Dictionary = {}
+var room_id := ""
+var room_instance := ""
+var room_revision := 0
+var room_port := PORT
+var room_heartbeat_busy := false
+var room_heartbeat_due := 0
+var room_heartbeat_success := -100000
+var room_heartbeat_signature := ""
+var room_heartbeat_attempt := -100000
 
 func _ready() -> void:
 	var manifest = JSON.parse_string(FileAccess.get_file_as_string("res://protocol.json"))
@@ -184,7 +193,14 @@ func request_quit(code := 0, discard_local := false) -> void:
 		sound.volume = 0
 		sound.reset_round()
 		if online and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
-			multiplayer.multiplayer_peer.disconnect_peer(1)
+			# Keep polling the reliable channel until the server sees the leave,
+			# rather than destroying ENet after one potentially lost packet.
+			leave_operation.rpc_id(1)
+			var deadline := Time.get_ticks_msec() + 2000
+			while multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED and Time.get_ticks_msec() < deadline:
+				await get_tree().process_frame
+			if multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+				multiplayer.multiplayer_peer.disconnect_peer(1)
 		# Stop requests and deferred frees need a mixer cycle before engine teardown.
 		await get_tree().process_frame
 		await get_tree().create_timer(0.15).timeout
@@ -226,8 +242,45 @@ func start_server() -> void:
 	online = true
 	running = true
 	phase = "waiting"
+	match_id = uuid4()
+	room_port = listen_port
+	room_id = OS.get_environment("GAME_ROOM_ID") if OS.has_environment("GAME_ROOM_ID") else "room-" + str(listen_port)
+	room_instance = uuid4()
+	# A restarted process waits for the previous instance's 12s lease to expire.
+	for attempt in range(8):
+		if await report_room():
+			break
+		await get_tree().create_timer(2, true, false, true).timeout
+	if room_heartbeat_success < 0:
+		push_error("Room registration failed")
+		request_quit(1)
+		return
 	load_outbox()
-	print("SERVER_READY udp=" + str(listen_port) + " relay=" + str(multiplayer.server_relay))
+	print("SERVER_READY udp=" + str(listen_port) + " relay=" + str(multiplayer.server_relay) + " room=" + room_id)
+
+func room_signature() -> String:
+	return match_id + "/" + phase + "/" + str(sessions.keys())
+
+func report_room() -> bool:
+	if room_heartbeat_busy:
+		return false
+	room_heartbeat_busy = true
+	room_heartbeat_attempt = Time.get_ticks_msec()
+	room_revision += 1
+	var signature := room_signature()
+	var players: Array = []
+	for session in sessions.values():
+		players.append(session.uid)
+	var payload := build_info.duplicate()
+	payload.merge({"room_id": room_id, "instance_id": room_instance, "generation": match_id, "revision": room_revision, "host": OS.get_environment("GAME_PUBLIC_HOST") if OS.has_environment("GAME_PUBLIC_HOST") else "127.0.0.1", "port": room_port, "capacity": MAX_PLAYERS, "phase": phase, "players": players})
+	var response: Dictionary = await http_call("/internal/rooms/heartbeat", payload, true)
+	room_heartbeat_busy = false
+	room_heartbeat_due = Time.get_ticks_msec() + 2000
+	if response.code != 200:
+		return false
+	room_heartbeat_signature = signature
+	room_heartbeat_success = Time.get_ticks_msec()
+	return true
 
 func start_solo() -> void:
 	get_tree().paused = false
@@ -269,7 +322,10 @@ func reset_round() -> void:
 	zone = 110
 	zone_tick = 0
 	world.set_zone(zone)
-	match_id = uuid4()
+	# Preserve the generation of waiting-room reservations when the first player
+	# starts the lobby. Later rounds always get a fresh generation.
+	if phase != "waiting" or match_id.is_empty():
+		match_id = uuid4()
 	var index := 0
 	for id in sessions:
 		var actor = spawn_actor(id, sessions[id].username, false, spawn_position(index))
@@ -519,6 +575,9 @@ func _physics_process(dt: float) -> void:
 		if Time.get_ticks_msec() - pending[id].at > 8000:
 			multiplayer.multiplayer_peer.disconnect_peer(id)
 	if dedicated:
+		var now := Time.get_ticks_msec()
+		if not room_id.is_empty() and not room_heartbeat_busy and (now >= room_heartbeat_due or (room_heartbeat_success >= room_heartbeat_attempt and room_signature() != room_heartbeat_signature and now - room_heartbeat_attempt >= 250)):
+			report_room()
 		retry_time -= dt
 		if retry_time <= 0 and not submitting and not result_outbox.is_empty():
 			submit_result()
@@ -528,7 +587,10 @@ func _physics_process(dt: float) -> void:
 	elif phase == "lobby":
 		phase_time -= dt
 		if phase_time <= 0:
-			begin_round()
+			if dedicated and sessions.is_empty():
+				release_empty_room()
+			else:
+				begin_round()
 	elif phase == "live":
 		elapsed += dt
 		phase_time = maxf(0, ROUND_SECONDS - elapsed)
@@ -562,6 +624,7 @@ func _physics_process(dt: float) -> void:
 			if sessions.is_empty():
 				clear_actors()
 				phase = "waiting"
+				match_id = uuid4()
 			else:
 				reset_round()
 	if dedicated:
@@ -1098,7 +1161,16 @@ func _process(dt: float) -> void:
 
 func peer_connected(id: int) -> void:
 	if dedicated:
+		var peer: ENetPacketPeer = multiplayer.multiplayer_peer.get_peer(id)
+		peer.set_timeout(32, 5000, 10000)
 		pending[id] = {"at": Time.get_ticks_msec(), "checking": false}
+
+@rpc("any_peer", "call_remote", "reliable", 4)
+func leave_operation() -> void:
+	if dedicated:
+		var id := multiplayer.get_remote_sender_id()
+		if sessions.has(id) and peer_ready(id):
+			multiplayer.multiplayer_peer.disconnect_peer(id)
 
 func peer_disconnected(id: int) -> void:
 	if dedicated:
@@ -1111,6 +1183,18 @@ func peer_disconnected(id: int) -> void:
 		remove_child(actors[id])
 		actors[id].queue_free()
 		actors.erase(id)
+		if sessions.is_empty() and phase in ["live", "finished"]:
+			release_empty_room()
+
+func release_empty_room() -> void:
+	if not dedicated or not sessions.is_empty():
+		return
+	if phase == "live":
+		finish_round()
+	clear_actors()
+	phase = "waiting"
+	match_id = uuid4()
+	print("ROOM_IDLE room=" + room_id)
 
 func connected() -> void:
 	local_id = multiplayer.get_unique_id()
@@ -1124,14 +1208,20 @@ func authenticate(value: String) -> void:
 	var id := multiplayer.get_remote_sender_id()
 	if not pending.has(id) or pending[id].checking or value.length() > 128 or value.length() < 20:
 		return
+	if phase not in ["waiting", "lobby"] or Time.get_ticks_msec() - room_heartbeat_success > 10000:
+		multiplayer.multiplayer_peer.disconnect_peer(id)
+		return
 	pending[id].checking = true
-	var response: Dictionary = await http_call("/internal/tickets/consume", ticket_payload(value), true)
+	var admission_generation := match_id
+	var payload := ticket_payload(value)
+	payload.merge({"room_id": room_id, "instance_id": room_instance, "generation": admission_generation})
+	var response: Dictionary = await http_call("/internal/rooms/tickets/consume", payload, true)
 	if not pending.has(id):
 		return
 	if not peer_ready(id):
 		pending.erase(id)
 		return
-	if response.code != 200 or sessions.size() >= MAX_PLAYERS:
+	if response.code != 200 or sessions.size() >= MAX_PLAYERS or match_id != admission_generation or phase not in ["waiting", "lobby"]:
 		multiplayer.multiplayer_peer.disconnect_peer(id)
 		return
 	for session in sessions.values():
@@ -1232,14 +1322,30 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 		return
 	token = response.body.token
 	token_origin = api_url
-	response = await http_call("/matchmaking/join", build_info)
+	var join_payload := build_info.duplicate()
+	if bot_client and OS.has_environment("TEST_ROOM_ID"):
+		join_payload.room_id = OS.get_environment("TEST_ROOM_ID")
+	elif bot_client and OS.has_environment("TEST_GAME_PORT"):
+		join_payload.room_id = "room-" + OS.get_environment("TEST_GAME_PORT")
+	ui.status.text = "Finding an available operation…"
+	for attempt in range(4):
+		response = await http_call("/matchmaking/rooms/join", join_payload)
+		if response.code == 200:
+			break
+		if response.code != 503 and not (response.code == 409 and str(response.body.get("detail", "")).begins_with("Already connected")):
+			break
+		if attempt < 3:
+			await get_tree().create_timer(2, true, false, true).timeout
 	if response.code != 200:
 		ui.show_menu("Matchmaking failed: " + error_message(response))
+		if bot_client:
+			request_quit(1)
 		return
 	if not compatible_build(response.body.get("build", {})):
 		ui.show_menu("Matchmaking returned an incompatible game build.")
 		return
 	ticket = response.body.ticket
+	room_id = response.body.room_id
 	var peer := ENetMultiplayerPeer.new()
 	var target_port: int = int(response.body.port)
 	if bot_client and OS.has_environment("TEST_GAME_PORT"):
@@ -1391,7 +1497,7 @@ func run_smoke_checks() -> void:
 	request_quit()
 
 func capture_frame() -> void:
-	await get_tree().create_timer(2).timeout
+	await get_tree().create_timer(2, true, false, true).timeout
 	await RenderingServer.frame_post_draw
 	var image := get_viewport().get_texture().get_image()
 	var path := OS.get_environment("CAPTURE_PATH")

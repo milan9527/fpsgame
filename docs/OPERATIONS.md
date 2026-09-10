@@ -6,7 +6,7 @@
 ./tools/setup.sh
 docker compose ps
 curl -f http://127.0.0.1:8000/health
-docker compose logs --tail 50 api game
+docker compose logs --tail 50 api game game2
 ```
 
 `setup.sh` 仅在 `.env` 不存在时生成三项随机密钥，并设置权限 0600。不覆盖已有凭据。容器自动重启策略为 `unless-stopped`。数据库、缓存和战绩队列均使用持久卷，日志按大小轮转。
@@ -26,7 +26,7 @@ docker compose up -d
 
 1. `.env` 的 `GAME_PUBLIC_HOST` 改为玩家能访问的域名或 IP。
 2. 在宿主机前配置 HTTPS 反向代理，将 API 转发至 `127.0.0.1:8000`；客户端输入对应 HTTPS URL。当前不自动申请域名或证书。
-3. 放行专用服务器 UDP 27015，API 的 HTTPS 端口使用反向代理所设端口。
+3. 放行专用服务器 UDP 27015 和 27022，API 的 HTTPS 端口使用反向代理所设端口。
 4. 运行 `docker compose up -d` 载入配置。
 
 API 默认仅绑定环回地址；数据库与 Redis 不对外开放。开发用 HTTP 不应直接作为公网账号入口。若仅通过本机测试或 SSH 隧道连接，可使用默认地址。
@@ -37,13 +37,13 @@ API 默认仅绑定环回地址；数据库与 Redis 不对外开放。开发用
 ./tools/backup.sh
 ```
 
-备份保存至 `artifacts/backups/`。PostgreSQL 使用一致性逻辑转储，另保存游戏战绩重试队列。备份含账户哈希和游戏数据，目录权限为 0700。
+备份保存至 `artifacts/backups/`。PostgreSQL 使用一致性逻辑转储，另保存两个专服的战绩重试队列：`results.json` 与 `results-game2.json`。备份含账户哈希和游戏数据，目录权限为 0700。
 
 恢复前停止 API 与游戏服务，在独立测试数据库上验证转储；本仓库不提供自动覆盖现有生产库的恢复命令。
 
 ## 配置与容量
 
-当前一个房间最多 16 名参战者，空缺用机器人补足。API 运行两个 worker；Godot 单个专用实例。没有完成 16 真人压力测试、弱网仿真、长时间稳定性测试或扩容验证，不能据此宣称支持大规模生产运营。
+当前一个房间最多 16 名参战者，空缺用机器人补足。API 运行两个 worker；Godot 固定两个专用实例，使用房间目录匹配。已做有限的延迟和随机丢包验证；尚未完成 16 真人压力测试、长时间稳定性测试或自动扩容验证，不能据此宣称支持大规模生产运营。
 
 Linux 客户端以 OpenGL Compatibility 渲染。开发主机通过软件 OpenGL 做实际渲染验证，所得性能不代表玩家 GPU 性能。Windows、macOS、移动端目前未打包验证。
 

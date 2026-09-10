@@ -57,8 +57,24 @@ services:
     environment:
       API_URL: http://api.internal:8000
       SERVER_SECRET: ${SERVER_SECRET}
+      GAME_PUBLIC_HOST: ${GAME_PUBLIC_HOST:-127.0.0.1}
     ports: ["27015:27015/udp"]
     volumes: ["game_data:/home/game/.local/share/godot/app_userdata"]
+    depends_on:
+      api: {condition: service_healthy}
+    logging: *logging
+  game2:
+    build:
+      context: .
+      dockerfile: infra/game.Dockerfile
+    restart: unless-stopped
+    environment:
+      API_URL: http://api.internal:8000
+      SERVER_SECRET: ${SERVER_SECRET}
+      GAME_PORT: "27022"
+      GAME_PUBLIC_HOST: ${GAME_PUBLIC_HOST:-127.0.0.1}
+    ports: ["27022:27022/udp"]
+    volumes: ["game2_data:/home/game/.local/share/godot/app_userdata"]
     depends_on:
       api: {condition: service_healthy}
     logging: *logging
@@ -66,3 +82,4 @@ volumes:
   postgres_data:
   redis_data:
   game_data:
+  game2_data:

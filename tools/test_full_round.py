@@ -23,7 +23,7 @@ client_log = open(root / 'artifacts/full-round-client.log', 'w')
 server = subprocess.Popen([str(root / 'tools/godot'), '--headless', '--path', str(root / 'client'), '--time-scale', '20', '--', '--server'], env=env, stdout=server_log, stderr=subprocess.STDOUT)
 client = None
 try:
-    for _ in range(100):
+    for _ in range(250):
         if 'SERVER_READY' in (root / 'artifacts/full-round-server.log').read_text():
             break
         if server.poll() is not None:

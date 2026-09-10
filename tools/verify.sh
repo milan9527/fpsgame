@@ -86,12 +86,13 @@ if rg -q 'SCRIPT ERROR|Assertion failed' artifacts/prediction-rules.log; then ca
 TEST_AUDIO=1 .venv/bin/python tools/test_online.py
 
 TEST_AUDIO=1 .venv/bin/python tools/test_full_round.py
-# Restart the single-room server so the delayed clients enter a fresh lobby.
-docker compose restart game
+# Empty-room recycling returns the primary server to a fresh generation.
 .venv/bin/python tools/test_delayed_online.py
-docker compose restart game
 .venv/bin/python tools/test_delayed_online.py --loss 0.1
 
 .venv/bin/python tools/test_death_loot_network.py
 .venv/bin/python tools/test_inventory_network.py
 .venv/bin/python tools/test_drop_network.py
+
+.venv/bin/python tools/test_multiroom.py
+.venv/bin/python tools/test_room_failure.py

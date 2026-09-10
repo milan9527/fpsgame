@@ -14,7 +14,7 @@ try:
         credentials = account('network-' + str(i))
         name = credentials['username']
         password = credentials['password']
-        env = dict(os.environ, TEST_USERNAME=name, TEST_PASSWORD=password, API_URL='http://127.0.0.1:8000')
+        env = dict(os.environ, TEST_USERNAME=name, TEST_PASSWORD=password, API_URL='http://127.0.0.1:8000', TEST_ROOM_ID=os.getenv('TEST_ROOM_ID', 'room-27015'))
         log_path = root / 'artifacts' / f'online-client-{i}.log'
         log = open(log_path, 'w')
         proc = subprocess.Popen([str(root / 'tools/godot'), '--headless', '--path', str(root / 'client'), '--', '--bot-client'], env=env, stdout=log, stderr=subprocess.STDOUT)
@@ -33,7 +33,7 @@ finally:
             proc.kill()
             proc.wait()
         log.close()
-for _ in range(40):
+for _ in range(100):
     server_output = subprocess.check_output(['docker', 'compose', 'logs', '--no-color', '--since', '2m', 'game'], cwd=root, text=True)
     if all('PEER_DISCONNECTED peer=' + peer in server_output for peer in peer_ids):
         break

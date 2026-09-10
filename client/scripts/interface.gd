@@ -551,13 +551,17 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 		waypoint_label.text = "WAYPOINT  %dm  /  %s MAP" % [roundi(distance), Bindings.key_label("map")]
 	hud.queue_redraw()
 
-func set_spectator(enabled: bool, nickname: String, placement: int) -> void:
+func set_spectator(enabled: bool, nickname: String, placement: int, team_only := false) -> void:
 	spectating = enabled
 	spectator_label.visible = enabled
 	if enabled:
 		spectator_label.text = "SPECTATING  /  " + (nickname if nickname != "" else "AWAITING RESULT")
 		spectator_label.text += ("\nYOUR PLACEMENT  #%d" % placement) if placement > 0 else "\nTEAM STILL ACTIVE"
 		prompt.text = "%s / %s  Switch operator   |   Mouse  Orbit   |   Wheel  Zoom   |   ESC  Menu" % [Bindings.key_label("spectate_previous"), Bindings.key_label("spectate_next")]
+		if team_only:
+			spectator_label.text = ("FOLLOWING TEAMMATE  /  " + nickname) if nickname != "" else "TEAM ELIMINATED"
+			spectator_label.text += ("\nTEAM PLACEMENT  #%d" % placement) if placement > 0 else "\nTEAM STILL ACTIVE"
+			prompt.text = "Mouse  Orbit   |   Wheel  Zoom   |   ESC  Menu" if nickname != "" else "ESC  /  MENU"
 		hit_until = 0
 		damage_until = 0
 		damage_indicators.clear()

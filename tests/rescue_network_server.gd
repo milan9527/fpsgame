@@ -51,12 +51,18 @@ class RescueServer:
 			completed_at = elapsed
 			stage = 4
 		elif stage == 4 and elapsed > completed_at + 2:
-			damage(enemy, 150, patient.actor_id, true)
+			damage(patient, 150, 0, true)
+			damage(patient, 150, 0, true)
+			assert(not patient.alive and helper.alive)
+			completed_at = elapsed
+			stage = 5
+		elif stage == 5 and elapsed > completed_at + 2:
+			damage(enemy, 150, helper.actor_id, true)
 			assert(enemy.downed)
-			damage(enemy_ally, 150, patient.actor_id, true)
+			damage(enemy_ally, 150, helper.actor_id, true)
 			assert(not enemy_ally.alive)
 			rescue.update(self, 0)
-			assert(not enemy.alive and patient.kills == 2)
+			assert(not enemy.alive and helper.kills == 2)
 			finish_round()
 			assert(patient.rank == 1 and helper.rank == 1 and enemy.rank == 2 and enemy_ally.rank == 2)
 			assert(result_outbox.size() == 1 and result_outbox[0].mode == "duo")
@@ -65,7 +71,7 @@ class RescueServer:
 			load_outbox()
 			assert(result_outbox.size() == 1)
 			print("RESCUE_NETWORK_SERVER_PASS match_id=%s knock=ok two_damage_interrupts=ok revive=ok wipe=ok team_victory=ok" % match_id)
-			stage = 5
+			stage = 6
 func _initialize() -> void:
 	call_deferred("run")
 func run() -> void:

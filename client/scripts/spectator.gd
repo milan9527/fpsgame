@@ -3,6 +3,7 @@ extends Node3D
 var active := false
 var target_id := 0
 var target_name := ""
+var team_filter := 0
 var orbit_yaw := 0.0
 var orbit_pitch := -0.22
 var distance := 4.5
@@ -28,6 +29,7 @@ func reset() -> void:
 	active = false
 	target_id = 0
 	target_name = ""
+	team_filter = 0
 	camera.current = false
 	distance = 4.5
 	orbit_pitch = -0.22
@@ -35,12 +37,14 @@ func reset() -> void:
 func candidates(actors: Dictionary) -> Array:
 	var ids: Array = []
 	for id in actors:
-		if actors[id].alive:
+		if actors[id].alive and (team_filter == 0 or actors[id].team_id == team_filter):
 			ids.append(id)
 	ids.sort()
 	return ids
 
 func select(id: int, actors: Dictionary) -> void:
+	if id not in candidates(actors):
+		return
 	target_id = id
 	var target = actors[id]
 	target_name = target.display_name
@@ -64,6 +68,7 @@ func update_view(actors: Dictionary, local_id: int, phase: String) -> void:
 		reset()
 		return
 	var local = actors[local_id]
+	team_filter = local.team_id
 	if local.alive or phase not in ["live", "finished"]:
 		if active:
 			reset()
@@ -74,12 +79,14 @@ func update_view(actors: Dictionary, local_id: int, phase: String) -> void:
 		position = local.position + Vector3.UP * 1.6
 		local.body_mesh.visible = true
 	camera.current = true
-	if not actors.has(target_id) or not actors[target_id].alive:
+	if target_id not in candidates(actors):
 		cycle(actors, 1)
 	if target_id != 0:
 		var target = actors[target_id]
 		position = target.position + Vector3.UP * target.eye_height()
 		target_name = target.display_name
+	else:
+		position = local.position + Vector3.UP * 1.6
 	arm.rotation = Vector3(orbit_pitch, orbit_yaw, 0)
 	arm.spring_length = distance
 

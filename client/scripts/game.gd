@@ -1482,7 +1482,7 @@ func _process(dt: float) -> void:
 			ui.training_label.text = training.hint()
 			ui.headline.text = "BASIC TRAINING / %d OF 9" % mini(training.step + 1, 9)
 			ui.stats.text = "PRACTICE / NO MATCH RESULTS"
-		ui.set_spectator(spectator.active, spectator.target_name, actor.rank)
+		ui.set_spectator(spectator.active, spectator.target_name, actor.rank, match_mode == "duo")
 		ui.recap_panel.visible = not actor.alive and not ui.death_recap.is_empty()
 
 func update_network_status() -> void:

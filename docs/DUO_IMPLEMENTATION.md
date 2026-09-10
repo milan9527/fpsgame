@@ -75,3 +75,11 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 ## 本地组队记录
 
 离线组队结果使用本地记录版本 2，包含模式和队伍编号。旧单人记录继续只读兼容；队友尚存活时个人死亡不视为最终名次，提前退出记为中止，留到队伍结算则保存最终排名。历史页面增加模式列和分模式统计。真实游戏/UI、磁盘失败重试、独立进程重读及旧单人存档回归见 `artifacts/local-duo-full-regression.log` 和 `artifacts/local-duo-checkpoint-regression.log`。组队检查点尚待开发。
+
+## 队伍观战
+
+双人玩家倒地时保留自己的镜头；正式阵亡后，观战候选只包含同队存活成员。按键循环、自动换人及直接选择均受该限制。队友淘汰或从名单移除后，镜头回到本人的阵亡位置，不跟随其他队伍；界面显示队伍淘汰与队伍名次。单人模式继续使用存活玩家名单，回合重置清除队伍过滤。
+
+`tests/duo_spectator.gd` 验证倒地视角、队友选择、输入循环、显式选择限制、整队淘汰、名单移除和回到单人模式；`tests/spectator_rules.gd` 回归单人换人、墙体碰撞、缩放、退出与重置。四客户端救援场景进一步在扶起后淘汰伤员，确认其跟随队友获得胜利；败方两个客户端不能进入胜方视角，数据库仍保存阵亡成员的共享胜利。
+
+证据：`artifacts/duo-spectator-rules.log`、`artifacts/duo-spectator-solo-regression.log`、`artifacts/duo-spectator-network.log`。这是标准客户端的观战规则；当前网络快照仍同步所有角色，不构成针对修改客户端的敌方状态保密机制。

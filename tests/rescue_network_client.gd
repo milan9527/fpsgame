@@ -43,9 +43,13 @@ func run() -> void:
 	var active := false
 	var requests := 0
 	var request_due := 0
+	var observed_team_view := false
 	while game.phase != "finished":
 		assert(Time.get_ticks_msec() < deadline, "Network rescue scenario timed out")
 		await process_frame
+		if game.local_id == patient_id and not patient.alive and game.spectator.active:
+			assert(game.spectator.target_id == helper_id)
+			observed_team_view = true
 		if patient.downed:
 			observed_knock = true
 			assert(patient.alive and patient.health == 0 and patient.bleed_left > 0)
@@ -64,12 +68,19 @@ func run() -> void:
 			requests += 1
 			await interact()
 	assert(observed_knock and observed_progress and observed_revive and interrupts == 2)
-	assert(patient.rank == 1 and helper.rank == 1 and patient.kills == 2)
+	assert(patient.rank == 1 and helper.rank == 1 and helper.kills == 2)
+	await process_frame
+	await process_frame
+	if game.local_id == patient_id:
+		assert(observed_team_view and game.spectator.target_id == helper_id)
+	if game.actors[game.local_id].team_id == 2:
+		assert(game.spectator.active and game.spectator.target_id == 0 and game.spectator.candidates(game.actors).is_empty())
+		assert("TEAM ELIMINATED" in game.ui.spectator_label.text)
 	for actor in game.actors.values():
 		if actor.actor_id > 0 and actor.team_id == 2:
 			assert(not actor.alive and actor.rank == 2)
 	if game.local_id == helper_id:
 		assert(requests == 3)
-	print("RESCUE_NETWORK_CLIENT_PASS peer=%d knock=replicated progress=replicated interrupts=2 revived=replicated team_results=replicated" % game.local_id)
+	print("RESCUE_NETWORK_CLIENT_PASS peer=%d knock=replicated progress=replicated interrupts=2 revived=replicated team_results=replicated team_spectator=ok" % game.local_id)
 	await create_timer(1).timeout
 	game.request_quit()

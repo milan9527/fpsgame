@@ -9,6 +9,18 @@ var materials: Dictionary = {}
 var navigation_region: NavigationRegion3D
 var navigation_bake_ms := 0
 var map_features: Array[Dictionary] = []
+var ground_obstacles: Array[Rect2] = []
+
+func accepts_zone_center(center: Vector2) -> bool:
+	# Final 4m circle plus a 0.5m player clearance. Read generated static
+	# geometry, which is available before the navigation server's first sync.
+	if absf(center.x) > 109.5 or absf(center.y) > 109.5:
+		return false
+	for obstacle in ground_obstacles:
+		var nearest := center.clamp(obstacle.position, obstacle.end)
+		if center.distance_to(nearest) <= 4.5:
+			return false
+	return true
 
 func prepare_navigation() -> void:
 	if navigation_region != null:
@@ -64,6 +76,8 @@ func block(at: Vector3, size: Vector3, color: String, solid := true, surface := 
 	mesh.position = at
 	add_child(mesh)
 	if solid:
+		if surface != "terrain":
+			ground_obstacles.append(Rect2(Vector2(at.x - size.x / 2, at.z - size.z / 2), Vector2(size.x, size.z)))
 		var body := StaticBody3D.new()
 		body.set_meta("surface", surface)
 		var shape := CollisionShape3D.new()

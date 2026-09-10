@@ -6,15 +6,23 @@ const HOLDS := [35.0, 20.0, 15.0, 15.0, 10.0, 10.0]
 const SHRINKS := [30.0, 30.0, 25.0, 25.0, 25.0, 20.0]
 var centers: Array[Vector2] = [Vector2.ZERO]
 
-func reset(seed_value: int) -> void:
+func reset(seed_value: int, accepts_center := Callable()) -> void:
 	var random := RandomNumberGenerator.new()
 	random.seed = seed_value
 	centers = [Vector2.ZERO]
 	var previous := 110.0
 	for radius in RADII:
-		var angle := random.randf() * TAU
-		var offset: float = sqrt(random.randf()) * (previous - radius) * 0.85
-		centers.append(centers.back() + Vector2(cos(angle), sin(angle)) * offset)
+		# A previously accepted center is a bounded, nested fallback. The initial
+		# road intersection is clear in Ash Valley, including before nav sync.
+		var selected: Vector2 = centers.back()
+		for attempt in range(48):
+			var angle := random.randf() * TAU
+			var offset: float = sqrt(random.randf()) * (previous - radius) * 0.85
+			var candidate: Vector2 = centers.back() + Vector2(cos(angle), sin(angle)) * offset
+			if not accepts_center.is_valid() or accepts_center.call(candidate):
+				selected = candidate
+				break
+		centers.append(selected)
 		previous = radius
 
 func sample(seconds: float) -> Dictionary:

@@ -27,6 +27,9 @@ exec ./IronMeridian --main-pack IronMeridian.pck "$@"
 SH
 chmod +x artifacts/IronMeridian-Linux/play.sh
 cp docs/SAFE_ZONES.md artifacts/IronMeridian-Linux/docs/SAFE_ZONES.md
+timeout 30s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/zone_terrain_rules.gd" > artifacts/packed-zone-terrain.log 2>&1
+rg -q ZONE_TERRAIN_RULES_PASS artifacts/packed-zone-terrain.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-zone-terrain.log; then cat artifacts/packed-zone-terrain.log; exit 1; fi
 timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/zone_rules.gd" > artifacts/packed-zones.log 2>&1
 rg -q ZONE_RULES_PASS artifacts/packed-zones.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-zones.log; then cat artifacts/packed-zones.log; exit 1; fi

@@ -337,7 +337,7 @@ func reset_round() -> void:
 	elapsed = 0
 	zone = 110
 	zone_center = Vector2.ZERO
-	zone_plan.reset(rng.randi())
+	zone_plan.reset(rng.randi(), world.accepts_zone_center)
 	zone_state = zone_plan.sample(0)
 	zone_tick = 0
 	world.set_zone(zone, zone_center)
@@ -868,6 +868,17 @@ func bot_input(actor, dt: float) -> void:
 	if actor.sprint:
 		var safe := zone_center + radial.normalized() * maxf(0, zone - 14)
 		destination = Vector3(safe.x, 0, safe.y)
+	# Use only the same next-circle preview available to human players. A
+	# conservative walking-time budget leaves room for detours around cover.
+	elif not zone_state.is_empty():
+		var next_center: Vector2 = zone_state.next_center
+		var next_radius: float = zone_state.next_radius
+		var next_offset := Vector2(actor.position.x, actor.position.z) - next_center
+		var travel := maxf(0, next_offset.length() - next_radius)
+		if travel > 0 and (zone_state.moving or zone_state.remaining <= travel / 4.0 + 8.0):
+			var safe := next_center + next_offset.normalized() * maxf(0, next_radius - 7)
+			destination = Vector3(safe.x, 0, safe.y)
+			actor.sprint = true
 	var direction: Vector3 = actor.navigator.steer(actor, world, destination, dt)
 	# Short-range separation supplements global paths around static geometry.
 	if direction.length_squared() > 0:

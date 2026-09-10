@@ -30,6 +30,7 @@ var participants: Dictionary = {}
 var loot: Dictionary = {}
 var next_loot_id := 48
 var grenades: Dictionary = {}
+const FallRules = preload("res://scripts/fall_rules.gd")
 const SmokeRules = preload("res://scripts/smoke_rules.gd")
 var smoke_clouds: Dictionary = {}
 var smoke_visuals: Dictionary = {}
@@ -642,6 +643,7 @@ func _physics_process(dt: float) -> void:
 				actor.move_input = Vector2.ZERO
 				actor.shooting = false
 			actor.simulate(dt)
+			apply_landing(actor)
 		# Capture all actors at the same simulation boundary before resolving fire.
 		hit_history.record(elapsed, actors)
 		for actor in actors.values():
@@ -1012,11 +1014,11 @@ func shot_fx(id: int, origin: Vector3, end: Vector3, kind: int) -> void:
 	add_child(line)
 	get_tree().create_timer(0.065, false).timeout.connect(line.queue_free)
 
-func damage(target, amount: float, attacker_id: int, bypass_protection := false, headshot := false, cause := "THE ZONE", impact_origin = null) -> void:
+func damage(target, amount: float, attacker_id: int, bypass_protection := false, headshot := false, cause := "THE ZONE", impact_origin = null, ignore_armor := false) -> void:
 	if phase == "finished" or not target.alive or (not bypass_protection and phase == "live" and elapsed < 5):
 		return
 	var before: float = target.health + target.armor
-	target.apply_damage(amount)
+	target.apply_damage(amount, ignore_armor)
 	var actual_damage: float = before - target.health - target.armor
 	if actors.has(attacker_id) and attacker_id != target.actor_id:
 		deliver_feedback(attacker_id, 0, actual_damage, headshot, not target.alive, target.position)
@@ -1853,3 +1855,12 @@ func update_smoke_visuals() -> void:
 		visual.material_override.set_shader_parameter("radius", radius)
 		visual.material_override.set_shader_parameter("density", SmokeRules.density(cloud.age))
 		visual.material_override.set_shader_parameter("age", cloud.age)
+
+func apply_landing(actor) -> void:
+	if online and not dedicated:
+		return
+	var impact: float = actor.landing_speed
+	actor.landing_speed = 0.0
+	var amount := FallRules.damage_for_speed(impact)
+	if phase == "live" and amount > 0:
+		damage(actor, amount, 0, false, false, "FALL", actor.position, true)

@@ -42,6 +42,7 @@ var reserve := 120
 var medkits := 2
 var grenades := 2
 var smokes := 0
+var landing_speed := 0.0
 var throw_left := 0.0
 var alive := true
 var yaw := 0.0
@@ -224,6 +225,7 @@ func simulate(dt: float) -> void:
 
 # Shared by authority and prediction. Never changes inventory, damage or timers.
 func move_step(dt: float) -> void:
+	landing_speed = 0.0
 	if not alive:
 		return
 	update_stance()
@@ -243,12 +245,19 @@ func move_step(dt: float) -> void:
 	elif jump_requested and not crouched:
 		velocity.y = 7.5
 	jump_requested = false
+	var was_grounded := grounded
+	var impact_velocity := velocity
 	move_and_slide()
 	grounded = is_on_floor()
+	if grounded and not was_grounded:
+		landing_speed = maxf(0.0, -impact_velocity.dot(get_floor_normal()))
 	position.x = clampf(position.x, -115, 115)
 	position.z = clampf(position.z, -115, 115)
 	if position.y < -10:
 		position.y = 4
+		velocity = Vector3.ZERO
+		grounded = false
+		landing_speed = 0.0
 
 func predict_movement(cmd: Dictionary, dt: float, active: bool) -> void:
 	reconcile_movement()
@@ -330,11 +339,11 @@ func switch_weapon(index: int) -> void:
 func total_ammunition() -> int:
 	return reserve + magazines[0] + magazines[1] + magazines[2]
 
-func apply_damage(amount: float) -> void:
+func apply_damage(amount: float, ignore_armor := false) -> void:
 	if not alive:
 		return
 	heal_left = 0
-	var absorbed := minf(armor, amount * 0.6)
+	var absorbed := 0.0 if ignore_armor else minf(armor, amount * 0.6)
 	armor -= absorbed
 	health = maxf(0, health - (amount - absorbed))
 	if health <= 0:

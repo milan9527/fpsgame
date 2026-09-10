@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+timeout 30s ./tools/godot --headless --path client --script ../tests/fall_rules.gd > artifacts/fall-rules.log 2>&1
+rg -q FALL_RULES_PASS artifacts/fall-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/fall-rules.log; then cat artifacts/fall-rules.log; exit 1; fi
 timeout 30s ./tools/godot --headless --path client --script ../tests/smoke_grenade_rules.gd > artifacts/smoke-grenade-rules.log 2>&1
 rg -q SMOKE_GRENADE_RULES_PASS artifacts/smoke-grenade-rules.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/smoke-grenade-rules.log; then cat artifacts/smoke-grenade-rules.log; exit 1; fi
@@ -118,3 +121,5 @@ if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/tac
 .venv/bin/python tools/test_map_network.py
 
 .venv/bin/python tools/test_smoke_network.py
+
+.venv/bin/python tools/test_fall_network.py

@@ -67,3 +67,9 @@ Linux 客户端以 OpenGL Compatibility 渲染。开发主机通过软件 OpenGL
 骨骼蒙皮测试通过 Xvfb 使用实际 OpenGL 渲染，验证顶点变形与脚底位置；纯 headless 渲染器不能完成这项检查。联机测试账户凭据保存在忽略提交且权限为 0600 的 `artifacts/test-accounts.json`，不包含持久令牌。仅在重建测试数据库后删除此缓存以重新生成测试账户。
 
 数据库升级已改用 Alembic，API 启动前自动运行事务迁移；`/health` 返回实际版本。升级策略和真实数据保留验证见 [数据库迁移](DATABASE_MIGRATIONS.md)。
+
+## 请求校验错误
+
+API 的请求模型校验失败返回 HTTP 422，`detail` 是可直接展示的简短提示，`errors` 为最多 20 个去重的 `{field, message}` 项。用户名与密码提示使用固定规则文本；错误响应不包含提交值、请求体、Pydantic 的 `input`/`ctx` 或解析异常上下文，并设置 `Cache-Control: no-store`。非法 JSON 也使用固定提示。字段名采用服务端白名单，不回显任意请求键。
+
+该格式替代 FastAPI 默认的校验错误数组，现有客户端直接显示 `detail` 字符串。内部工具如依赖默认数组格式，需要改用 `errors`。业务错误的 HTTP 状态和内容保持原样。`backend/tests/test_validation_privacy.py` 使用实际 HTTP 服务验证，需运行环境提供 `SERVER_SECRET` 以覆盖专服模型级校验；不要将该值写入命令日志。

@@ -10,6 +10,8 @@ import redis
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, InvalidHashError
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from .validation import validation_error
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
@@ -30,6 +32,7 @@ DUMMY_HASH = passwords.hash(secrets.token_urlsafe(32))
 
 
 app = FastAPI(title='Iron Meridian Services', version='0.1.0')
+app.add_exception_handler(RequestValidationError, validation_error)
 auth = HTTPBearer()
 
 

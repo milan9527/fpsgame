@@ -18,10 +18,12 @@ from sqlalchemy.orm import Session
 from .models import User, Match, Result
 from .database import engine
 from .protocol import BUILD, BuildInfo, require_compatible
+from .rooms import RoomDirectory, RoomHeartbeat, RoomJoin, RoomTicket
 
 JWT_SECRET = os.environ['JWT_SECRET']
 SERVER_SECRET = os.environ['SERVER_SECRET']
 cache = redis.Redis.from_url(os.environ['REDIS_URL'], decode_responses=True)
+rooms = RoomDirectory(cache)
 passwords = PasswordHasher(time_cost=2, memory_cost=19456, parallelism=1)
 # One real verification for unknown accounts keeps timing comparable.
 DUMMY_HASH = passwords.hash(secrets.token_urlsafe(32))
@@ -140,6 +142,28 @@ def join(body: BuildInfo, uid: str = Depends(user_token), session: Session = Dep
 
 class Ticket(BuildInfo):
     ticket: str = Field(min_length=20, max_length=128)
+
+
+@app.post('/internal/rooms/heartbeat', dependencies=[Depends(server_auth)])
+def room_heartbeat(body: RoomHeartbeat):
+    require_compatible(body)
+    return rooms.heartbeat(body)
+
+
+@app.post('/matchmaking/rooms/join')
+def room_join(body: RoomJoin, uid: str = Depends(user_token), session: Session = Depends(db)):
+    require_compatible(body)
+    limit('room-join:' + uid, 10, 60)
+    user = session.get(User, uid)
+    if not user:
+        raise HTTPException(404, 'Account not found')
+    return rooms.allocate(uid, user.username, body.room_id)
+
+
+@app.post('/internal/rooms/tickets/consume', dependencies=[Depends(server_auth)])
+def room_consume(body: RoomTicket):
+    require_compatible(body)
+    return rooms.consume(body)
 
 
 @app.post('/internal/tickets/consume', dependencies=[Depends(server_auth)])

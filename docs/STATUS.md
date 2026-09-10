@@ -4,6 +4,8 @@
 
 ## 已实际实现
 
+- 房间目录服务基础：Redis 原子名额预留、房间/实例/回合票据绑定、用户占位、心跳过期与版本筛选。**尚未接入 Godot 默认匹配或运行第二个专服。** 详见 [房间目录](ROOM_DIRECTORY.md)。
+
 - 背包按数量丢弃储备弹药/医疗包/手雷、权威生成与近距离同类合并、其他角色回收及治疗库存保护；协议 7 可靠去重与限流。详见 [丢弃物资](DROPPING.md)。
 
 - B 键战场背包：库存与三枪弹匣、明确选择附近物资、切枪/换弹/治疗、单机/在线权威操作、输入隔离及关闭生命周期。详见 [背包](INVENTORY.md)，尚无完整物品与配件系统。
@@ -135,6 +137,9 @@
 | 主动丢弃守恒、合并、另一角色取用、重放/数量/治疗/限流/旧回合保护 | 通过（源码及打包版） | `artifacts/drop-rules.log`、`artifacts/packed-drop.log` |
 | 图形窗口真实客户端丢弃/重放拒绝/回收与背包视觉回归 | 通过 | `artifacts/drop-network.log`、`artifacts/drop-inventory-render.log` |
 | 协议 7 兼容及整局落库 | 通过 | `artifacts/drop-protocol.log`、`artifacts/drop-full-round.log` |
+| 房间目录并发名额/用户占位、票据绑定/一次消费、心跳/回合/过期边界 | 通过（真实 Redis，7 项测试） | `artifacts/rooms-tests.log` |
+| 新目录 HTTP 鉴权、双地址分配、用户预留和并发消费 | 通过（合成心跳，非双 Godot 专服） | `artifacts/rooms-http.log` |
+| 房间目录部署后原账户/匹配/结算接口回归 | 通过（5 项测试） | `artifacts/rooms-backend-regression.log` |
 | 补给目标提示与高亮画面 | 已检查 | `artifacts/supply-prompt.png` |
 
 20 倍速测试用于验证完整流程，不代表实时性能、弱网适应性或长期稳定性。双客户端验证不等于 16 真人并发验证。

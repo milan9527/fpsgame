@@ -47,6 +47,9 @@ var yaw := 0.0
 var pitch := 0.0
 var move_input := Vector2.ZERO
 var sprint := false
+var lean_input := 0.0
+var lean := 0.0
+const LEAN_ANGLE := PI / 10
 var crouch := false
 var crouched := false
 var aiming := false
@@ -223,8 +226,11 @@ func move_step(dt: float) -> void:
 	if not alive:
 		return
 	update_stance()
+	update_lean(dt)
 	var direction := Basis(Vector3.UP, yaw) * Vector3(move_input.x, 0, move_input.y)
 	var speed := 2.8 if crouched else (9.0 if sprint and not shooting and not aiming else 5.5)
+	if absf(lean) > 0.01:
+		speed = minf(speed, 2.8)
 	if aiming:
 		speed = minf(speed, 3.2)
 	if heal_left > 0:
@@ -262,6 +268,7 @@ func predict_movement(cmd: Dictionary, dt: float, active: bool) -> void:
 func predict_step(cmd: Dictionary, dt: float) -> void:
 	move_input = Vector2(cmd.x, cmd.z).limit_length()
 	yaw = cmd.yaw
+	lean_input = cmd.get("lean", 0.0)
 	crouch = cmd.crouch
 	sprint = cmd.sprint
 	aiming = cmd.ads
@@ -285,6 +292,7 @@ func reconcile_movement() -> void:
 	position = state.p
 	velocity = state.vel
 	grounded = state.ground
+	lean = state.get("lean", 0.0)
 	set_stance(state.crouched)
 	while not prediction_history.is_empty() and int(prediction_history[0].cmd.seq) <= ack:
 		prediction_history.pop_front()
@@ -338,7 +346,7 @@ func apply_damage(amount: float) -> void:
 		gun.visible = false
 
 func pack() -> Dictionary:
-	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "mags": magazines.duplicate(), "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "throw": throw_left, "ack": last_sequence}
+	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "mags": magazines.duplicate(), "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "lean": lean, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "throw": throw_left, "ack": last_sequence}
 
 func unpack(data: Dictionary, local: bool) -> void:
 	target_position = data.p
@@ -359,6 +367,8 @@ func unpack(data: Dictionary, local: bool) -> void:
 	medkits = data.med
 	reload_left = data.reload
 	heal_left = data.heal
+	if not local:
+		lean = data.get("lean", 0.0)
 	set_stance(data.crouched)
 	aiming = data.ads
 	recoil = data.recoil
@@ -378,6 +388,7 @@ func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> vo
 		position = position.lerp(target_position, minf(1, dt * 20))
 	rotation.y = yaw
 	head.rotation.x = pitch
+	apply_lean_pose()
 	flash_left = maxf(0, flash_left - dt)
 	muzzle.visible = flash_left > 0
 	weapon_kick = move_toward(weapon_kick, 0, dt * 8)
@@ -405,7 +416,7 @@ func eye_height() -> float:
 	return 0.98 if crouched else 1.6
 
 func weapon_obstructed(ads: bool) -> bool:
-	var facing := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, clampf(pitch + recoil, -1.5, 1.5))
+	var facing := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, clampf(pitch + recoil, -1.5, 1.5)) * Basis(Vector3.BACK, -lean * LEAN_ANGLE)
 	var offset := Vector3(0, -OPTIC_HEIGHTS[weapon], -0.40) if ads else Vector3(0.26, -0.24, -0.48)
 	var eye := eye_position()
 	var mount := eye + facing * offset
@@ -424,10 +435,61 @@ func weapon_segment_blocked(from: Vector3, to: Vector3) -> bool:
 	return space.cast_motion(query)[0] < 0.999
 
 func eye_position() -> Vector3:
-	return position + Vector3.UP * eye_height()
+	return position + Basis(Vector3.UP, yaw) * lean_point(Vector3.UP * eye_height())
 
 func aim_position() -> Vector3:
-	return position + Vector3.UP * (0.72 if crouched else 1.1)
+	return position + Basis(Vector3.UP, yaw) * lean_point(Vector3.UP * (0.72 if crouched else 1.1))
+
+func lean_basis() -> Basis:
+	return Basis(Vector3.UP, yaw) * Basis(Vector3.BACK, -lean * LEAN_ANGLE)
+
+func lean_point(point: Vector3, value := INF) -> Vector3:
+	var amount: float = lean if value == INF else value
+	var pivot := Vector3.UP * 0.38
+	return pivot + Basis(Vector3.BACK, -amount * LEAN_ANGLE) * (point - pivot)
+
+func hit_base() -> Vector3:
+	return position + Basis(Vector3.UP, yaw) * lean_point(Vector3.ZERO)
+
+func is_headshot(point: Vector3) -> bool:
+	return (lean_basis().inverse() * (point - hit_base())).y > headshot_height()
+
+func apply_lean_pose() -> void:
+	if not alive:
+		return
+	body_shape.position = lean_point(Vector3.UP * body_shape.shape.height / 2)
+	body_shape.rotation.z = -lean * LEAN_ANGLE
+	body_mesh.position = lean_point(Vector3.ZERO)
+	body_mesh.rotation.z = -lean * LEAN_ANGLE
+	head.position = lean_point(Vector3.UP * eye_height())
+	head.rotation.z = 0
+	camera.rotation.z = -lean * LEAN_ANGLE
+
+func update_lean(dt: float) -> void:
+	var wanted := 0.0 if sprint or not grounded else clampf(lean_input, -1, 1)
+	var candidate := move_toward(lean, wanted, dt * 5)
+	if is_equal_approx(candidate, lean):
+		apply_lean_pose()
+		return
+	# Small angular increments prevent a head crossing a thin wall between poses.
+	var steps := maxi(1, ceili(absf(candidate - lean) / 0.025))
+	var initial := lean
+	var query := PhysicsShapeQueryParameters3D.new()
+	var probe := CapsuleShape3D.new()
+	probe.radius = 0.37
+	probe.height = body_shape.shape.height - 0.02
+	query.shape = probe
+	query.collision_mask = 3
+	query.exclude = [get_rid()]
+	for i in range(1, steps + 1):
+		var amount := lerpf(initial, candidate, float(i) / steps)
+		var basis := Basis(Vector3.UP, yaw) * Basis(Vector3.BACK, -amount * LEAN_ANGLE)
+		var center := position + Basis(Vector3.UP, yaw) * lean_point(Vector3.UP * body_shape.shape.height / 2, amount)
+		query.transform = Transform3D(basis, center)
+		if not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty():
+			break
+		lean = amount
+	apply_lean_pose()
 
 func headshot_height() -> float:
 	return 0.9 if crouched else 1.42
@@ -445,7 +507,7 @@ func can_stand() -> bool:
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = shape
 	# A small floor clearance avoids mistaking the supporting floor for a ceiling.
-	query.transform = Transform3D(Basis.IDENTITY, global_position + Vector3.UP * (STANDING_HEIGHT / 2 + 0.015))
+	query.transform = Transform3D(lean_basis(), global_position + Basis(Vector3.UP, yaw) * lean_point(Vector3.UP * (STANDING_HEIGHT / 2)) + Vector3.UP * 0.015)
 	query.collision_mask = 3
 	query.exclude = [get_rid()]
 	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
@@ -458,6 +520,7 @@ func set_stance(lowered: bool) -> void:
 	head.position.y = eye_height()
 	if not character_animation.available:
 		body_mesh.scale.y = height / STANDING_HEIGHT
+	apply_lean_pose()
 
 func shot_spread() -> float:
 	var base: float = [0.009, 0.045, 0.002][weapon]

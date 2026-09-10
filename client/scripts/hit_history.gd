@@ -20,7 +20,7 @@ func record(time: float, actors: Dictionary) -> void:
 	for id in actors:
 		var actor = actors[id]
 		if actor.alive:
-			poses[id] = {"p": actor.position, "height": actor.body_shape.shape.height, "head": actor.headshot_height()}
+			poses[id] = {"p": actor.hit_base(), "basis": actor.lean_basis(), "height": actor.body_shape.shape.height, "head": actor.headshot_height()}
 	if not samples.is_empty() and time <= float(samples[-1].time):
 		return
 	samples.append({"time": time, "poses": poses})
@@ -49,7 +49,7 @@ func poses_at(time: float) -> Dictionary:
 		# Never sweep a teleport into a hittable corridor.
 		if a.p.distance_to(b.p) > 3:
 			continue
-		poses[id] = {"p": a.p.lerp(b.p, weight), "height": a.height, "head": a.head}
+		poses[id] = {"p": a.p.lerp(b.p, weight), "basis": a.basis.slerp(b.basis, weight), "height": a.height, "head": a.head}
 	return poses
 
 static func sphere_distance(origin: Vector3, direction: Vector3, center: Vector3) -> float:
@@ -90,9 +90,9 @@ func trace(time: float, origin: Vector3, direction: Vector3, limit: float, shoot
 		if id == shooter_id or not actors.has(id) or not actors[id].alive:
 			continue
 		var pose: Dictionary = poses[id]
-		var distance := capsule_distance(origin, direction, pose.p, pose.height)
+		var distance := capsule_distance(pose.basis.inverse() * (origin - pose.p), pose.basis.inverse() * direction, Vector3.ZERO, pose.height)
 		if distance < limit:
 			limit = distance
 			var point := origin + direction * distance
-			hit = {"collider": actors[id], "position": point, "headshot": point.y - pose.p.y > pose.head}
+			hit = {"collider": actors[id], "position": point, "headshot": (pose.basis.inverse() * (point - pose.p)).y > pose.head}
 	return hit

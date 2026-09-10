@@ -117,7 +117,7 @@ func _ready() -> void:
 	var bottom := Control.new()
 	bottom.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left.add_child(bottom)
-	label(left, "WASD  Move    •    SHIFT  Sprint    •    SPACE  Jump\nR  Reload    •    E  Loot    •    H  Heal\n1/2/3  Weapons    •    RMB  Aim    •    ESC  Menu\nB  Inventory    •    M  Map    •    G  Frag", 16, Color("b7c6c8"))
+	label(left, "WASD  Move    •    SHIFT  Sprint    •    SPACE  Jump\nR  Reload    •    E  Loot    •    H  Heal\n1/2/3  Weapons    •    RMB  Aim    •    ESC  Menu\nB  Inventory    •    M  Map    •    G  Frag    •    Z/C  Lean", 16, Color("b7c6c8"))
 	var right := VBoxContainer.new()
 	right.custom_minimum_size.x = 390
 	right.add_theme_constant_override("separation", 13)
@@ -428,6 +428,8 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 	loadout_label.text = "1  AR %02d   |   2  SG %02d   |   3  SR %02d" % [actor.magazines[0], actor.magazines[1], actor.magazines[2]]
 	if actor.crouched:
 		weapon.text += "  [CROUCHED]"
+	if absf(actor.lean) > 0.05:
+		weapon.text += "  [LEAN L]" if actor.lean < 0 else "  [LEAN R]"
 	health_bar.value = actor.health
 	armor_bar.value = actor.armor
 	prompt.text = ("H  Medkit ×%d   |   G  Frag ×%d" % [actor.medkits, actor.grenades]) if supply_prompt == "" else supply_prompt

@@ -73,6 +73,8 @@ var bot_test_timer := 0.0
 var test_start_position := Vector3.ZERO
 var test_moved := false
 var test_fired := false
+var test_leaned := false
+var test_remote_leaned := false
 var test_crouched := false
 var test_recoil := false
 var test_remote_crouch := false
@@ -220,7 +222,7 @@ func request_quit(code := 0, discard_local := false) -> void:
 	get_tree().quit(code)
 
 func setup_input() -> void:
-	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "inventory": KEY_B, "map": KEY_M, "scoreboard": KEY_TAB, "spectate_previous": KEY_Q, "spectate_next": KEY_E}
+	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "lean_left": KEY_Z, "lean_right": KEY_C, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "inventory": KEY_B, "map": KEY_M, "scoreboard": KEY_TAB, "spectate_previous": KEY_Q, "spectate_next": KEY_E}
 	for action in keys:
 		InputMap.add_action(action)
 		var e := InputEventKey.new()
@@ -574,8 +576,11 @@ func _physics_process(dt: float) -> void:
 				test_fired = test_fired or player.ammo < 30
 				test_magazines = test_magazines or (test_switch_stage == 3 and player.weapon == 0 and player.reserve == 120 and player.magazines[0] < 30 and player.magazines[1] < 8 and player.magazines[2] < 5)
 				test_crouched = test_crouched or (player.crouched and player.head.position.y < 1.1)
+				test_leaned = test_leaned or absf(player.lean) > 0.5
 				test_recoil = test_recoil or player.recoil > 0
 				for other in actors.values():
+					if other.actor_id > 0 and other.actor_id != local_id and absf(other.lean) > 0.5:
+						test_remote_leaned = true
 					if other.actor_id > 0 and other.actor_id != local_id and other.third_person_gun != null:
 						if other.third_person_gun.scene_file_path == other.WEAPON_MODELS[other.weapon]:
 							test_remote_weapons[other.weapon] = true
@@ -591,8 +596,8 @@ func _physics_process(dt: float) -> void:
 				request_quit()
 			if not round_client and bot_test_timer > 26:
 				var audio_ok: bool = not audio_test or (sound.played_events.get("gun_ar", 0) > 0 and sound.played_events.get("step_hard", 0) + sound.played_events.get("step_grass", 0) > 0)
-				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_menu_done and test_magazines and test_remote_weapons.size() == 3 and test_grenade_seen and test_grenade_exploded and actors[local_id].grenades == 1 and actors[local_id].prediction_corrections > 20 and audio_ok:
-					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok recoil=ok remote_stance=ok remote_animation=ok grenade=ok explosion=ok action_once=ok weapon_models=ok online_menu=ok magazines=ok reconciliation=ok audio=%s" % [local_id, actors.size(), phase, "ok" if audio_test else "muted"])
+				if actors.has(local_id) and phase == "live" and actors.size() >= 2 and test_leaned and test_remote_leaned and test_moved and test_fired and test_crouched and test_recoil and test_remote_crouch and test_remote_animation and test_menu_done and test_magazines and test_remote_weapons.size() == 3 and test_grenade_seen and test_grenade_exploded and actors[local_id].grenades == 1 and actors[local_id].prediction_corrections > 20 and audio_ok:
+					print("ONLINE_CLIENT_PASS id=%d actors=%d phase=%s stance=ok lean=ok remote_lean=ok recoil=ok remote_stance=ok remote_animation=ok grenade=ok explosion=ok action_once=ok weapon_models=ok online_menu=ok magazines=ok reconciliation=ok audio=%s" % [local_id, actors.size(), phase, "ok" if audio_test else "muted"])
 					request_quit()
 				else:
 					push_error("Online smoke test failed to reach active match")
@@ -668,7 +673,7 @@ func _physics_process(dt: float) -> void:
 
 func local_command(actor) -> Dictionary:
 	sequence += 1
-	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "loot": false, "throw": false, "weapon": -1}
+	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "loot": false, "throw": false, "weapon": -1, "lean": 0.0}
 	if ui.pause_panel.visible or ui.inventory.visible or ui.tactical_map.visible or not actor.alive:
 		action_latch.clear()
 		return cmd
@@ -676,6 +681,7 @@ func local_command(actor) -> Dictionary:
 	cmd.x = movement.x
 	cmd.z = movement.y
 	cmd.ads = Input.is_action_pressed("aim")
+	cmd.lean = Input.get_axis("lean_left", "lean_right")
 	for action in ["fire", "sprint", "crouch"]:
 		cmd[action] = Input.is_action_pressed(action)
 	if inventory_pointer_guard:
@@ -700,6 +706,7 @@ func local_command(actor) -> Dictionary:
 		cmd.fire = true
 		cmd.crouch = int(bot_test_timer) % 6 < 3
 		cmd.ads = true
+		cmd.lean = -1.0 if int(bot_test_timer) % 4 < 2 else 1.0
 		if phase == "live" and bot_test_timer > 19 and not test_throw_sent:
 			cmd.throw = true
 			action_latch["throw"] = true
@@ -770,9 +777,9 @@ func receive_actions(actor, round_id: String, cmd: Dictionary, loot_target = -1)
 	return true
 
 func valid_command(cmd: Dictionary) -> bool:
-	if cmd.size() != 15:
+	if cmd.size() != 16:
 		return false
-	for key in ["seq", "x", "z", "yaw", "pitch", "weapon"]:
+	for key in ["seq", "x", "z", "yaw", "pitch", "weapon", "lean"]:
 		if not cmd.has(key) or not (cmd[key] is float or cmd[key] is int):
 			return false
 		if not is_finite(float(cmd[key])):
@@ -780,7 +787,7 @@ func valid_command(cmd: Dictionary) -> bool:
 	for key in ["fire", "sprint", "crouch", "ads", "jump", "reload", "heal", "loot", "throw"]:
 		if not cmd.has(key) or not cmd[key] is bool:
 			return false
-	return absf(cmd.x) <= 1 and absf(cmd.z) <= 1 and absf(cmd.yaw) <= PI + 0.01 and absf(cmd.pitch) <= 1.46 and cmd.weapon >= -1 and cmd.weapon <= 2
+	return absf(cmd.lean) <= 1 and absf(cmd.x) <= 1 and absf(cmd.z) <= 1 and absf(cmd.yaw) <= PI + 0.01 and absf(cmd.pitch) <= 1.46 and cmd.weapon >= -1 and cmd.weapon <= 2
 
 func apply_command(actor, cmd: Dictionary) -> void:
 	actor.move_input = Vector2(cmd.x, cmd.z).limit_length()
@@ -788,6 +795,7 @@ func apply_command(actor, cmd: Dictionary) -> void:
 	actor.pitch = cmd.pitch
 	actor.shooting = cmd.fire and phase == "live"
 	actor.sprint = cmd.sprint
+	actor.lean_input = cmd.lean
 	actor.crouch = cmd.crouch
 	actor.aiming = cmd.ads
 	apply_actions(actor, cmd)
@@ -960,7 +968,7 @@ func shoot(actor) -> void:
 		last_end = origin + direction * 100 if hit.is_empty() else hit.position
 		if not hit.is_empty() and hit.collider is CharacterBody3D:
 			var target = hit.collider
-			var headshot: bool = hit.get("headshot", hit.position.y - target.position.y > target.headshot_height())
+			var headshot: bool = hit.get("headshot", target.is_headshot(hit.position))
 			var amount: float = actor.DAMAGE[actor.weapon] * (1.65 if headshot else 1.0)
 			if actor.weapon == 1:
 				amount *= clampf(1 - origin.distance_to(hit.position) / 60, 0.15, 1)

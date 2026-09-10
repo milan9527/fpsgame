@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+timeout 30s ./tools/godot --headless --path client --script ../tests/lean_rules.gd > artifacts/lean-rules.log 2>&1
+rg -q LEAN_RULES_PASS artifacts/lean-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/lean-rules.log; then cat artifacts/lean-rules.log; exit 1; fi
 timeout 30s ./tools/godot --headless --path client --script ../tests/zone_terrain_rules.gd > artifacts/zone-terrain-rules.log 2>&1
 rg -q ZONE_TERRAIN_RULES_PASS artifacts/zone-terrain-rules.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/zone-terrain-rules.log; then cat artifacts/zone-terrain-rules.log; exit 1; fi

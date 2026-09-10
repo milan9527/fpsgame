@@ -9,6 +9,9 @@ timeout 25s ./tools/godot --headless --path client --script ../tests/death_loot_
 rg -q DEATH_LOOT_RULES_PASS artifacts/death-loot-rules.log
 timeout 25s xvfb-run -a ./tools/godot --path client --audio-driver Dummy --script ../tests/inventory_rules.gd -- --capture-inventory > artifacts/inventory-rules.log 2>&1
 rg -q INVENTORY_RULES_PASS artifacts/inventory-rules.log
+timeout 25s ./tools/godot --headless --path client --script ../tests/drop_rules.gd > artifacts/drop-rules.log 2>&1
+rg -q DROP_RULES_PASS artifacts/drop-rules.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/drop-rules.log; then cat artifacts/drop-rules.log; exit 1; fi
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/inventory-rules.log; then cat artifacts/inventory-rules.log; exit 1; fi
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/death-loot-rules.log; then cat artifacts/death-loot-rules.log; exit 1; fi
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/magazine-rules.log; then cat artifacts/magazine-rules.log; exit 1; fi
@@ -89,3 +92,4 @@ docker compose restart game
 
 .venv/bin/python tools/test_death_loot_network.py
 .venv/bin/python tools/test_inventory_network.py
+.venv/bin/python tools/test_drop_network.py

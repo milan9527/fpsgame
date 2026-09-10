@@ -4,6 +4,8 @@
 
 ## 已实际实现
 
+- 背包按数量丢弃储备弹药/医疗包/手雷、权威生成与近距离同类合并、其他角色回收及治疗库存保护；协议 7 可靠去重与限流。详见 [丢弃物资](DROPPING.md)。
+
 - B 键战场背包：库存与三枪弹匣、明确选择附近物资、切枪/换弹/治疗、单机/在线权威操作、输入隔离及关闭生命周期。详见 [背包](INVENTORY.md)，尚无完整物品与配件系统。
 
 - 淘汰库存转移、弹匣弹药回收、按类别堆放与部分拾取；清空尸体库存防重复生成，详见 [淘汰物资](DEATH_LOOT.md)。
@@ -130,6 +132,9 @@
 | 背包按钮、指定拾取、余量、切枪/换弹/治疗、输入隔离及关闭生命周期 | 通过（实际 OpenGL 及打包版） | `artifacts/inventory-rules.log`、`artifacts/packed-inventory.log` |
 | 图形窗口真实鉴权客户端背包选择/切枪/余量同步及鼠标捕获 | 通过 | `artifacts/inventory-network.log` |
 | 背包版本双客户端、整局落库与兼容检查 | 通过 | `artifacts/inventory-online.log`、`artifacts/inventory-full-round.log`、`artifacts/inventory-protocol.log` |
+| 主动丢弃守恒、合并、另一角色取用、重放/数量/治疗/限流/旧回合保护 | 通过（源码及打包版） | `artifacts/drop-rules.log`、`artifacts/packed-drop.log` |
+| 图形窗口真实客户端丢弃/重放拒绝/回收与背包视觉回归 | 通过 | `artifacts/drop-network.log`、`artifacts/drop-inventory-render.log` |
+| 协议 7 兼容及整局落库 | 通过 | `artifacts/drop-protocol.log`、`artifacts/drop-full-round.log` |
 | 补给目标提示与高亮画面 | 已检查 | `artifacts/supply-prompt.png` |
 
 20 倍速测试用于验证完整流程，不代表实时性能、弱网适应性或长期稳定性。双客户端验证不等于 16 真人并发验证。

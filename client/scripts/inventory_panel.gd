@@ -3,6 +3,7 @@ extends Control
 signal close_requested
 signal pickup_requested(id: int)
 signal equipment_requested(action: String, index: int)
+signal drop_requested(kind: int, count: int)
 const SupplyRules = preload("res://scripts/supply_rules.gd")
 var stock: Label
 var empty: Label
@@ -11,6 +12,9 @@ var rows := {}
 var weapons: Array[Button] = []
 var reload_button: Button
 var heal_button: Button
+var drop_kind: OptionButton
+var drop_count: SpinBox
+var drop_button: Button
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -62,11 +66,31 @@ func _ready() -> void:
 	empty.text = "No reachable supplies within 2.8 m."
 	right.add_child(empty)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(550, 420)
+	scroll.custom_minimum_size = Vector2(550, 240)
 	right.add_child(scroll)
 	nearby = VBoxContainer.new()
 	nearby.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(nearby)
+	var drop_title := Label.new()
+	drop_title.text = "DROP CARRIED SUPPLIES AT YOUR FEET"
+	right.add_child(drop_title)
+	var drop_row := HBoxContainer.new()
+	right.add_child(drop_row)
+	drop_kind = OptionButton.new()
+	for kind in [0, 1, 3]:
+		drop_kind.add_item(SupplyRules.NAMES[kind], kind)
+	drop_row.add_child(drop_kind)
+	drop_count = SpinBox.new()
+	drop_count.min_value = 1
+	drop_count.max_value = 300
+	drop_count.step = 1
+	drop_count.value = 1
+	drop_count.custom_minimum_size.x = 110
+	drop_row.add_child(drop_count)
+	drop_button = Button.new()
+	drop_button.text = "DROP"
+	drop_button.pressed.connect(func(): drop_requested.emit(drop_kind.get_selected_id(), int(drop_count.value)))
+	drop_row.add_child(drop_button)
 	var close := Button.new()
 	close.text = "RETURN TO OPERATION"
 	close.pressed.connect(func(): close_requested.emit())
@@ -80,6 +104,10 @@ func refresh(actor, supplies: Array) -> void:
 		weapons[index].disabled = index == actor.weapon or actor.reload_left > 0 or actor.throw_left > 0
 	reload_button.disabled = actor.reserve <= 0 or actor.ammo >= actor.CAPACITY[actor.weapon] or actor.heal_left > 0 or actor.reload_left > 0 or actor.throw_left > 0
 	heal_button.disabled = actor.medkits <= 0 or actor.health >= 100 or actor.reload_left > 0 or actor.heal_left > 0 or actor.throw_left > 0
+	var kind := drop_kind.get_selected_id()
+	var available := int(actor.get(SupplyRules.FIELDS[kind]))
+	drop_count.max_value = maxi(1, available)
+	drop_button.disabled = available <= 0 or (kind == 1 and actor.heal_left > 0)
 	var present := {}
 	for item in supplies:
 		var id: int = item.id

@@ -143,6 +143,7 @@ func _ready() -> void:
 		ui.inventory_changed.connect(func(_enabled): action_latch.clear(); inventory_pointer_guard = true)
 		ui.inventory.pickup_requested.connect(inventory_pickup)
 		ui.inventory.equipment_requested.connect(inventory_equipment)
+		ui.inventory.drop_requested.connect(inventory_drop)
 		ui.solo_requested.connect(start_solo)
 		ui.leaderboard_requested.connect(show_leaderboard)
 		ui.online_requested.connect(sign_in)
@@ -395,6 +396,60 @@ func inventory_pickup(id: int) -> void:
 
 func inventory_equipment(action: String, index: int) -> void:
 	inventory_action(action, index)
+
+func inventory_drop(kind: int, count: int) -> void:
+	if dedicated or not running or phase != "live" or not ui.inventory.visible or ui.pause_panel.visible or not actors.has(local_id):
+		return
+	sequence += 1
+	if online:
+		if multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+			drop_command.rpc_id(1, network_round_id, sequence, kind, count)
+	else:
+		receive_drop(actors[local_id], match_id, sequence, kind, count)
+
+@rpc("any_peer", "call_remote", "reliable", 4)
+func drop_command(round_id: String, seq, kind, count) -> void:
+	if not dedicated:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if sessions.has(id) and actors.has(id):
+		receive_drop(actors[id], round_id, seq, kind, count)
+
+func receive_drop(actor, round_id: String, seq, kind, count) -> bool:
+	if not seq is int or not kind is int or not count is int:
+		return false
+	if round_id != match_id or phase != "live" or not actor.alive:
+		return false
+	if seq < 0 or seq > 2147483647 or seq <= actor.last_action_sequence:
+		return false
+	actor.last_action_sequence = seq
+	if seq < actor.last_sequence - 120 or actor.action_tokens < 1:
+		return false
+	actor.action_tokens -= 1
+	if kind not in [0, 1, 3] or count <= 0 or count > 300:
+		return false
+	# Healing consumes its medkit at completion; keep it reserved until then.
+	if kind == 1 and actor.heal_left > 0:
+		return false
+	var field: String = SupplyRules.FIELDS[kind]
+	var stock: int = actor.get(field)
+	if count > stock:
+		return false
+	var target := -1
+	for id in loot:
+		var item: Dictionary = loot[id]
+		if item.has("drop_slot") and item.kind == kind and actor.position.distance_to(item.p) < 0.25 and supply_accessible(actor, item):
+			target = id
+			break
+	if target >= 0:
+		loot[target].amount = SupplyRules.amount(loot[target]) + count
+	else:
+		while loot.has(next_loot_id):
+			next_loot_id += 1
+		loot[next_loot_id] = {"p": actor.position, "kind": kind, "amount": float(count), "drop_slot": kind}
+		next_loot_id += 1
+	actor.set(field, stock - count)
+	return true
 
 func _physics_process(dt: float) -> void:
 	if not running or get_tree().paused:

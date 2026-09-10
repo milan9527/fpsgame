@@ -14,6 +14,7 @@ cp docs/SUPPLIES.md artifacts/IronMeridian-Linux/docs/SUPPLIES.md
 cp docs/AMMUNITION.md artifacts/IronMeridian-Linux/docs/AMMUNITION.md
 cp docs/DEATH_LOOT.md artifacts/IronMeridian-Linux/docs/DEATH_LOOT.md
 cp docs/INVENTORY.md artifacts/IronMeridian-Linux/docs/INVENTORY.md
+cp docs/DROPPING.md artifacts/IronMeridian-Linux/docs/DROPPING.md
 cp LICENSE artifacts/IronMeridian-Linux/LICENSE
 cat > artifacts/IronMeridian-Linux/play.sh <<'SH'
 #!/usr/bin/env bash
@@ -31,6 +32,9 @@ timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests
 rg -q DEATH_LOOT_RULES_PASS artifacts/packed-death-loot.log
 timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/inventory_rules.gd" > artifacts/packed-inventory.log 2>&1
 rg -q INVENTORY_RULES_PASS artifacts/packed-inventory.log
+timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/drop_rules.gd" > artifacts/packed-drop.log 2>&1
+rg -q DROP_RULES_PASS artifacts/packed-drop.log
+if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-drop.log; then cat artifacts/packed-drop.log; exit 1; fi
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/packed-inventory.log; then cat artifacts/packed-inventory.log; exit 1; fi
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-death-loot.log; then cat artifacts/packed-death-loot.log; exit 1; fi
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-magazines.log; then cat artifacts/packed-magazines.log; exit 1; fi

@@ -56,4 +56,12 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 `tests/rescue_rules.gd` 在实际 Godot 世界中验证倒地、动作限制、真实墙体遮挡、快照复制/恢复、受伤/移动/距离/再次交互中断、可靠动作重放、完成、机器人救援、流血归因、整队淘汰及单人立即死亡。证据 `artifacts/rescue-rules.log`。旧存档和单人完整对局分别见 `artifacts/rescue-solo-checkpoint.log` 与 `artifacts/rescue-solo-smoke.log`。
 
-尚需专门的四客户端真实网络倒地/扶起/中断/结算验收；当前四客户端脚本只证明入场与队伍快照，不能替代它。当前倒地使用蹲姿，没有专用倒地动画；完整队伍观战/地图和邀请仍待开发。开发协议 16 扩展快照字段 `downed`、`down_health`、`bleed`、`revive_target`、`revive_left`；旧单人检查点不包含这些字段。
+四客户端倒地/扶起/两次受伤中断/队伍胜负同步已通过专门验收，战绩落库与退出/会话撤销组合验收仍待完成。原有入场脚本仍只证明入场与队伍快照。当前倒地使用蹲姿，没有专用倒地动画；完整队伍观战/地图和邀请仍待开发。开发协议 16 扩展快照字段 `downed`、`down_health`、`bleed`、`revive_target`、`revive_left`；旧单人检查点不包含这些字段。
+
+## 四客户端救援网络验收
+
+运行 `.venv/bin/python tools/test_rescue_network.py`：临时专服连接独立开发 API，监听 UDP 27032；四个真实客户端使用各自账号完成房间票据鉴权。夹具控制伤害时机并关闭机器人攻击，以稳定制造倒地、救援者受伤、伤员受伤、扶起完成和对方整队淘汰。救援者实际注入拾取交互输入，由客户端正常可靠动作链路发送，未直接调用专服救援方法。四个客户端都必须看到倒地、进度、两次中断、恢复 30 生命及两队名次，专服另检查击杀与排名。
+
+证据：`artifacts/rescue-network.log`、`artifacts/rescue-network-server.log`、`artifacts/rescue-network-client-0.log` 至 `-3.log`。测试不是自由对战压力测试，也不证明组队战绩落库：当前专服仍阻止未适配的双人结果写入单人结果接口。
+
+同时修正倒地补枪的护甲重复扣除及淘汰报告：补枪仅消耗倒地生命，剩余护甲进入死亡掉落，报告显示该次倒地生命损失。`tests/rescue_rules.gd` 验证 82 点剩余护甲完整回收以及 100 点补枪伤害报告；`artifacts/rescue-death-recap.log` 验证既有报告规则回归。

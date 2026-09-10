@@ -107,6 +107,21 @@ func run() -> void:
 	game.rescue.update(game, 0.01)
 	assert(not player.alive and player.rank == ally.rank and player.rank == 8)
 	assert(enemy.kills == 2)
+	game.start_solo("duo")
+	game.elapsed = 20
+	player = game.actors[1]
+	player.health = 10
+	player.armor = 100
+	game.damage(player, 30, -2)
+	assert(player.downed and player.armor == 82)
+	game.damage(player, 100, -2)
+	assert(not player.alive and game.ui.death_recap.health_damage == 100)
+	assert(game.ui.death_recap.armor_damage == 0, "Downed damage cannot double-charge armor")
+	var recovered_armor := 0.0
+	for item in game.loot.values():
+		if item.get("drop_slot", -1) == 2 and item.p == player.position:
+			recovered_armor += item.amount
+	assert(recovered_armor == 82, "Finisher preserves the remaining armor in the death drop")
 	# Solo fatal damage remains immediate and old checkpoint fields stay valid.
 	game.start_solo()
 	game.elapsed = 20

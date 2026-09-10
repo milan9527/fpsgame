@@ -1272,7 +1272,7 @@ func damage(target, amount: float, attacker_id: int, bypass_protection := false,
 			distance = target.position.distance_to(impact_origin)
 		elif actors.has(attacker_id) and attacker_id != target.actor_id:
 			distance = target.position.distance_to(actors[attacker_id].position)
-		var report := {"source": "YOURSELF" if attacker_id == target.actor_id else source, "cause": method, "headshot": headshot, "distance": distance, "health_damage": health_before - target.health, "armor_damage": armor_before - target.armor}
+		var report := {"source": "YOURSELF" if attacker_id == target.actor_id else source, "cause": method, "headshot": headshot, "distance": distance, "health_damage": actual_damage if was_downed else health_before - target.health, "armor_damage": armor_before - target.armor}
 		if dedicated:
 			if peer_ready(target.actor_id):
 				death_report.rpc_id(target.actor_id, match_id, report)

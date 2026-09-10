@@ -398,7 +398,7 @@ func apply_damage(amount: float, ignore_armor := false, can_knock := false) -> v
 		down_health = maxf(0, down_health - amount)
 		if down_health > 0:
 			return
-	var absorbed := 0.0 if ignore_armor else minf(armor, amount * 0.6)
+	var absorbed := 0.0 if ignore_armor or downed else minf(armor, amount * 0.6)
 	armor -= absorbed
 	health = maxf(0, health - (amount - absorbed))
 	if health <= 0:

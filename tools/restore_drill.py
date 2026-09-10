@@ -23,6 +23,38 @@ SELECT json_build_object(
 );
 """
 
+TEAM_SQL = """
+SELECT json_build_object(
+ 'invalid_mode_rows', (SELECT count(*) FROM results r JOIN matches m ON m.id=r.match_id
+   WHERE m.mode NOT IN ('solo','duo') OR (m.mode='solo' AND r.team_id<>0)
+      OR (m.mode='duo' AND (r.team_id<1 OR r.team_id>32 OR r.rank>32))),
+ 'invalid_teams', (SELECT count(*) FROM (
+   SELECT r.match_id,r.team_id FROM results r JOIN matches m ON m.id=r.match_id
+   WHERE m.mode='duo' GROUP BY r.match_id,r.team_id HAVING count(*)>2 OR min(r.rank)<>max(r.rank)
+ ) q),
+ 'invalid_placements', (SELECT count(*) FROM (
+   SELECT r.match_id,r.rank FROM results r JOIN matches m ON m.id=r.match_id
+   GROUP BY r.match_id,r.rank,m.mode
+   HAVING (m.mode='solo' AND count(*)>1) OR (m.mode='duo' AND count(DISTINCT r.team_id)>1)
+ ) q),
+ 'mismatched_account_totals', (SELECT count(*) FROM users u LEFT JOIN (
+   SELECT user_id,count(*) AS matches,sum(kills) AS kills,sum(CASE WHEN rank=1 THEN 1 ELSE 0 END) AS wins
+   FROM results GROUP BY user_id
+ ) r ON r.user_id=u.id
+ WHERE u.matches<>coalesce(r.matches,0) OR u.kills<>coalesce(r.kills,0) OR u.wins<>coalesce(r.wins,0)),
+ 'mode_totals', (SELECT coalesce(json_object_agg(mode, totals),'{}'::json) FROM (
+   SELECT m.mode,json_build_object('matches',count(DISTINCT m.id),'player_results',count(r.id),
+     'player_wins',sum(CASE WHEN r.rank=1 THEN 1 ELSE 0 END),'kills',coalesce(sum(r.kills),0)) AS totals
+   FROM matches m LEFT JOIN results r ON r.match_id=m.id GROUP BY m.mode
+ ) q)
+);
+"""
+
+def validate_team_state(state):
+    if any(state[key] for key in ('invalid_mode_rows', 'invalid_teams', 'invalid_placements', 'mismatched_account_totals')):
+        raise ValueError('Restored team results failed mode, placement or account-total checks')
+
+
 def drill(bundle, report_path):
     os.umask(0o077)
     manifest = validate(bundle)  # Reject corruption before any container is created.
@@ -44,14 +76,20 @@ def drill(bundle, report_path):
                             '--exit-on-error', '--single-transaction', '--no-owner', '--no-privileges'], stdin=source, check=True)
         raw = subprocess.check_output(['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-At', '-v', 'ON_ERROR_STOP=1', '-c', SQL], text=True)
         state = json.loads(raw)
-        if state['schema_revision'] not in ['0002', '0003'] or any(state[key] for key in ['invalid_stats', 'invalid_results', 'orphan_results', 'duplicate_results', 'unvalidated_constraints']):
+        if state['schema_revision'] not in ['0002', '0003', '0004'] or any(state[key] for key in ['invalid_stats', 'invalid_results', 'orphan_results', 'duplicate_results', 'unvalidated_constraints']):
             raise ValueError('Restored database failed schema or integrity checks')
-        if state['schema_revision'] == '0003':
+        if state['schema_revision'] in ['0003', '0004']:
             invalid = subprocess.check_output(['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-At', '-v', 'ON_ERROR_STOP=1', '-c',
                 'SELECT count(*) FROM users WHERE session_version IS NULL OR session_version<0'], text=True)
             state['invalid_session_versions'] = int(invalid.strip())
             if state['invalid_session_versions']:
                 raise ValueError('Restored session versions failed integrity checks')
+        if state['schema_revision'] == '0004':
+            raw = subprocess.check_output(['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-At', '-v', 'ON_ERROR_STOP=1', '-c', TEAM_SQL], text=True)
+            state['team_results'] = json.loads(raw)
+            validate_team_state(state['team_results'])
+            mode_probe = "BEGIN; DO $$ BEGIN BEGIN INSERT INTO matches(id,mode,created) VALUES ('restore-mode-probe','invalid',now()); RAISE EXCEPTION 'mode check accepted invalid value'; EXCEPTION WHEN check_violation THEN NULL; END; BEGIN INSERT INTO results(match_id,user_id,kills,rank,team_id) VALUES ('missing-match','missing-user',0,1,-1); RAISE EXCEPTION 'team check accepted invalid value'; EXCEPTION WHEN check_violation THEN NULL; END; END $$; ROLLBACK;"
+            subprocess.run(['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-v', 'ON_ERROR_STOP=1', '-c', mode_probe], stdout=subprocess.DEVNULL, check=True)
         # Exercise the restored FK/check constraints and roll back the probe transaction.
         probe = "BEGIN; DO $$ BEGIN BEGIN INSERT INTO results(match_id,user_id,kills,rank) VALUES ('missing-match','missing-user',0,1); RAISE EXCEPTION 'foreign key accepted invalid row'; EXCEPTION WHEN foreign_key_violation THEN NULL; END; END $$; ROLLBACK;"
         subprocess.run(['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-v', 'ON_ERROR_STOP=1', '-c', probe], stdout=subprocess.DEVNULL, check=True)

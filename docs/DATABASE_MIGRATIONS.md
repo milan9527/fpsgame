@@ -48,4 +48,4 @@ docker compose run --rm --no-deps \
 
 账户原有统计是所有模式总计。`GET /profile?mode=solo` 和 `?mode=duo` 分别查询对应模式的对局、胜利和击杀，不将队伍胜利计入单人胜利。旧 `/profile` 响应不变。
 
-`0004` 含组队数据时拒绝 downgrade，以免丢掉队伍语义；仅单人数据时允许回退，测试证明旧业务字段保持不变。测试入口 `backend/tests/test_team_results.py`、`test_migrations.py`，独立数据库证据 `artifacts/team-results-backend.log`（共 47 项后端回归通过）。开发升级前 dump 为私有文件 `artifacts/duo-before-schema-0004.dump`。原发布恢复工具的 0004 支持与完整恢复演练仍须在组队发布前完成。
+`0004` 含组队数据时拒绝 downgrade，以免丢掉队伍语义；仅单人数据时允许回退，测试证明旧业务字段保持不变。测试入口 `backend/tests/test_team_results.py`、`test_migrations.py`，独立数据库证据 `artifacts/team-results-backend.log`（共 47 项后端回归通过）。开发升级前 dump 为私有文件 `artifacts/duo-before-schema-0004.dump`。恢复工具现已支持 0004；实际组队恢复演练见 `artifacts/duo-restore-drill.json`，旧发布结构回归见 `artifacts/release-restore-regression.json`。

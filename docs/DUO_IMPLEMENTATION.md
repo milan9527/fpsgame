@@ -89,3 +89,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 战斗 HUD 显示队友姓名、生命/倒地剩余秒数/救援进度/淘汰状态和距离。队友缺失时显示不可用，不保留过期位置。小地图和战术地图仅绘制本队其他成员：绿色存活标记、橙色倒地标记、淘汰叉号；战术地图标注姓名，姓名保持在地图边界内。进入单人、新回合或离开时清除标记。队伍文字带深色描边以适应亮天空。
 
 原生验证：`tests/team_hud.gd`，日志 `artifacts/team-hud.log`。原单人地图回归：`artifacts/team-map-solo-regression.log`。真实四客户端救援场景确认队友倒地提示及本队标记筛选，并继续通过胜负/战绩落库验收：`artifacts/team-hud-network.log`。实际渲染截图为 `artifacts/team-hud.png` 和 `artifacts/team-map.png`。尚未实现队友共享主动标点和语音通信。
+
+## 组队数据恢复验收
+
+备份工具提供独立开发环境入口，恢复器支持 0004 的队伍排名与账户总计检查。实际双人数据库备份已在无网络临时 PostgreSQL 容器恢复并验证，旧发布库 0003 也通过恢复回归；详见 [运维说明](OPERATIONS.md) 及 `artifacts/duo-restore-drill.json`。邀请、进行中的组队检查点、共享标点/语音与其余发行验收仍需继续完成。

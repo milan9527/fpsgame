@@ -4,9 +4,9 @@
 
 | 字段 | 当前值 | 更新规则 |
 |---|---|---|
-| `protocol` | `8` | 改变 RPC、输入、快照或其他不兼容网络语义时递增 |
-| `content_revision` | `ash-valley-11` | 改变地图碰撞或需要各端一致的游戏资源/规则时更新 |
-| `client_version` | `0.16.0-dev` | 人类可读发行版本；仅用于提示，不决定兼容 |
+| `protocol` | `9` | 改变 RPC、输入、快照或其他不兼容网络语义时递增 |
+| `content_revision` | `ash-valley-12` | 改变地图碰撞或需要各端一致的游戏资源/规则时更新 |
+| `client_version` | `0.17.0-dev` | 人类可读发行版本；仅用于提示，不决定兼容 |
 
 兼容要求前两个字段完全一致。客户端在登录前查询 `GET /protocol`，不兼容时显示升级提示；匹配 API 在签发票据前再次验证。Redis 票据存储协议和内容版本；专服消费票据时也检查绑定，错误版本不会烧掉正常票据。消费检查与删除在同一 Lua 脚本内执行。
 
@@ -20,12 +20,14 @@
 
 协议 8 将默认匹配和专服鉴权迁移至房间目录入口；票据绑定 room_id、instance_id 与 generation。旧单地址接口的票据不再用于 Godot 入场。
 
+协议 9 在快照中增加 `zone_state`：当前圆心与半径、下一圈圆心与半径、阶段编号、收缩状态及阶段剩余秒数。专服决定圈位与时间，客户端仅显示当前阶段预告；原 `zone` 字段仍表示当前半径。
+
 专服启动时用服务密钥请求 `/internal/build/check`，成功后才监听 ENet 端口。不兼容或 API 不可用会导致进程非零退出，Docker 可按重启策略重试。API `/health` 同时提供数据库与协议版本。
 
 修改清单后，重新构建并一起部署 API、专服和客户端：
 
 ```sh
-docker compose up -d --build api game
+docker compose up -d --build api game game2
 ./tools/package.sh
 ```
 

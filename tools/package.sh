@@ -26,6 +26,10 @@ cd "$(dirname "$0")"
 exec ./IronMeridian --main-pack IronMeridian.pck "$@"
 SH
 chmod +x artifacts/IronMeridian-Linux/play.sh
+cp docs/SAFE_ZONES.md artifacts/IronMeridian-Linux/docs/SAFE_ZONES.md
+timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/zone_rules.gd" > artifacts/packed-zones.log 2>&1
+rg -q ZONE_RULES_PASS artifacts/packed-zones.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-zones.log; then cat artifacts/packed-zones.log; exit 1; fi
 # A packed-project smoke run checks imported GLB assets and resource paths.
 timeout 25s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/supply_rules.gd" > artifacts/packed-supplies.log 2>&1
 rg -q SUPPLY_RULES_PASS artifacts/packed-supplies.log

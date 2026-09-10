@@ -42,6 +42,9 @@ var phase := "standby"
 var phase_time := 0.0
 var elapsed := 0.0
 var zone := 110.0
+var zone_center := Vector2.ZERO
+var zone_plan = preload("res://scripts/zone_rules.gd").new()
+var zone_state: Dictionary = {}
 var zone_tick := 0.0
 var net_tick := 0.0
 var local_id := 1
@@ -333,8 +336,11 @@ func reset_round() -> void:
 	next_loot_id = 48
 	elapsed = 0
 	zone = 110
+	zone_center = Vector2.ZERO
+	zone_plan.reset(rng.randi())
+	zone_state = zone_plan.sample(0)
 	zone_tick = 0
-	world.set_zone(zone)
+	world.set_zone(zone, zone_center)
 	# Preserve the generation of waiting-room reservations when the first player
 	# starts the lobby. Later rounds always get a fresh generation.
 	if phase != "waiting" or match_id.is_empty():
@@ -615,9 +621,11 @@ func _physics_process(dt: float) -> void:
 	elif phase == "live":
 		elapsed += dt
 		phase_time = maxf(0, ROUND_SECONDS - elapsed)
-		# Calm first 35 seconds; continuously closes to 4m by the final minute.
-		zone = lerpf(110, 4, clampf((elapsed - 35) / 220, 0, 1))
-		world.set_zone(zone)
+		# The authority alone advances the staged circle schedule.
+		zone_state = zone_plan.sample(elapsed)
+		zone = zone_state.radius
+		zone_center = zone_state.center
+		world.set_zone(zone, zone_center)
 		zone_tick += dt
 		for actor in actors.values():
 			if actor.is_bot:
@@ -634,7 +642,7 @@ func _physics_process(dt: float) -> void:
 		if zone_tick >= 1:
 			zone_tick = 0
 			for actor in actors.values():
-				if Vector2(actor.position.x, actor.position.z).length() > zone:
+				if Vector2(actor.position.x, actor.position.z).distance_to(zone_center) > zone:
 					damage(actor, 5 + elapsed / 24, 0)
 		advance_grenades(dt)
 		if alive_count() <= 1 or elapsed >= ROUND_SECONDS:
@@ -844,10 +852,10 @@ func bot_input(actor, dt: float) -> void:
 			actor.bot_patrol_left = rng.randf_range(4, 8)
 			var angle := rng.randf() * TAU
 			var radius := sqrt(rng.randf()) * maxf(4, zone - 12)
-			actor.bot_destination = Vector3(cos(angle) * radius, 0, sin(angle) * radius)
+			actor.bot_destination = Vector3(zone_center.x + cos(angle) * radius, 0, zone_center.y + sin(angle) * radius)
 			var nearest := 35.0
 			for supply in loot.values():
-				if Vector2(supply.p.x, supply.p.z).length() > maxf(4, zone - 7):
+				if Vector2(supply.p.x, supply.p.z).distance_to(zone_center) > maxf(4, zone - 7):
 					continue
 				var wanted: bool = (supply.kind == 0 and actor.reserve < 45) or (supply.kind == 1 and actor.medkits == 0) or (supply.kind == 2 and actor.armor < 25)
 				var distance: float = actor.position.distance_to(supply.p)
@@ -855,10 +863,10 @@ func bot_input(actor, dt: float) -> void:
 					nearest = distance
 					actor.bot_destination = supply.p
 		destination = actor.bot_destination
-	var radial := Vector2(actor.position.x, actor.position.z)
+	var radial := Vector2(actor.position.x, actor.position.z) - zone_center
 	actor.sprint = radial.length() > maxf(4, zone - 7)
 	if actor.sprint:
-		var safe := radial.normalized() * maxf(0, zone - 14)
+		var safe := zone_center + radial.normalized() * maxf(0, zone - 14)
 		destination = Vector3(safe.x, 0, safe.y)
 	var direction: Vector3 = actor.navigator.steer(actor, world, destination, dt)
 	# Short-range separation supplements global paths around static geometry.
@@ -1143,7 +1151,7 @@ func _process(dt: float) -> void:
 	spectator.update_view(actors, local_id, phase)
 	sound.update_actors(actors, world, get_viewport().get_camera_3d())
 	world.show_loot(loot)
-	world.set_zone(zone)
+	world.set_zone(zone, zone_center)
 	ui.update_scoreboard(actors.values(), Input.is_action_pressed("scoreboard") and not ui.pause_panel.visible and not ui.inventory.visible and not ui.tactical_map.visible)
 	if actors.has(local_id):
 		var actor = actors[local_id]
@@ -1181,7 +1189,7 @@ func _process(dt: float) -> void:
 		ui.grenade_warning_distance = INF
 		for grenade in grenades.values():
 			ui.grenade_warning_distance = minf(ui.grenade_warning_distance, viewed_actor.position.distance_to(grenade.position))
-		ui.update_hud(viewed_actor, alive_count(), phase, phase_time, zone, events, message)
+		ui.update_hud(viewed_actor, alive_count(), phase, phase_time, zone, events, message, zone_state)
 		ui.set_spectator(spectator.active, spectator.target_name, actor.rank)
 
 func peer_connected(id: int) -> void:
@@ -1298,7 +1306,7 @@ func broadcast_snapshot() -> void:
 			world_sync.rpc_id(id, match_id, loot)
 		# Four actors per compressed packet stay below the ENet MTU.
 		for offset in range(0, states.size(), 4):
-			var payload := {"round_id": match_id, "actors": states.slice(offset, offset + 4), "roster": actors.keys(), "phase": phase, "time": phase_time, "zone": zone, "events": events}
+			var payload := {"round_id": match_id, "actors": states.slice(offset, offset + 4), "roster": actors.keys(), "phase": phase, "time": phase_time, "zone": zone, "zone_state": zone_state, "events": events}
 			var packet := var_to_bytes(payload).compress(FileAccess.COMPRESSION_DEFLATE)
 			if packet.size() > 1150:
 				push_warning("Snapshot exceeds target packet size: " + str(packet.size()))
@@ -1327,6 +1335,8 @@ func snapshot(packet: PackedByteArray) -> void:
 	phase = payload.phase
 	phase_time = payload.time
 	zone = payload.zone
+	zone_state = payload.zone_state
+	zone_center = zone_state.get("center", Vector2.ZERO)
 	events = payload.events
 
 func sign_in(username: String, password: String, register: bool, endpoint: String) -> void:

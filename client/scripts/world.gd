@@ -176,10 +176,11 @@ func tree(at: Vector3) -> void:
 	foliage.position = at + Vector3(0, 6, 0)
 	add_child(foliage)
 
-func set_zone(radius: float) -> void:
+func set_zone(radius: float, center := Vector2.ZERO) -> void:
 	zone_radius = radius
 	if zone_mesh:
 		zone_mesh.scale = Vector3(radius, 1, radius)
+		zone_mesh.position = Vector3(center.x, 8, center.y)
 
 func show_loot(items: Dictionary) -> void:
 	for id in loot_nodes.keys():

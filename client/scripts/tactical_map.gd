@@ -8,6 +8,7 @@ var features: Array[Dictionary] = []
 var operator_position := Vector2.ZERO
 var operator_yaw := 0.0
 var zone_radius := 110.0
+var zone_info: Dictionary = {}
 var time_left := 300.0
 var waypoint = null
 
@@ -35,10 +36,11 @@ func mark(point: Vector2) -> bool:
 	queue_redraw()
 	return true
 
-func refresh(at: Vector3, yaw: float, zone: float, remaining: float) -> void:
+func refresh(at: Vector3, yaw: float, zone: float, remaining: float, circle: Dictionary = {}) -> void:
 	operator_position = Vector2(at.x, at.z)
 	operator_yaw = yaw
 	zone_radius = zone
+	zone_info = circle
 	time_left = remaining
 	queue_redraw()
 
@@ -58,7 +60,7 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.02, 0.05, 0.07, 0.96))
 	draw_string(font, Vector2(260, 70), "ASH VALLEY / TACTICAL MAP", HORIZONTAL_ALIGNMENT_LEFT, -1, 28, white)
 	draw_rect(MAP_RECT, Color("393c34"))
-	draw_circle(world_to_map(Vector2.ZERO), zone_radius / 240 * 640, Color("344b45"))
+	draw_circle(world_to_map(zone_info.get("center", Vector2.ZERO)), zone_radius / 240 * 640, Color("344b45"))
 	for feature in features:
 		var area: Rect2 = feature.rect
 		var rectangle := Rect2(world_to_map(area.position), area.size / BOUNDS.size * MAP_RECT.size)
@@ -71,7 +73,7 @@ func _draw() -> void:
 		if index < 6:
 			draw_string(font, MAP_RECT.position + Vector2(offset + 47, -12), "ABCDEF"[index], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, white)
 			draw_string(font, MAP_RECT.position + Vector2(-24, offset + 58), str(index + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, white)
-	draw_arc(world_to_map(Vector2.ZERO), zone_radius / 240 * 640, 0, TAU, 128, blue, 3, true)
+	draw_arc(world_to_map(zone_info.get("center", Vector2.ZERO)), zone_radius / 240 * 640, 0, TAU, 128, blue, 3, true)
 	draw_rect(MAP_RECT, white, false, 1)
 	var p := world_to_map(operator_position)
 	var forward := Vector2(-sin(operator_yaw), -cos(operator_yaw))
@@ -83,7 +85,9 @@ func _draw() -> void:
 		draw_circle(target, 7, MARKER, false, 2, true)
 		draw_line(target - Vector2(11, 0), target + Vector2(11, 0), MARKER, 2)
 		draw_line(target - Vector2(0, 11), target + Vector2(0, 11), MARKER, 2)
-	var lines := ["NORTH  /  -Z", "", "M / ESC     CLOSE MAP", "LEFT CLICK  SET WAYPOINT", "RIGHT CLICK CLEAR WAYPOINT", "", "BLUE RING   SAFE ZONE", "PALE BLOCKS BUILDINGS", "GRAY STRIPS ROADS", "GRID CELL   40 m", "", "ZONE RADIUS  %d m" % zone_radius, "ROUND TIME   %02d:%02d" % [int(time_left) / 60, int(time_left) % 60], "", "WORLD CONTINUES WHILE OPEN"]
+	if not zone_info.is_empty():
+		draw_arc(world_to_map(zone_info.next_center), zone_info.next_radius / 240 * 640, 0, TAU, 128, Color.WHITE, 2, true)
+	var lines := ["NORTH  /  -Z", "", "M / ESC     CLOSE MAP", "LEFT CLICK  SET WAYPOINT", "RIGHT CLICK CLEAR WAYPOINT", "", "BLUE RING   CURRENT ZONE", "WHITE RING  NEXT ZONE", "STAGE %d / %s %ds" % [zone_info.get("stage", 1), "SHRINK" if zone_info.get("moving", false) else "HOLD", ceili(zone_info.get("remaining", 0))], "PALE BLOCKS BUILDINGS", "GRAY STRIPS ROADS", "GRID CELL   40 m", "", "ZONE RADIUS  %d m" % zone_radius, "ROUND TIME   %02d:%02d" % [int(time_left) / 60, int(time_left) % 60], "", "WORLD CONTINUES WHILE OPEN"]
 	if waypoint is Vector2:
 		lines.append("WAYPOINT     %d m" % roundi(operator_position.distance_to(waypoint)))
 	for index in range(lines.size()):

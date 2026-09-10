@@ -39,6 +39,8 @@ func run() -> void:
 	assert(actor.position.distance_to(before_position) < 0.2)
 	assert(map.operator_position.distance_to(Vector2(actor.position.x, actor.position.z)) < 0.1)
 	assert(is_equal_approx(map.zone_radius, game.zone) and "36m" in game.ui.waypoint_label.text)
+	assert(game.zone_center.length() > 0.1 and game.zone_state.moving)
+	assert(map.zone_info == game.zone_state and game.world.zone_mesh.position.distance_to(Vector3(game.zone_center.x, 8, game.zone_center.y)) < 0.1)
 	Input.action_release("forward")
 	Input.action_release("fire")
 	Input.action_release("aim")

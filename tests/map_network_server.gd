@@ -9,6 +9,7 @@ class SupplyServer:
 
 	func begin_round() -> void:
 		super.begin_round()
+		elapsed = 45.0
 		for actor in actors.values():
 			if not actor.is_bot:
 				actor.position = Vector3(0, 0.02, 20)

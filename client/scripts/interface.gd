@@ -39,6 +39,7 @@ var radar: Control
 var local_position := Vector3.ZERO
 var local_yaw := 0.0
 var radius := 110.0
+var zone_info: Dictionary = {}
 var sensitivity := 0.0022
 var volume := 0.65
 var settings := ConfigFile.new()
@@ -405,7 +406,9 @@ func draw_hud() -> void:
 			hud.draw_arc(center, 62, angle - 0.25, angle + 0.25, 12, Color(1, 0.2, 0.1, opacity), 5)
 	var radar_center := Vector2(hud.size.x - 120, 120)
 	hud.draw_circle(radar_center, 88, Color(0.03, 0.08, 0.11, 0.85))
-	hud.draw_arc(radar_center, radius * 0.72, 0, TAU, 64, Color("72bbd9"), 2)
+	hud.draw_arc(radar_center + zone_info.get("center", Vector2.ZERO) * 0.72, radius * 0.72, 0, TAU, 64, Color("72bbd9"), 2)
+	if not zone_info.is_empty():
+		hud.draw_arc(radar_center + zone_info.next_center * 0.72, zone_info.next_radius * 0.72, 0, TAU, 64, Color.WHITE, 1)
 	hud.draw_line(radar_center + Vector2(-80, 0), radar_center + Vector2(80, 0), Color("49606a"), 7)
 	hud.draw_line(radar_center + Vector2(0, -80), radar_center + Vector2(0, 80), Color("49606a"), 7)
 	var p := radar_center + Vector2(local_position.x, local_position.z) * 0.72
@@ -415,10 +418,12 @@ func draw_hud() -> void:
 		var target: Vector2 = radar_center + (tactical_map.waypoint * 0.72).limit_length(80)
 		hud.draw_circle(target, 5, tactical_map.MARKER, false, 2)
 
-func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: float, events: Array, message: String) -> void:
+func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: float, events: Array, message: String, circle: Dictionary = {}) -> void:
 	weapon_blocked = actor.weapon_blocked
 	headline.text = "ASH VALLEY   /   " + phase.to_upper()
 	stats.text = "%02d ALIVE    •    %02d ELIMINATIONS    •    ZONE %dm    •    %02d:%02d" % [alive_count, actor.kills, zone, int(time_left) / 60, int(time_left) % 60]
+	if not circle.is_empty() and phase == "live":
+		headline.text += "   /   ZONE %d · %s %ds" % [circle.stage, "SHRINKING" if circle.moving else "CLOSES IN", ceili(circle.remaining)]
 	weapon.text = "%s    %02d / %03d" % [actor.NAMES[actor.weapon], actor.ammo, actor.reserve]
 	loadout_label.text = "1  AR %02d   |   2  SG %02d   |   3  SR %02d" % [actor.magazines[0], actor.magazines[1], actor.magazines[2]]
 	if actor.crouched:
@@ -432,7 +437,7 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 		prompt.text = "RELOADING   %.1fs" % actor.reload_left
 	elif actor.heal_left > 0:
 		prompt.text = "APPLYING MEDKIT   %.1fs" % actor.heal_left
-	elif Vector2(actor.position.x, actor.position.z).length() > zone:
+	elif Vector2(actor.position.x, actor.position.z).distance_to(circle.get("center", Vector2.ZERO)) > zone:
 		prompt.text = "WARNING  /  RETURN TO THE SAFE ZONE"
 	elif actor.weapon_blocked and not spectating:
 		prompt.text = "MUZZLE BLOCKED / STEP BACK OR REPOSITION"
@@ -445,7 +450,8 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 	local_position = actor.position
 	local_yaw = actor.yaw
 	radius = zone
-	tactical_map.refresh(actor.position, actor.yaw, zone, time_left)
+	zone_info = circle
+	tactical_map.refresh(actor.position, actor.yaw, zone, time_left, circle)
 	waypoint_label.visible = tactical_map.waypoint is Vector2 and not spectating
 	if waypoint_label.visible:
 		var distance: float = Vector2(actor.position.x, actor.position.z).distance_to(tactical_map.waypoint)

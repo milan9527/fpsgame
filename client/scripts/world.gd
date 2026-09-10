@@ -203,7 +203,7 @@ func show_loot(items: Dictionary) -> void:
 			loot_nodes.erase(id)
 			if highlighted_supply == id:
 				highlighted_supply = -1
-	var colors := ["e8c77b", "77d7ad", "7bbee8", "d9844e", "c2d6c9"]
+	var colors := ["e8c77b", "77d7ad", "7bbee8", "d9844e", "c2d6c9", "b5a1dc"]
 	var stack_heights := {}
 	for id in items:
 		var item: Dictionary = items[id]
@@ -223,11 +223,25 @@ func show_loot(items: Dictionary) -> void:
 				existing.set_meta("supply_kind", item.kind)
 				if highlighted_supply == id:
 					highlighted_supply = -1
+			update_supply_attachment(existing, item.kind)
 			continue
 		var mesh := block(item.p + offset, size, colors[item.kind], false)
 		mesh.material_override = mesh.material_override.duplicate()
 		mesh.set_meta("supply_kind", item.kind)
 		loot_nodes[id] = mesh
+		update_supply_attachment(mesh, item.kind)
+
+func update_supply_attachment(mesh: MeshInstance3D, kind: int) -> void:
+	var existing = mesh.get_node_or_null("ForegripDisplay")
+	if kind == 5 and existing == null:
+		var model = preload("res://assets/foregrip.glb").instantiate()
+		model.name = "ForegripDisplay"
+		model.scale = Vector3.ONE * 2.5
+		model.position.y = mesh.mesh.size.y / 2 + 0.4
+		mesh.add_child(model)
+	elif kind != 5 and existing != null:
+		mesh.remove_child(existing)
+		existing.queue_free()
 
 func highlight_supply(id: int) -> void:
 	if highlighted_supply == id:

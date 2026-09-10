@@ -83,6 +83,11 @@ func validate(data, content: String) -> bool:
 				return false
 		if not finite_number(actor.s, 0, 300) or not finite_number(actor.med, 0, 5) or not finite_number(actor.frags, 0, 4) or not finite_number(actor.smokes, 0, 3):
 			return false
+		if actor.grips < 0 or actor.grips > 3 or actor.grip_slots.size() != 3:
+			return false
+		for equipped in actor.grip_slots:
+			if equipped not in [0, 1]:
+				return false
 		if not finite_number(actor.y, -PI - 0.01, PI + 0.01) or not finite_number(actor.v, -PI / 2, PI / 2) or not finite_number(actor.lean, -1, 1):
 			return false
 		if not finite_number(actor.reload, -1, 3.1) or not finite_number(actor.heal, -1, 3.5) or not finite_number(actor.throw, 0, 0.7):
@@ -93,11 +98,11 @@ func validate(data, content: String) -> bool:
 		var item = data.loot[id]
 		if not id is int or id < 0 or id >= data.next_loot or not item is Dictionary:
 			return false
-		if not point(item.get("p")) or not item.get("kind") is int or item.kind < 0 or item.kind > 4:
+		if not point(item.get("p")) or not item.get("kind") is int or item.kind < 0 or item.kind > 5:
 			return false
 		if item.has("amount") and not finite_number(item.amount, 0.001, 10000):
 			return false
-		if item.has("drop_slot") and (not item.drop_slot is int or item.drop_slot < 0 or item.drop_slot > 4):
+		if item.has("drop_slot") and (not item.drop_slot is int or item.drop_slot < 0 or item.drop_slot > 5):
 			return false
 	var grenade_ids := []
 	for grenade in data.grenades:
@@ -137,6 +142,15 @@ func read_copy(file_path: String, content: String) -> Dictionary:
 	if digest(envelope.payload) != envelope.sha:
 		return {}
 	var data = bytes_to_var(envelope.payload)
+	# The previous content version has the same terrain and simulation schema,
+	# except for the new attachment inventory. Preserve its world and round ID.
+	if data is Dictionary and data.get("version") == 1 and data.get("content") == "ash-valley-16" and content == "ash-valley-17" and data.get("actors") is Array:
+		for actor in data.actors:
+			if not actor is Dictionary or actor.has("grips") or actor.has("grip_slots"):
+				return {}
+			actor.grips = 0
+			actor.grip_slots = PackedInt32Array([0, 0, 0])
+		data.content = content
 	return data if validate(data, content) else {}
 
 func load_state(content: String) -> Dictionary:

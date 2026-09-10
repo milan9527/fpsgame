@@ -7,6 +7,10 @@ var first_person := FirstPerson.new()
 var gun_model: Node3D
 var third_person_gun: Node3D
 var visual_weapon := -1
+var visual_grip := -1
+var grips := 0
+var grip_slots := PackedInt32Array([0, 0, 0])
+const GRIP_MODEL = preload("res://assets/foregrip.glb")
 var local_view := false
 const WEAPON_MODELS := ["res://assets/carbine.glb", "res://assets/shotgun.glb", "res://assets/marksman.glb"]
 const AIM_FOV := [48.0, 58.0, 24.0]
@@ -148,15 +152,17 @@ func _ready() -> void:
 	update_weapon_visuals()
 
 func update_weapon_visuals(force := false) -> void:
-	if visual_weapon == weapon and not force:
+	if visual_weapon == weapon and visual_grip == grip_slots[weapon] and not force:
 		return
 	visual_weapon = weapon
+	visual_grip = grip_slots[weapon]
 	if third_person_gun != null:
 		third_person_gun.get_parent().remove_child(third_person_gun)
 		third_person_gun.queue_free()
 	if character_animation.available:
 		third_person_gun = load(WEAPON_MODELS[weapon]).instantiate()
 		character_animation.skeleton.add_child(third_person_gun)
+		add_grip_visual(third_person_gun)
 		update_weapon_attachment()
 	if local_view:
 		if gun_model != null:
@@ -165,10 +171,34 @@ func update_weapon_visuals(force := false) -> void:
 		gun_model = load(WEAPON_MODELS[weapon]).instantiate()
 		gun_model.scale = Vector3.ONE * 0.75
 		gun.add_child(gun_model)
+		add_grip_visual(gun_model)
 		first_person.bind_weapon(gun_model, gun, weapon)
 		var anchor = gun_model.find_child("MuzzleAnchor", true, false)
 		if anchor != null:
 			muzzle.position = gun.to_local(anchor.global_position)
+
+func add_grip_visual(model: Node3D) -> void:
+	if grip_slots[weapon] == 0:
+		return
+	var attachment = GRIP_MODEL.instantiate()
+	attachment.name = "Foregrip"
+	attachment.position = Vector3(0, [-0.09, -0.095, -0.067][weapon], -0.23)
+	model.add_child(attachment)
+
+func change_grip(index: int, attach: bool) -> bool:
+	if not alive or index != weapon or index < 0 or index > 2 or reload_left > 0 or heal_left > 0 or throw_left > 0:
+		return false
+	if attach:
+		if grips <= 0 or grip_slots[index] != 0:
+			return false
+		grips -= 1
+		grip_slots[index] = 1
+	else:
+		if grips >= 3 or grip_slots[index] == 0:
+			return false
+		grips += 1
+		grip_slots[index] = 0
+	return true
 
 func update_weapon_attachment() -> void:
 	if third_person_gun == null:
@@ -356,7 +386,7 @@ func apply_damage(amount: float, ignore_armor := false) -> void:
 		gun.visible = false
 
 func pack() -> Dictionary:
-	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "mags": magazines.duplicate(), "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "lean": lean, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "smokes": smokes, "throw": throw_left, "ack": last_sequence}
+	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "mags": magazines.duplicate(), "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "lean": lean, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "smokes": smokes, "grips": grips, "grip_slots": grip_slots.duplicate(), "throw": throw_left, "ack": last_sequence}
 
 func unpack(data: Dictionary, local: bool) -> void:
 	target_position = data.p
@@ -386,6 +416,8 @@ func unpack(data: Dictionary, local: bool) -> void:
 	grounded = data.ground
 	grenades = data.frags
 	smokes = data.get("smokes", 0)
+	grips = data.grips
+	grip_slots = PackedInt32Array(data.grip_slots)
 	throw_left = data.throw
 	if alive and not data.live:
 		apply_damage(10000)
@@ -544,4 +576,4 @@ func shot_spread() -> float:
 	return base
 
 func add_recoil() -> void:
-	recoil = minf(0.18, recoil + RECOIL[weapon] * (0.7 if crouched else 1.0))
+	recoil = minf(0.18, recoil + RECOIL[weapon] * (0.8 if grip_slots[weapon] == 1 else 1.0) * (0.7 if crouched else 1.0))

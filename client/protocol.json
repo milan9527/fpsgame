@@ -1,5 +1,5 @@
 {
-  "protocol": 11,
-  "content_revision": "ash-valley-16",
-  "client_version": "0.27.0-dev"
+  "protocol": 12,
+  "content_revision": "ash-valley-17",
+  "client_version": "0.28.0-dev"
 }

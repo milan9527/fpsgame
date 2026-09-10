@@ -377,7 +377,7 @@ func reset_round() -> void:
 	for i in range(48):
 		# Supplies are placed along open approaches, outside building walls.
 		var p := Vector3([-18.0, 18.0, -90.0, 90.0][i % 4], 0.1, -88 + (i / 4) * 16)
-		loot[i] = {"p": p, "kind": 4 if i % 8 == 7 else i % 4}
+		loot[i] = {"p": p, "kind": 5 if i % 12 == 8 else (4 if i % 8 == 7 else i % 4)}
 	world.show_loot(loot)
 	phase = "lobby"
 	phase_time = 18
@@ -507,7 +507,40 @@ func inventory_pickup(id: int) -> void:
 	inventory_action("loot", -1, id)
 
 func inventory_equipment(action: String, index: int) -> void:
-	inventory_action(action, index)
+	if action != "grip":
+		inventory_action(action, index)
+		return
+	if dedicated or not running or phase != "live" or not ui.inventory.visible or ui.pause_panel.visible or not actors.has(local_id):
+		return
+	var actor = actors[local_id]
+	sequence += 1
+	var attach: bool = actor.grip_slots[actor.weapon] == 0
+	if online:
+		if multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+			grip_command.rpc_id(1, network_round_id, sequence, actor.weapon, attach)
+	else:
+		receive_grip(actor, match_id, sequence, actor.weapon, attach)
+
+@rpc("any_peer", "call_remote", "reliable", 4)
+func grip_command(round_id: String, seq, index, attach) -> void:
+	if not dedicated:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if sessions.has(id) and actors.has(id):
+		receive_grip(actors[id], round_id, seq, index, attach)
+
+func receive_grip(actor, round_id: String, seq, index, attach) -> bool:
+	if not seq is int or not index is int or not attach is bool:
+		return false
+	if round_id != match_id or phase != "live" or not actor.alive:
+		return false
+	if seq < 0 or seq > 2147483647 or seq <= actor.last_action_sequence:
+		return false
+	actor.last_action_sequence = seq
+	if seq < actor.last_sequence - 120 or actor.action_tokens < 1:
+		return false
+	actor.action_tokens -= 1
+	return actor.change_grip(index, attach)
 
 func inventory_drop(kind: int, count: int) -> void:
 	if dedicated or not running or phase != "live" or not ui.inventory.visible or ui.pause_panel.visible or not actors.has(local_id):
@@ -538,7 +571,7 @@ func receive_drop(actor, round_id: String, seq, kind, count) -> bool:
 	if seq < actor.last_sequence - 120 or actor.action_tokens < 1:
 		return false
 	actor.action_tokens -= 1
-	if kind not in [0, 1, 3, 4] or count <= 0 or count > 300:
+	if kind not in [0, 1, 3, 4, 5] or count <= 0 or count > 300:
 		return false
 	# Healing consumes its medkit at completion; keep it reserved until then.
 	if kind == 1 and actor.heal_left > 0:
@@ -976,6 +1009,8 @@ func bot_input(actor, dt: float) -> void:
 	if actor.health < 40 and actor.target_id == 0:
 		actor.heal()
 	pickup(actor)
+	if actor.grips > 0 and actor.grip_slots[actor.weapon] == 0:
+		actor.change_grip(actor.weapon, true)
 
 func visible_target(actor, other) -> bool:
 	if smoke_blocks(actor.eye_position(), other.aim_position()):
@@ -1104,7 +1139,7 @@ func damage(target, amount: float, attacker_id: int, bypass_protection := false,
 func drop_inventory(actor) -> void:
 	if actor.alive or (online and not dedicated):
 		return
-	var amounts := [actor.total_ammunition(), actor.medkits, actor.armor, actor.grenades, actor.smokes]
+	var amounts := [actor.total_ammunition(), actor.medkits, actor.armor, actor.grenades, actor.smokes, actor.grips + actor.grip_slots[0] + actor.grip_slots[1] + actor.grip_slots[2]]
 	for kind in range(amounts.size()):
 		if amounts[kind] <= 0:
 			continue
@@ -1118,6 +1153,8 @@ func drop_inventory(actor) -> void:
 	actor.armor = 0
 	actor.grenades = 0
 	actor.smokes = 0
+	actor.grips = 0
+	actor.grip_slots.fill(0)
 
 func supply_accessible(actor, item: Dictionary) -> bool:
 	if actor.position.distance_to(item.p) >= SupplyRules.RANGE:

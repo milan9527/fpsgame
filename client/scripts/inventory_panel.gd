@@ -14,6 +14,7 @@ var rows := {}
 var weapons: Array[Button] = []
 var reload_button: Button
 var heal_button: Button
+var grip_button: Button
 var drop_kind: OptionButton
 var drop_count: SpinBox
 var drop_button: Button
@@ -58,6 +59,9 @@ func _ready() -> void:
 	heal_button.text = "USE MEDKIT"
 	heal_button.pressed.connect(func(): equipment_requested.emit("heal", -1))
 	equipment.add_child(heal_button)
+	grip_button = Button.new()
+	grip_button.pressed.connect(func(): equipment_requested.emit("grip", -1))
+	equipment.add_child(grip_button)
 	var right := VBoxContainer.new()
 	right.custom_minimum_size.x = 550
 	columns.add_child(right)
@@ -79,7 +83,7 @@ func _ready() -> void:
 	var drop_row := HBoxContainer.new()
 	right.add_child(drop_row)
 	drop_kind = OptionButton.new()
-	for kind in [0, 1, 3, 4]:
+	for kind in [0, 1, 3, 4, 5]:
 		drop_kind.add_item(SupplyRules.NAMES[kind], kind)
 	drop_row.add_child(drop_kind)
 	drop_count = SpinBox.new()
@@ -104,9 +108,13 @@ func refresh(actor, supplies: Array) -> void:
 	stock.text = "CARRIED SUPPLIES\n\nAMMUNITION  %d / 300\nMEDKITS  %d / 5     FRAGS  %d / 4\nSMOKE  %d / 3     ARMOR  %d / 100\n\nWEAPONS / LOADED MAGAZINES" % [actor.reserve, actor.medkits, actor.grenades, actor.smokes, actor.armor]
 	for index in range(3):
 		weapons[index].text = "%s  %s   %d / %d" % ["EQUIPPED" if index == actor.weapon else "EQUIP", ["AR-30", "SG-8", "SR-5"][index], actor.magazines[index], actor.CAPACITY[index]]
+		if actor.grip_slots[index] == 1:
+			weapons[index].text += "  + GRIP"
 		weapons[index].disabled = index == actor.weapon or actor.reload_left > 0 or actor.throw_left > 0
 	reload_button.disabled = actor.reserve <= 0 or actor.ammo >= actor.CAPACITY[actor.weapon] or actor.heal_left > 0 or actor.reload_left > 0 or actor.throw_left > 0
 	heal_button.disabled = actor.medkits <= 0 or actor.health >= 100 or actor.reload_left > 0 or actor.heal_left > 0 or actor.throw_left > 0
+	grip_button.text = ("REMOVE FOREGRIP" if actor.grip_slots[actor.weapon] == 1 else "INSTALL FOREGRIP / 20% LESS KICK") + "  /  %d SPARE" % actor.grips
+	grip_button.disabled = actor.reload_left > 0 or actor.heal_left > 0 or actor.throw_left > 0 or (actor.grips >= 3 if actor.grip_slots[actor.weapon] == 1 else actor.grips <= 0)
 	var kind := drop_kind.get_selected_id()
 	var available := int(actor.get(SupplyRules.FIELDS[kind]))
 	drop_count.max_value = maxi(1, available)

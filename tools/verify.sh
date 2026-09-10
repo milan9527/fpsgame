@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+timeout 20s ./tools/godot --headless --path client --script ../tests/foregrip_rules.gd > artifacts/foregrip-rules.log 2>&1
+rg -q FOREGRIP_RULES_PASS artifacts/foregrip-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/foregrip-rules.log; then cat artifacts/foregrip-rules.log; exit 1; fi
 timeout 15s ./tools/godot --headless --path client --script ../tests/input_timeout_rules.gd > artifacts/input-timeout-rules.log 2>&1
 rg -q INPUT_TIMEOUT_RULES_PASS artifacts/input-timeout-rules.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/input-timeout-rules.log; then cat artifacts/input-timeout-rules.log; exit 1; fi
@@ -147,3 +150,5 @@ if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/tac
 .venv/bin/python tools/test_bindings_network.py
 
 .venv/bin/python tools/test_input_timeout.py
+
+.venv/bin/python tools/test_foregrip_network.py

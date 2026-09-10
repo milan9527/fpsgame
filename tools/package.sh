@@ -32,8 +32,12 @@ cp docs/SMOKE_GRENADES.md artifacts/IronMeridian-Linux/docs/SMOKE_GRENADES.md
 cp docs/FALL_DAMAGE.md artifacts/IronMeridian-Linux/docs/FALL_DAMAGE.md
 cp docs/CONTROLS.md artifacts/IronMeridian-Linux/docs/CONTROLS.md
 cp docs/SOLO_CHECKPOINTS.md artifacts/IronMeridian-Linux/docs/SOLO_CHECKPOINTS.md
+cp docs/ATTACHMENTS.md artifacts/IronMeridian-Linux/docs/ATTACHMENTS.md
 cp docs/BOT_COVER.md artifacts/IronMeridian-Linux/docs/BOT_COVER.md
 cp docs/TRAINING.md artifacts/IronMeridian-Linux/docs/TRAINING.md
+timeout 20s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/foregrip_rules.gd" > artifacts/packed-foregrip.log 2>&1
+rg -q FOREGRIP_RULES_PASS artifacts/packed-foregrip.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-foregrip.log; then cat artifacts/packed-foregrip.log; exit 1; fi
 timeout 15s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/input_timeout_rules.gd" > artifacts/packed-input-timeout.log 2>&1
 rg -q INPUT_TIMEOUT_RULES_PASS artifacts/packed-input-timeout.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-input-timeout.log; then cat artifacts/packed-input-timeout.log; exit 1; fi

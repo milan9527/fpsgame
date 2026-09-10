@@ -44,6 +44,10 @@ rg -q DEATH_RECAP_RULES_PASS artifacts/packed-death-recap.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-death-recap.log; then cat artifacts/packed-death-recap.log; exit 1; fi
 cp docs/BOT_COVER.md artifacts/IronMeridian-Linux/docs/BOT_COVER.md
 cp docs/BOT_UTILITIES.md artifacts/IronMeridian-Linux/docs/BOT_UTILITIES.md
+cp docs/BOT_HAZARDS.md artifacts/IronMeridian-Linux/docs/BOT_HAZARDS.md
+timeout 30s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/bot_hazards_rules.gd" > artifacts/packed-bot-hazards.log 2>&1
+rg -q BOT_HAZARDS_RULES_PASS artifacts/packed-bot-hazards.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-bot-hazards.log; then cat artifacts/packed-bot-hazards.log; exit 1; fi
 timeout 30s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/bot_utilities_rules.gd" > artifacts/packed-bot-utilities.log 2>&1
 rg -q BOT_UTILITIES_RULES_PASS artifacts/packed-bot-utilities.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-bot-utilities.log; then cat artifacts/packed-bot-utilities.log; exit 1; fi

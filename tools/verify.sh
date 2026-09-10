@@ -166,3 +166,7 @@ timeout 30s ./tools/godot --headless --path client --script ../tests/bot_utiliti
 rg -q BOT_UTILITIES_RULES_PASS artifacts/bot-utilities-rules.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/bot-utilities-rules.log; then cat artifacts/bot-utilities-rules.log; exit 1; fi
 .venv/bin/python tools/test_bot_utilities_network.py
+timeout 30s ./tools/godot --headless --path client --script ../tests/bot_hazards_rules.gd > artifacts/bot-hazards-rules.log 2>&1
+rg -q BOT_HAZARDS_RULES_PASS artifacts/bot-hazards-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/bot-hazards-rules.log; then cat artifacts/bot-hazards-rules.log; exit 1; fi
+.venv/bin/python tools/test_bot_hazards_network.py

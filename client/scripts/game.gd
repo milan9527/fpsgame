@@ -1028,10 +1028,18 @@ func bot_input(actor, dt: float) -> void:
 			var safe := next_center + next_offset.normalized() * maxf(0, next_radius - 7)
 			destination = Vector3(safe.x, 0, safe.y)
 			actor.sprint = true
+	var escape: Vector3 = actor.navigator.hazards.select(self, actor, dt)
+	if escape.is_finite():
+		destination = escape
+		actor.sprint = true
+		actor.shooting = false
+		actor.aiming = false
+		if actor.navigator.goal.distance_to(escape) > 0.5:
+			actor.navigator.repath_left = 0
 	if actor.sprint:
 		actor.navigator.cover.clear()
 		actor.crouch = false
-	var direction: Vector3 = actor.navigator.steer(actor, world, destination, dt, 0.1 if cover_point.is_finite() and not actor.sprint else 1.5)
+	var direction: Vector3 = actor.navigator.steer(actor, world, destination, dt, 0.1 if escape.is_finite() or (cover_point.is_finite() and not actor.sprint) else 1.5)
 	# Short-range separation supplements global paths around static geometry.
 	if direction.length_squared() > 0:
 		for other in actors.values():

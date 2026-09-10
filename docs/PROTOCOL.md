@@ -54,3 +54,5 @@ docker compose up -d --build api game game2
 ## 协议 16：开发中的队伍状态
 
 角色网络快照增加 `team`，对局快照增加 `mode`，`accepted` 与 `new_round` 可靠通知携带模式。房间匹配、心跳和票据消费均绑定 `solo | duo`。队伍由权威服务器分配，客户端输入不能提交队伍。组队其他功能仍在开发，当前不发行此协议。
+
+开发协议 16 的倒地快照还包括 `downed`、`down_health`、`bleed`、`revive_target`、`revive_left`。存活但倒地与正式淘汰明确区分；拾取交互无物资目标时可请求扶起附近队友，继续使用通道 4 的动作去重与预算，扶起时间和结果全部由专服决定。

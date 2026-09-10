@@ -43,6 +43,7 @@ var grenade_tombstones: Dictionary = {}
 var last_loot_hash := 0
 var events: Array = []
 var match_mode := "solo"
+var rescue = preload("res://scripts/rescue_rules.gd").new()
 var teams = preload("res://scripts/team_rules.gd").new()
 var network_status = preload("res://scripts/network_status.gd").new()
 var network_sample_due := 0
@@ -631,7 +632,7 @@ func grip_command(round_id: String, seq, index, attach) -> void:
 func receive_grip(actor, round_id: String, seq, index, attach) -> bool:
 	if not seq is int or not index is int or not attach is bool:
 		return false
-	if round_id != match_id or phase != "live" or not actor.alive:
+	if round_id != match_id or phase != "live" or not actor.alive or actor.downed:
 		return false
 	if seq < 0 or seq > 2147483647 or seq <= actor.last_action_sequence:
 		return false
@@ -662,7 +663,7 @@ func drop_command(round_id: String, seq, kind, count) -> void:
 func receive_drop(actor, round_id: String, seq, kind, count) -> bool:
 	if not seq is int or not kind is int or not count is int:
 		return false
-	if round_id != match_id or phase != "live" or not actor.alive:
+	if round_id != match_id or phase != "live" or not actor.alive or actor.downed:
 		return false
 	if seq < 0 or seq > 2147483647 or seq <= actor.last_action_sequence:
 		return false
@@ -708,6 +709,8 @@ func _physics_process(dt: float) -> void:
 				net_tick = 0
 				if phase == "live" and has_actions(cmd):
 					var supply_id := int(supply_target(actor).get("id", -1)) if cmd.loot else -1
+					if match_mode == "duo" and (actor.revive_target != 0 or rescue.target(self, actor) != null):
+						supply_id = -1
 					action_command.rpc_id(1, network_round_id, cmd, supply_id)
 				input_command.rpc_id(1, without_actions(cmd))
 				action_latch.clear()
@@ -810,6 +813,7 @@ func _physics_process(dt: float) -> void:
 				if Vector2(actor.position.x, actor.position.z).distance_to(zone_center) > zone:
 					damage(actor, 5 + elapsed / 24, 0)
 		advance_grenades(dt)
+		rescue.update(self, dt)
 		if training != null:
 			training.update(self)
 		elif (teams.living(actors).size() <= 1 if match_mode == "duo" else alive_count() <= 1) or elapsed >= ROUND_SECONDS:
@@ -978,7 +982,11 @@ func apply_command(actor, cmd: Dictionary) -> void:
 	apply_actions(actor, cmd)
 
 func apply_actions(actor, cmd: Dictionary, loot_target := -1, explicit_pickup := false) -> void:
-	if phase != "live" or not actor.alive:
+	if phase != "live" or not actor.alive or actor.downed:
+		return
+	if cmd.jump or cmd.reload or cmd.heal or cmd.weapon >= 0 or cmd.throw or cmd.smoke_throw:
+		rescue.cancel(actor)
+	if cmd.loot and loot_target < 0 and match_mode == "duo" and rescue.interact(self, actor):
 		return
 	actor.jump_requested = actor.jump_requested or cmd.jump
 	if cmd.cancel_heal:
@@ -998,6 +1006,8 @@ func apply_actions(actor, cmd: Dictionary, loot_target := -1, explicit_pickup :=
 
 func bot_input(actor, dt: float) -> void:
 	if not actor.alive:
+		return
+	if match_mode == "duo" and rescue.bot_rescue(self, actor, dt):
 		return
 	actor.bot_think -= dt
 	actor.bot_patrol_left -= dt
@@ -1148,7 +1158,7 @@ func trace_shot(actor, origin: Vector3, direction: Vector3, rewind: float) -> Di
 	return wall if hit.is_empty() else hit
 
 func shoot(actor) -> void:
-	if not actor.alive or actor.fire_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or actor.ammo <= 0 or actor.throw_left > 0 or phase != "live":
+	if not actor.alive or actor.downed or actor.revive_target != 0 or actor.fire_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or actor.ammo <= 0 or actor.throw_left > 0 or phase != "live":
 		return
 	actor.weapon_blocked = actor.weapon_obstructed(actor.aiming)
 	if actor.weapon_blocked:
@@ -1209,18 +1219,25 @@ func shot_fx(id: int, origin: Vector3, end: Vector3, kind: int) -> void:
 	add_child(line)
 	get_tree().create_timer(0.065, false).timeout.connect(line.queue_free)
 
-func damage(target, amount: float, attacker_id: int, bypass_protection := false, headshot := false, cause := "THE ZONE", impact_origin = null, ignore_armor := false) -> void:
+func damage(target, amount: float, attacker_id: int, bypass_protection := false, headshot := false, cause := "THE ZONE", impact_origin = null, ignore_armor := false, force_eliminate := false) -> void:
 	if teams.friendly(attacker_id, target.actor_id):
 		return
 	if training != null and (target.actor_id == local_id or training.step != 2 or attacker_id != local_id or cause == "FRAG"):
 		return
 	if phase in ["finished", "training_complete"] or not target.alive or (training == null and not bypass_protection and phase == "live" and elapsed < 5):
 		return
+	rescue.interrupt(self, target)
+	var was_downed: bool = target.downed
+	var down_before: float = target.down_health
 	var before: float = target.health + target.armor
 	var health_before: float = target.health
 	var armor_before: float = target.armor
-	target.apply_damage(amount, ignore_armor)
-	var actual_damage: float = before - target.health - target.armor
+	var can_knock: bool = match_mode == "duo" and not force_eliminate and rescue.standing_ally(self, target)
+	target.apply_damage(amount, ignore_armor, can_knock)
+	if target.downed and not was_downed:
+		target.knock_attacker = attacker_id
+		add_event(target.display_name + "  DOWNED")
+	var actual_damage: float = down_before - target.down_health if was_downed else before - target.health - target.armor
 	if actors.has(attacker_id) and attacker_id != target.actor_id:
 		deliver_feedback(attacker_id, 0, actual_damage, headshot, not target.alive, target.position)
 	var source_position: Vector3 = actors[attacker_id].position if actors.has(attacker_id) else target.position
@@ -1299,7 +1316,7 @@ func supply_accessible(actor, item: Dictionary) -> bool:
 	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 func supply_target(actor) -> Dictionary:
-	if not actor.alive or phase != "live":
+	if not actor.alive or actor.downed or phase != "live":
 		return {}
 	var best := {}
 	var best_distance := INF
@@ -1318,7 +1335,7 @@ func supply_target(actor) -> Dictionary:
 	return best
 
 func pickup(actor, requested_id := -1) -> bool:
-	if not actor.alive or phase != "live":
+	if not actor.alive or actor.downed or phase != "live":
 		return false
 	var id := requested_id
 	if id < 0:
@@ -1419,12 +1436,12 @@ func _process(dt: float) -> void:
 	ui.update_scoreboard(actors.values(), Input.is_action_pressed("scoreboard") and not ui.pause_panel.visible and not ui.inventory.visible and not ui.tactical_map.visible)
 	if actors.has(local_id):
 		var actor = actors[local_id]
-		if not actor.alive or phase != "live":
+		if not actor.alive or actor.downed or phase != "live":
 			ui.tactical_map.waypoint = null
 			if ui.tactical_map.visible:
 				ui.set_map(false)
 		if ui.inventory.visible:
-			if not actor.alive or phase != "live":
+			if not actor.alive or actor.downed or phase != "live":
 				ui.set_inventory(false)
 			else:
 				var supplies: Array = []
@@ -1441,6 +1458,10 @@ func _process(dt: float) -> void:
 			var quantity_text := str(int(quantity)) if is_equal_approx(quantity, roundf(quantity)) else String.num(quantity, 1)
 			ui.supply_prompt = ("%s  %s ×%s" % [Bindings.key_label("loot"), item_name, quantity_text]) if supply.usable else item_name + " / INVENTORY FULL"
 		var message := ""
+		if match_mode == "duo":
+			var rescue_target = rescue.target(self, actor)
+			if rescue_target != null:
+				ui.supply_prompt = Bindings.key_label("loot") + "  REVIVE  " + rescue_target.display_name
 		if phase == "finished":
 			message = ("VICTORY" if actor.rank == 1 else "OPERATION COMPLETE") + "\nPLACEMENT  #%d  /  %d ELIMINATIONS" % [actor.rank, actor.kills]
 			message += "\nNext operation in %ds" % maxi(0, int(phase_time)) if online else "\nESC  /  RETURN TO DEPLOYMENT"
@@ -1500,7 +1521,7 @@ func peer_disconnected(id: int) -> void:
 	sessions.erase(id)
 	if dedicated and actors.has(id):
 		if phase == "live":
-			damage(actors[id], 10000, 0, true)
+			damage(actors[id], 10000, 0, true, false, "DISCONNECTED", null, true, true)
 		remove_child(actors[id])
 		actors[id].queue_free()
 		actors.erase(id)
@@ -1952,7 +1973,7 @@ func throw_grenade(actor, kind := 0) -> bool:
 	var stock := "smokes" if kind == 1 else "grenades"
 	if kind == 1 and smoke_clouds.size() + grenades.size() >= 32:
 		return false
-	if phase != "live" or not actor.alive or actor.get(stock) <= 0 or actor.throw_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or grenades.size() >= 32:
+	if phase != "live" or not actor.alive or actor.downed or actor.revive_target != 0 or actor.get(stock) <= 0 or actor.throw_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or grenades.size() >= 32:
 		return false
 	var direction := Basis(Vector3.UP, actor.yaw) * Basis(Vector3.RIGHT, actor.pitch) * Vector3.FORWARD
 	var origin: Vector3 = actor.eye_position()

@@ -533,6 +533,11 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 		prompt.text = Bindings.key_label("reload") + "  RELOAD / EMPTY MAGAZINE" if actor.reserve > 0 else "NO RESERVE AMMUNITION / FIND SUPPLIES"
 	if grenade_warning_distance < 9:
 		prompt.text = "FRAG NEARBY / %dm — MOVE TO COVER" % ceili(grenade_warning_distance)
+	if actor.downed:
+		prompt.text = "DOWNED  /  BLEED OUT %.1fs  /  WAIT FOR TEAMMATE" % actor.bleed_left
+		health_bar.value = actor.down_health
+	elif actor.revive_target != 0:
+		prompt.text = "REVIVING  %.1fs  /  %s CANCEL" % [actor.revive_left, Bindings.key_label("loot")]
 	feed.text = "\n".join(events)
 	result_label.text = message
 	local_position = actor.position

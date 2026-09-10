@@ -50,6 +50,12 @@ var smokes := 0
 var landing_speed := 0.0
 var throw_left := 0.0
 var alive := true
+var downed := false
+var down_health := 0.0
+var bleed_left := 0.0
+var knock_attacker := 0
+var revive_target := 0
+var revive_left := 0.0
 var yaw := 0.0
 var pitch := 0.0
 var move_input := Vector2.ZERO
@@ -187,7 +193,7 @@ func add_grip_visual(model: Node3D) -> void:
 	model.add_child(attachment)
 
 func change_grip(index: int, attach: bool) -> bool:
-	if not alive or index != weapon or index < 0 or index > 2 or reload_left > 0 or heal_left > 0 or throw_left > 0:
+	if not alive or downed or revive_target != 0 or index != weapon or index < 0 or index > 2 or reload_left > 0 or heal_left > 0 or throw_left > 0:
 		return false
 	if attach:
 		if grips <= 0 or grip_slots[index] != 0:
@@ -259,6 +265,11 @@ func move_step(dt: float) -> void:
 	landing_speed = 0.0
 	if not alive:
 		return
+	if downed:
+		shooting = false
+		aiming = false
+		sprint = false
+		lean_input = 0
 	update_stance()
 	update_lean(dt)
 	var direction := Basis(Vector3.UP, yaw) * Vector3(move_input.x, 0, move_input.y)
@@ -269,6 +280,11 @@ func move_step(dt: float) -> void:
 		speed = minf(speed, 3.2)
 	if heal_left > 0:
 		speed = 2.0
+	if downed:
+		speed = 1.0
+		jump_requested = false
+	if revive_target != 0:
+		speed = 0.0
 	velocity.x = direction.x * speed
 	velocity.z = direction.z * speed
 	if not grounded:
@@ -352,11 +368,11 @@ func reconcile_movement() -> void:
 	prediction_corrections += 1
 
 func reload_weapon() -> void:
-	if alive and throw_left <= 0 and reload_left <= 0 and heal_left <= 0 and ammo < CAPACITY[weapon] and reserve > 0:
+	if alive and not downed and revive_target == 0 and throw_left <= 0 and reload_left <= 0 and heal_left <= 0 and ammo < CAPACITY[weapon] and reserve > 0:
 		reload_left = RELOAD[weapon]
 
 func heal() -> void:
-	if alive and throw_left <= 0 and medkits > 0 and health < 100 and heal_left <= 0 and reload_left <= 0:
+	if alive and not downed and revive_target == 0 and throw_left <= 0 and medkits > 0 and health < 100 and heal_left <= 0 and reload_left <= 0:
 		heal_left = 3.5
 
 func cancel_heal() -> void:
@@ -364,7 +380,7 @@ func cancel_heal() -> void:
 	heal_left = 0
 
 func switch_weapon(index: int) -> void:
-	if not alive or throw_left > 0 or index < 0 or index > 2 or index == weapon or reload_left > 0:
+	if not alive or downed or revive_target != 0 or throw_left > 0 or index < 0 or index > 2 or index == weapon or reload_left > 0:
 		return
 	# Loaded rounds stay in their own weapon. Only a completed reload transfers
 	# reserve ammunition into a magazine.
@@ -374,14 +390,28 @@ func switch_weapon(index: int) -> void:
 func total_ammunition() -> int:
 	return reserve + magazines[0] + magazines[1] + magazines[2]
 
-func apply_damage(amount: float, ignore_armor := false) -> void:
+func apply_damage(amount: float, ignore_armor := false, can_knock := false) -> void:
 	if not alive:
 		return
 	heal_left = 0
+	if downed:
+		down_health = maxf(0, down_health - amount)
+		if down_health > 0:
+			return
 	var absorbed := 0.0 if ignore_armor else minf(armor, amount * 0.6)
 	armor -= absorbed
 	health = maxf(0, health - (amount - absorbed))
 	if health <= 0:
+		if can_knock and not downed:
+			downed = true
+			down_health = 100
+			bleed_left = 30
+			reload_left = 0
+			throw_left = 0
+			shooting = false
+			return
+		downed = false
+		bleed_left = 0
 		alive = false
 		collision_layer = 0
 		collision_mask = 0
@@ -394,6 +424,11 @@ func pack(include_team := false) -> Dictionary:
 	var state := {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "mags": magazines.duplicate(), "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "lean": lean, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "smokes": smokes, "grips": grips, "grip_slots": grip_slots.duplicate(), "throw": throw_left, "ack": last_sequence}
 	if include_team:
 		state.team = team_id
+		state.downed = downed
+		state.down_health = down_health
+		state.bleed = bleed_left
+		state.revive_target = revive_target
+		state.revive_left = revive_left
 	return state
 
 func unpack(data: Dictionary, local: bool) -> void:
@@ -405,6 +440,11 @@ func unpack(data: Dictionary, local: bool) -> void:
 	if not local:
 		yaw = data.y
 		pitch = data.v
+	downed = data.get("downed", false)
+	down_health = data.get("down_health", 0.0)
+	bleed_left = data.get("bleed", 0.0)
+	revive_target = int(data.get("revive_target", 0))
+	revive_left = data.get("revive_left", 0.0)
 	health = data.h
 	team_id = int(data.get("team", 0))
 	armor = data.a
@@ -547,7 +587,7 @@ func headshot_height() -> float:
 	return 0.9 if crouched else 1.42
 
 func update_stance() -> void:
-	if crouch:
+	if crouch or downed:
 		set_stance(true)
 	elif crouched and can_stand():
 		set_stance(false)

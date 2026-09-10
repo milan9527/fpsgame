@@ -23,18 +23,18 @@ func run() -> void:
 		assert(game.world.accepts_zone_center(Vector2(center.x, center.z)))
 	var hp: float = player.health
 	var armor: float = player.armor
-	game.damage(player, 500, -1, true)
-	game.damage(player, 500, -1, true, false, "FRAG", ally.position)
+	eliminate(game, player, 500, -1, true)
+	eliminate(game, player, 500, -1, true, false, "FRAG", ally.position)
 	assert(player.health == hp and player.armor == armor and player.alive)
 	game.actors.erase(-1)
-	game.damage(player, 500, -1, true, false, "FRAG", ally.position)
+	eliminate(game, player, 500, -1, true, false, "FRAG", ally.position)
 	assert(player.health == hp, "Disconnected thrower retains team membership for damage attribution")
 	game.actors[-1] = ally
 	assert(not game.visible_target(ally, player))
 	ally.bot_think = 0
 	game.bot_input(ally, 0.02)
 	assert(not game.teams.friendly(ally.actor_id, ally.target_id), "Bots cannot choose teammates as enemies")
-	game.damage(player, 5, 1, true, false, "FRAG", player.position)
+	eliminate(game, player, 5, 1, true, false, "FRAG", player.position)
 	assert(player.health + player.armor < hp + armor, "Self damage remains active")
 	var replica = game.Actor.new()
 	root.add_child(replica)
@@ -44,15 +44,15 @@ func run() -> void:
 	assert(replica.team_id == 0 and not ally.pack().has("team"), "Solo checkpoint representation stays compatible")
 	replica.queue_free()
 	assert(not game.suspend_solo(), "Incomplete duo persistence cannot overwrite the solo save")
-	game.damage(player, 10000, -2, true)
+	eliminate(game, player, 10000, -2, true)
 	assert(not player.alive and player.rank == 0 and game.teams.living(game.actors).size() == 8)
 	game.ui.set_spectator(true, ally.display_name, player.rank)
 	assert("TEAM STILL ACTIVE" in game.ui.spectator_label.text)
 	for team in range(2, 9):
 		var pair: Array = game.teams.members[team]
-		game.damage(game.actors[pair[0]], 10000, -1, true)
+		eliminate(game, game.actors[pair[0]], 10000, -1, true)
 		assert(game.actors[pair[0]].rank == 0)
-		game.damage(game.actors[pair[1]], 10000, -1, true)
+		eliminate(game, game.actors[pair[1]], 10000, -1, true)
 		assert(game.actors[pair[0]].rank == game.actors[pair[1]].rank)
 	assert(game.teams.living(game.actors) == [1])
 	game.finish_round()
@@ -63,7 +63,7 @@ func run() -> void:
 	game.elapsed = 20
 	for team in range(2, 9):
 		for id in game.teams.members[team]:
-			game.damage(game.actors[id], 10000, 1, true)
+			eliminate(game, game.actors[id], 10000, 1, true)
 	assert(game.alive_count() == 2 and game.phase == "live")
 	game._physics_process(1.0 / 60)
 	assert(game.phase == "finished" and game.actors[1].rank == 1 and game.actors[-1].rank == 1, "Two surviving teammates end the match as one winning team")
@@ -79,7 +79,10 @@ func run() -> void:
 	assert(game.match_mode == "solo" and game.teams.members.is_empty())
 	assert(game.checkpoint.validate(game.snapshot_solo(), game.build_info.content_revision))
 	player = game.actors[1]
-	game.damage(player, 5, -1, true)
+	eliminate(game, player, 5, -1, true)
 	assert(player.health + player.armor < 150, "Solo damage rules remain unrestricted")
 	print("TEAM_RULES_PASS assignment=ok safe_spawns=ok friendly_fire=blocked self_damage=ok disconnected_owner=ok bots=ok snapshots=ok elimination=ok team_ranks=ok timeout=ok solo_compatibility=ok")
 	game.request_quit()
+
+func eliminate(game, actor, amount: float, source: int, bypass := false, headshot := false, cause := "THE ZONE", origin = null) -> void:
+	game.damage(actor, amount, source, bypass, headshot, cause, origin, false, true)

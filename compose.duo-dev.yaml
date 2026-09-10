@@ -1,0 +1,74 @@
+name: fpsgame-duo
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: iron
+      POSTGRES_PASSWORD: ${DUO_POSTGRES_PASSWORD:?Run tools/duo_dev.sh}
+      POSTGRES_DB: iron_duo
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iron -d iron_duo"]
+      interval: 5s
+      retries: 12
+    logging: &logging
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    volumes: ["redis_data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 12
+    logging: *logging
+  api:
+    image: fpsgame-api-duo-dev
+    networks:
+      default:
+        aliases: [api.internal]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://iron:${DUO_POSTGRES_PASSWORD}@postgres/iron_duo
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${DUO_JWT_SECRET:?Run tools/duo_dev.sh}
+      SERVER_SECRET: ${DUO_SERVER_SECRET:?Run tools/duo_dev.sh}
+      GAME_PUBLIC_HOST: 127.0.0.1
+    ports: ["127.0.0.1:8001:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging: *logging
+  game:
+    image: fpsgame-game-duo-dev
+    build:
+      context: .
+      dockerfile: infra/game.Dockerfile
+    restart: unless-stopped
+    environment:
+      API_URL: http://api.internal:8000
+      SERVER_SECRET: ${DUO_SERVER_SECRET:?Run tools/duo_dev.sh}
+      GAME_MODE: duo
+      GAME_PORT: "27031"
+      GAME_PUBLIC_HOST: 127.0.0.1
+    ports: ["127.0.0.1:27031:27031/udp"]
+    volumes: ["game_data:/home/game/.local/share/godot/app_userdata"]
+    depends_on:
+      api: {condition: service_healthy}
+    logging: *logging
+volumes:
+  postgres_data:
+  redis_data:
+  game_data:

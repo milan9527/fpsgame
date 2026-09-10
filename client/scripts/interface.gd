@@ -551,7 +551,7 @@ func set_spectator(enabled: bool, nickname: String, placement: int) -> void:
 	spectator_label.visible = enabled
 	if enabled:
 		spectator_label.text = "SPECTATING  /  " + (nickname if nickname != "" else "AWAITING RESULT")
-		spectator_label.text += "\nYOUR PLACEMENT  #%d" % placement
+		spectator_label.text += ("\nYOUR PLACEMENT  #%d" % placement) if placement > 0 else "\nTEAM STILL ACTIVE"
 		prompt.text = "%s / %s  Switch operator   |   Mouse  Orbit   |   Wheel  Zoom   |   ESC  Menu" % [Bindings.key_label("spectate_previous"), Bindings.key_label("spectate_next")]
 		hit_until = 0
 		damage_until = 0

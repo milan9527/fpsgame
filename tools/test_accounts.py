@@ -13,16 +13,17 @@ FILE = ROOT / 'artifacts' / 'test-accounts.json'
 BASE = 'http://127.0.0.1:8000'
 
 
-def account(slot):
+def account(slot, base=BASE):
     records = json.loads(FILE.read_text()) if FILE.exists() else {}
-    if slot in records:
-        credentials = records[slot]
-        response = httpx.post(BASE + '/auth/login', json=credentials)
+    key = slot if base == BASE else base + '|' + slot
+    if key in records:
+        credentials = records[key]
+        response = httpx.post(base + '/auth/login', json=credentials)
     else:
         credentials = {'username': 'qa_' + uuid.uuid4().hex[:15], 'password': secrets.token_urlsafe(24)}
-        response = httpx.post(BASE + '/auth/register', json=credentials)
+        response = httpx.post(base + '/auth/register', json=credentials)
         response.raise_for_status()
-        records[slot] = credentials
+        records[key] = credentials
         temporary = FILE.with_suffix('.tmp')
         descriptor = os.open(temporary, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o600)
         with os.fdopen(descriptor, 'w') as file:

@@ -42,6 +42,8 @@ var next_grenade_id := 1
 var grenade_tombstones: Dictionary = {}
 var last_loot_hash := 0
 var events: Array = []
+var match_mode := "solo"
+var teams = preload("res://scripts/team_rules.gd").new()
 var network_status = preload("res://scripts/network_status.gd").new()
 var network_sample_due := 0
 var last_eliminated_name := ""
@@ -243,6 +245,11 @@ func setup_input() -> void:
 	bindings.apply()
 
 func start_server() -> void:
+	match_mode = OS.get_environment("GAME_MODE") if OS.has_environment("GAME_MODE") else "solo"
+	if match_mode not in ["solo", "duo"]:
+		push_error("GAME_MODE must be solo or duo")
+		request_quit(1)
+		return
 	if server_key.length() < 32:
 		push_error("SERVER_SECRET must contain at least 32 characters")
 		request_quit(1)
@@ -281,7 +288,7 @@ func start_server() -> void:
 	print("SERVER_READY udp=" + str(listen_port) + " relay=" + str(multiplayer.server_relay) + " room=" + room_id)
 
 func room_signature() -> String:
-	return match_id + "/" + phase + "/" + str(sessions.keys())
+	return match_id + "/" + match_mode + "/" + phase + "/" + str(sessions.keys())
 
 func report_room() -> bool:
 	if room_heartbeat_busy:
@@ -296,6 +303,7 @@ func report_room() -> bool:
 		players.append(session.uid)
 		versions[session.uid] = int(session.get("session_version", 0))
 	var payload := build_info.duplicate()
+	payload.mode = match_mode
 	payload.merge({"room_id": room_id, "instance_id": room_instance, "generation": match_id, "revision": room_revision, "host": OS.get_environment("GAME_PUBLIC_HOST") if OS.has_environment("GAME_PUBLIC_HOST") else "127.0.0.1", "port": room_port, "capacity": MAX_PLAYERS, "phase": phase, "players": players, "session_versions": versions})
 	var response: Dictionary = await http_call("/internal/rooms/heartbeat", payload, true)
 	room_heartbeat_busy = false
@@ -355,6 +363,7 @@ func sign_out_all() -> bool:
 
 func start_training() -> void:
 	save_local_operation()
+	match_mode = "solo"
 	connection_attempt += 1
 	cancel_admission()
 	get_tree().paused = false
@@ -369,13 +378,16 @@ func start_training() -> void:
 	training.start(self)
 	ui.show_game()
 
-func start_solo() -> void:
+func start_solo(mode := "solo") -> void:
+	if mode not in ["solo", "duo"]:
+		return
 	connection_attempt += 1
 	cancel_admission()
 	if online:
 		multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	get_tree().paused = false
 	save_local_operation()
+	match_mode = mode
 	training = null
 	flush_local_results()
 	world.prepare_navigation()
@@ -402,6 +414,7 @@ func clear_actors() -> void:
 		remove_child(actor)
 		actor.queue_free()
 	actors.clear()
+	teams.configure(actors, match_mode)
 
 func reset_round() -> void:
 	clear_actors()
@@ -436,7 +449,7 @@ func reset_round() -> void:
 	if online:
 		for id in sessions:
 			if peer_ready(id):
-				new_round.rpc_id(id, match_id)
+				new_round.rpc_id(id, match_id, match_mode)
 
 func spawn_position(index: int) -> Vector3:
 	var angle := float(index) * 2.39996
@@ -463,6 +476,9 @@ func begin_round() -> void:
 	var human_count := actors.size()
 	for i in range(MAX_PLAYERS - human_count):
 		spawn_actor(-i - 1, "RANGER-%02d" % (i + 1), true, spawn_position(human_count + i))
+	teams.configure(actors, match_mode)
+	if match_mode == "duo":
+		position_teams()
 	for id in actors:
 		var actor = actors[id]
 		if not actor.is_bot:
@@ -470,10 +486,40 @@ func begin_round() -> void:
 	phase = "live"
 	elapsed = 0
 	phase_time = ROUND_SECONDS
-	add_event("Operation live. Last operator standing wins.")
+	add_event("Operation live. Last team standing wins." if match_mode == "duo" else "Operation live. Last operator standing wins.")
+
+func position_teams() -> void:
+	var centers: Array = []
+	for team in teams.members:
+		var center := Vector2.INF
+		for attempt in range(192):
+			var angle: float = (team - 1) * TAU / 8 + attempt * 0.11
+			var radius: float = [90, 74, 58, 42][attempt % 4]
+			var candidate := Vector2(sin(angle), cos(angle)) * radius
+			if not world.accepts_zone_center(candidate):
+				continue
+			var separated := true
+			for previous in centers:
+				if candidate.distance_to(previous) < 20:
+					separated = false
+					break
+			if separated:
+				center = candidate
+				break
+		assert(center.is_finite(), "Map needs eight clear team spawn regions")
+		centers.append(center)
+		for index in range(teams.members[team].size()):
+			var actor = actors[teams.members[team][index]]
+			actor.position = Vector3(center.x + (-1.2 if index == 0 else 1.2), 1, center.y)
+			actor.target_position = actor.position
+			actor.velocity = Vector3.ZERO
+			actor.yaw = atan2(actor.position.x, actor.position.z)
 
 @rpc("authority", "call_remote", "reliable")
-func new_round(id: String) -> void:
+func new_round(id: String, mode := "solo") -> void:
+	if mode not in ["solo", "duo"]:
+		return
+	match_mode = mode
 	network_round_id = id
 	network_status.begin(Time.get_ticks_msec())
 	clear_actors()
@@ -532,7 +578,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func change_pause(enabled: bool) -> void:
 	get_tree().paused = enabled and running and not online and not dedicated
 	ui.pause_feedback(get_tree().paused)
-	ui.checkpoint_save_button.visible = enabled and training == null and not online and phase == "live" and actors.has(local_id) and actors[local_id].alive
+	ui.checkpoint_save_button.visible = enabled and match_mode == "solo" and training == null and not online and phase == "live" and actors.has(local_id) and actors[local_id].alive
 	ui.checkpoint_save_button.text = "REPLACE SAVED OPERATION & RETURN" if FileAccess.file_exists(checkpoint.path) or FileAccess.file_exists(checkpoint.path + ".bak") else "SAVE OPERATION & RETURN"
 	ui.pause_description.text = "Operation paused. Resume when ready." if not online else "Online operation continues. You remain vulnerable."
 	action_latch.clear()
@@ -766,7 +812,7 @@ func _physics_process(dt: float) -> void:
 		advance_grenades(dt)
 		if training != null:
 			training.update(self)
-		elif alive_count() <= 1 or elapsed >= ROUND_SECONDS:
+		elif (teams.living(actors).size() <= 1 if match_mode == "duo" else alive_count() <= 1) or elapsed >= ROUND_SECONDS:
 			finish_round()
 	elif phase == "finished":
 		phase_time -= dt
@@ -961,7 +1007,7 @@ func bot_input(actor, dt: float) -> void:
 		var best := 70.0
 		actor.target_id = 0
 		for other in actors.values():
-			if other == actor or not other.alive:
+			if other == actor or not other.alive or teams.friendly(actor.actor_id, other.actor_id):
 				continue
 			var distance: float = actor.position.distance_to(other.position)
 			if distance < best and visible_target(actor, other):
@@ -1074,6 +1120,8 @@ func bot_input(actor, dt: float) -> void:
 		actor.change_grip(actor.weapon, true)
 
 func visible_target(actor, other) -> bool:
+	if teams.friendly(actor.actor_id, other.actor_id):
+		return false
 	if smoke_blocks(actor.eye_position(), other.aim_position()):
 		return false
 	var query := PhysicsRayQueryParameters3D.create(actor.eye_position(), other.aim_position(), 3, [actor.get_rid()])
@@ -1162,6 +1210,8 @@ func shot_fx(id: int, origin: Vector3, end: Vector3, kind: int) -> void:
 	get_tree().create_timer(0.065, false).timeout.connect(line.queue_free)
 
 func damage(target, amount: float, attacker_id: int, bypass_protection := false, headshot := false, cause := "THE ZONE", impact_origin = null, ignore_armor := false) -> void:
+	if teams.friendly(attacker_id, target.actor_id):
+		return
 	if training != null and (target.actor_id == local_id or training.step != 2 or attacker_id != local_id or cause == "FRAG"):
 		return
 	if phase in ["finished", "training_complete"] or not target.alive or (training == null and not bypass_protection and phase == "live" and elapsed < 5):
@@ -1178,7 +1228,10 @@ func damage(target, amount: float, attacker_id: int, bypass_protection := false,
 		source_position = impact_origin
 	deliver_feedback(target.actor_id, 1, actual_damage, false, not target.alive, source_position)
 	if not target.alive:
-		target.rank = alive_count() + 1
+		if match_mode == "duo":
+			teams.eliminated(actors, participants)
+		else:
+			target.rank = alive_count() + 1
 		if target.rank == 1:
 			last_eliminated_name = target.display_name
 		if participants.has(target.actor_id):
@@ -1291,19 +1344,24 @@ func finish_round() -> void:
 	# Time limit ties are resolved by health, then kills, then stable actor id.
 	var survivors: Array = actors.values().filter(func(a): return a.alive)
 	survivors.sort_custom(func(a, b): return a.health > b.health if a.health != b.health else (a.kills > b.kills if a.kills != b.kills else a.actor_id < b.actor_id))
-	for i in range(survivors.size()):
-		var actor = survivors[i]
-		actor.rank = i + 1
-		if participants.has(actor.actor_id):
-			participants[actor.actor_id].rank = actor.rank
+	if match_mode == "duo":
+		teams.finish(actors, participants)
+	else:
+		for i in range(survivors.size()):
+			var actor = survivors[i]
+			actor.rank = i + 1
+			if participants.has(actor.actor_id):
+				participants[actor.actor_id].rank = actor.rank
 	clear_grenades()
 	phase = "finished"
 	phase_time = 12
 	# Damage resolves in simulation order. The last eliminated operator retains
 	# rank 1 even if another effect kills them before this tick completes.
 	var winner: String = survivors[0].display_name if not survivors.is_empty() else (last_eliminated_name if last_eliminated_name != "" else "No winner")
+	if match_mode == "duo":
+		winner = "TEAM %d" % teams.winner()
 	add_event("Operation complete / " + winner)
-	if dedicated:
+	if dedicated and match_mode == "solo":
 		var players: Array = []
 		for entry in participants.values():
 			if entry.user_id != "" and entry.rank > 0:
@@ -1315,7 +1373,7 @@ func finish_round() -> void:
 		save_local_operation()
 
 func save_local_operation() -> void:
-	if training != null or local_profile == null or online or phase not in ["live", "finished"] or not actors.has(local_id) or match_id == local_recorded_id:
+	if match_mode != "solo" or training != null or local_profile == null or online or phase not in ["live", "finished"] or not actors.has(local_id) or match_id == local_recorded_id:
 		return
 	var actor = actors[local_id]
 	var completed: bool = phase == "finished" or not actor.alive
@@ -1479,6 +1537,7 @@ func authenticate(value: String) -> void:
 	pending[id].checking = true
 	var admission_generation := match_id
 	var payload := ticket_payload(value)
+	payload.mode = match_mode
 	payload.merge({"room_id": room_id, "instance_id": room_instance, "generation": admission_generation})
 	var response: Dictionary = await http_call("/internal/rooms/tickets/consume", payload, true)
 	if not pending.has(id):
@@ -1503,13 +1562,14 @@ func authenticate(value: String) -> void:
 		actor.user_id = response.body.uid
 		if phase == "live" or phase == "finished":
 			actor.apply_damage(10000)
-	accepted.rpc_id(id, match_id)
+	accepted.rpc_id(id, match_id, match_mode)
 	print("AUTHENTICATED peer=" + str(id))
 
 @rpc("authority", "call_remote", "reliable")
-func accepted(id: String) -> void:
-	if not online or shutdown_requested:
+func accepted(id: String, mode := "solo") -> void:
+	if not online or shutdown_requested or mode not in ["solo", "duo"]:
 		return
+	match_mode = mode
 	admission_ticket = ""
 	admission_token = ""
 	network_round_id = id
@@ -1522,7 +1582,7 @@ func accepted(id: String) -> void:
 func broadcast_snapshot() -> void:
 	var states: Array = []
 	for actor in actors.values():
-		states.append(actor.pack())
+		states.append(actor.pack(true))
 	var supplies_changed := loot.hash() != last_loot_hash
 	last_loot_hash = loot.hash()
 	var grenade_states: Array = []
@@ -1543,7 +1603,7 @@ func broadcast_snapshot() -> void:
 			world_sync.rpc_id(id, match_id, loot)
 		# Four actors per compressed packet stay below the ENet MTU.
 		for offset in range(0, states.size(), 4):
-			var payload := {"round_id": match_id, "actors": states.slice(offset, offset + 4), "roster": actors.keys(), "phase": phase, "time": phase_time, "zone": zone, "zone_state": zone_state, "events": events}
+			var payload := {"round_id": match_id, "actors": states.slice(offset, offset + 4), "roster": actors.keys(), "phase": phase, "time": phase_time, "zone": zone, "zone_state": zone_state, "events": events, "mode": match_mode}
 			var packet := var_to_bytes(payload).compress(FileAccess.COMPRESSION_DEFLATE)
 			if packet.size() > 1150:
 				push_warning("Snapshot exceeds target packet size: " + str(packet.size()))
@@ -1571,13 +1631,19 @@ func snapshot(packet: PackedByteArray) -> void:
 			actors[id].queue_free()
 			actors.erase(id)
 	phase = payload.phase
+	match_mode = payload.get("mode", "solo")
 	phase_time = payload.time
 	zone = payload.zone
 	zone_state = payload.zone_state
 	zone_center = zone_state.get("center", Vector2.ZERO)
 	events = payload.events
 
-func sign_in(username: String, password: String, register: bool, endpoint: String) -> void:
+func sign_in(username: String, password: String, register: bool, endpoint: String, mode := "solo") -> void:
+	if bot_client and OS.has_environment("TEST_GAME_MODE"):
+		mode = OS.get_environment("TEST_GAME_MODE")
+	if mode not in ["solo", "duo"]:
+		ui.show_menu("Unknown operation mode.")
+		return
 	connection_attempt += 1
 	var attempt_id := connection_attempt
 	ui.busy = true
@@ -1612,6 +1678,7 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 	ui.logout_button.disabled = false
 	var attempt_token: String = token
 	var join_payload := build_info.duplicate()
+	join_payload.mode = mode
 	if bot_client and OS.has_environment("TEST_ROOM_ID"):
 		join_payload.room_id = OS.get_environment("TEST_ROOM_ID")
 	elif bot_client and OS.has_environment("TEST_GAME_PORT"):
@@ -1636,9 +1703,9 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 		if bot_client:
 			request_quit(1)
 		return
-	if not compatible_build(response.body.get("build", {})):
+	if not compatible_build(response.body.get("build", {})) or response.body.get("mode", "solo") != mode:
 		cancel_ticket(str(response.body.get("ticket", "")), endpoint, attempt_token)
-		ui.show_menu("Matchmaking returned an incompatible game build.")
+		ui.show_menu("Matchmaking returned an incompatible game build or mode.")
 		return
 	ticket = response.body.ticket
 	admission_ticket = ticket
@@ -2102,7 +2169,7 @@ func snapshot_solo() -> Dictionary:
 	return {"version": 1, "content": build_info.content_revision, "id": match_id, "elapsed": elapsed, "zone_tick": zone_tick, "centers": zone_plan.centers.duplicate(), "rng_seed": rng.seed, "rng_state": rng.state, "actors": states, "loot": loot.duplicate(true), "grenades": projectiles, "clouds": smoke_clouds.duplicate(true), "events": events.duplicate(), "next_loot": next_loot_id, "next_grenade": next_grenade_id, "waypoint": ui.tactical_map.waypoint}
 
 func suspend_solo() -> bool:
-	if training != null:
+	if training != null or match_mode != "solo":
 		return false
 	if dedicated or online or not running or phase != "live" or not actors.has(local_id) or not actors[local_id].alive:
 		return false
@@ -2131,6 +2198,7 @@ func resume_solo() -> bool:
 	get_tree().paused = false
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	online = false
+	match_mode = "solo"
 	clear_actors()
 	world.prepare_navigation()
 	local_id = 1

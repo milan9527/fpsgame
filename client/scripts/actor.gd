@@ -32,6 +32,7 @@ var display_name: String
 var user_id := ""
 var is_bot := false
 var health := 100.0
+var team_id := 0
 var armor := 50.0
 var kills := 0
 var rank := 0
@@ -389,8 +390,11 @@ func apply_damage(amount: float, ignore_armor := false) -> void:
 			body_mesh.position.y = 0.3
 		gun.visible = false
 
-func pack() -> Dictionary:
-	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "mags": magazines.duplicate(), "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "lean": lean, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "smokes": smokes, "grips": grips, "grip_slots": grip_slots.duplicate(), "throw": throw_left, "ack": last_sequence}
+func pack(include_team := false) -> Dictionary:
+	var state := {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "mags": magazines.duplicate(), "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "lean": lean, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "smokes": smokes, "grips": grips, "grip_slots": grip_slots.duplicate(), "throw": throw_left, "ack": last_sequence}
+	if include_team:
+		state.team = team_id
+	return state
 
 func unpack(data: Dictionary, local: bool) -> void:
 	target_position = data.p
@@ -402,6 +406,7 @@ func unpack(data: Dictionary, local: bool) -> void:
 		yaw = data.y
 		pitch = data.v
 	health = data.h
+	team_id = int(data.get("team", 0))
 	armor = data.a
 	kills = data.k
 	rank = data.r

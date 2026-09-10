@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+timeout 30s ./tools/godot --headless --path client --script ../tests/bindings_rules.gd > artifacts/bindings-rules.log 2>&1
+rg -q BINDINGS_RULES_PASS artifacts/bindings-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/bindings-rules.log; then cat artifacts/bindings-rules.log; exit 1; fi
 timeout 30s ./tools/godot --headless --path client --script ../tests/fall_rules.gd > artifacts/fall-rules.log 2>&1
 rg -q FALL_RULES_PASS artifacts/fall-rules.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/fall-rules.log; then cat artifacts/fall-rules.log; exit 1; fi
@@ -123,3 +126,5 @@ if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/tac
 .venv/bin/python tools/test_smoke_network.py
 
 .venv/bin/python tools/test_fall_network.py
+
+.venv/bin/python tools/test_bindings_network.py

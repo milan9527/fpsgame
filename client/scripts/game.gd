@@ -29,6 +29,8 @@ var pending: Dictionary = {}
 var participants: Dictionary = {}
 var loot: Dictionary = {}
 var next_loot_id := 48
+const Bindings = preload("res://scripts/control_bindings.gd")
+var bindings = Bindings.new()
 var grenades: Dictionary = {}
 const FallRules = preload("res://scripts/fall_rules.gd")
 const SmokeRules = preload("res://scripts/smoke_rules.gd")
@@ -156,6 +158,7 @@ func _ready() -> void:
 		sound.process_mode = Node.PROCESS_MODE_PAUSABLE
 		add_child(sound)
 		ui = Interface.new()
+		ui.bindings = bindings
 		add_child(ui)
 		sound.volume = 0.0 if smoke or bot_client else ui.volume
 		if audio_test:
@@ -226,17 +229,9 @@ func request_quit(code := 0, discard_local := false) -> void:
 	get_tree().quit(code)
 
 func setup_input() -> void:
-	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "lean_left": KEY_Z, "lean_right": KEY_C, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "smoke_throw": KEY_V, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "inventory": KEY_B, "map": KEY_M, "scoreboard": KEY_TAB, "spectate_previous": KEY_Q, "spectate_next": KEY_E}
-	for action in keys:
-		InputMap.add_action(action)
-		var e := InputEventKey.new()
-		e.physical_keycode = keys[action]
-		InputMap.action_add_event(action, e)
-	for action in ["fire", "aim"]:
-		InputMap.add_action(action)
-		var e := InputEventMouseButton.new()
-		e.button_index = MOUSE_BUTTON_LEFT if action == "fire" else MOUSE_BUTTON_RIGHT
-		InputMap.action_add_event(action, e)
+	if not dedicated:
+		bindings.load_profile()
+	bindings.apply()
 
 func start_server() -> void:
 	if server_key.length() < 32:
@@ -410,7 +405,7 @@ func new_round(id: String) -> void:
 	ui.show_game()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if dedicated or not running:
+	if dedicated or not running or ui.controls.visible:
 		return
 	if event.is_action_pressed("pause"):
 		if ui.tactical_map.visible:
@@ -679,7 +674,7 @@ func _physics_process(dt: float) -> void:
 func local_command(actor) -> Dictionary:
 	sequence += 1
 	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "loot": false, "throw": false, "smoke_throw": false, "weapon": -1, "lean": 0.0}
-	if ui.pause_panel.visible or ui.inventory.visible or ui.tactical_map.visible or not actor.alive:
+	if ui.controls.visible or ui.pause_panel.visible or ui.inventory.visible or ui.tactical_map.visible or not actor.alive:
 		action_latch.clear()
 		return cmd
 	var movement := Input.get_vector("left", "right", "forward", "back")
@@ -1205,7 +1200,7 @@ func _process(dt: float) -> void:
 			var item_name: String = SupplyRules.NAMES[int(supply.kind)]
 			var quantity: float = supply.amount
 			var quantity_text := str(int(quantity)) if is_equal_approx(quantity, roundf(quantity)) else String.num(quantity, 1)
-			ui.supply_prompt = ("E  %s ×%s" % [item_name, quantity_text]) if supply.usable else item_name + " / INVENTORY FULL"
+			ui.supply_prompt = ("%s  %s ×%s" % [Bindings.key_label("loot"), item_name, quantity_text]) if supply.usable else item_name + " / INVENTORY FULL"
 		var message := ""
 		if phase == "finished":
 			message = ("VICTORY" if actor.rank == 1 else "OPERATION COMPLETE") + "\nPLACEMENT  #%d  /  %d ELIMINATIONS" % [actor.rank, actor.kills]

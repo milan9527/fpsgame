@@ -30,6 +30,10 @@ cp docs/SAFE_ZONES.md artifacts/IronMeridian-Linux/docs/SAFE_ZONES.md
 cp docs/LEANING.md artifacts/IronMeridian-Linux/docs/LEANING.md
 cp docs/SMOKE_GRENADES.md artifacts/IronMeridian-Linux/docs/SMOKE_GRENADES.md
 cp docs/FALL_DAMAGE.md artifacts/IronMeridian-Linux/docs/FALL_DAMAGE.md
+cp docs/CONTROLS.md artifacts/IronMeridian-Linux/docs/CONTROLS.md
+timeout 30s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/bindings_rules.gd" > artifacts/packed-bindings.log 2>&1
+rg -q BINDINGS_RULES_PASS artifacts/packed-bindings.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-bindings.log; then cat artifacts/packed-bindings.log; exit 1; fi
 timeout 30s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/fall_rules.gd" > artifacts/packed-fall.log 2>&1
 rg -q FALL_RULES_PASS artifacts/packed-fall.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-fall.log; then cat artifacts/packed-fall.log; exit 1; fi

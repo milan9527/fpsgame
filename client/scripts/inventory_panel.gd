@@ -4,6 +4,8 @@ signal close_requested
 signal pickup_requested(id: int)
 signal equipment_requested(action: String, index: int)
 signal drop_requested(kind: int, count: int)
+const Bindings = preload("res://scripts/control_bindings.gd")
+var title: Label
 const SupplyRules = preload("res://scripts/supply_rules.gd")
 var stock: Label
 var empty: Label
@@ -27,7 +29,7 @@ func _ready() -> void:
 	panel.size = Vector2(1000, 660)
 	panel.add_theme_constant_override("separation", 18)
 	add_child(panel)
-	var title := Label.new()
+	title = Label.new()
 	title.text = "FIELD INVENTORY    /    B OR ESC TO CLOSE"
 	title.add_theme_font_size_override("font_size", 28)
 	panel.add_child(title)
@@ -98,6 +100,7 @@ func _ready() -> void:
 	hide()
 
 func refresh(actor, supplies: Array) -> void:
+	title.text = "FIELD INVENTORY    /    %s OR ESC TO CLOSE" % Bindings.key_label("inventory")
 	stock.text = "CARRIED SUPPLIES\n\nAMMUNITION  %d / 300\nMEDKITS  %d / 5     FRAGS  %d / 4\nSMOKE  %d / 3     ARMOR  %d / 100\n\nWEAPONS / LOADED MAGAZINES" % [actor.reserve, actor.medkits, actor.grenades, actor.smokes, actor.armor]
 	for index in range(3):
 		weapons[index].text = "%s  %s   %d / %d" % ["EQUIPPED" if index == actor.weapon else "EQUIP", ["AR-30", "SG-8", "SR-5"][index], actor.magazines[index], actor.CAPACITY[index]]

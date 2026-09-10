@@ -1,6 +1,7 @@
 extends Control
 
 signal close_requested
+const Bindings = preload("res://scripts/control_bindings.gd")
 const BOUNDS := Rect2(-120, -120, 240, 240)
 const MAP_RECT := Rect2(260, 120, 640, 640)
 const MARKER := Color("f6a77a")
@@ -87,7 +88,7 @@ func _draw() -> void:
 		draw_line(target - Vector2(0, 11), target + Vector2(0, 11), MARKER, 2)
 	if not zone_info.is_empty():
 		draw_arc(world_to_map(zone_info.next_center), zone_info.next_radius / 240 * 640, 0, TAU, 128, Color.WHITE, 2, true)
-	var lines := ["NORTH  /  -Z", "", "M / ESC     CLOSE MAP", "LEFT CLICK  SET WAYPOINT", "RIGHT CLICK CLEAR WAYPOINT", "", "BLUE RING   CURRENT ZONE", "WHITE RING  NEXT ZONE", "STAGE %d / %s %ds" % [zone_info.get("stage", 1), "SHRINK" if zone_info.get("moving", false) else "HOLD", ceili(zone_info.get("remaining", 0))], "PALE BLOCKS BUILDINGS", "GRAY STRIPS ROADS", "GRID CELL   40 m", "", "ZONE RADIUS  %d m" % zone_radius, "ROUND TIME   %02d:%02d" % [int(time_left) / 60, int(time_left) % 60], "", "WORLD CONTINUES WHILE OPEN"]
+	var lines := ["NORTH  /  -Z", "", "%s / ESC     CLOSE MAP" % Bindings.key_label("map"), "LEFT CLICK  SET WAYPOINT", "RIGHT CLICK CLEAR WAYPOINT", "", "BLUE RING   CURRENT ZONE", "WHITE RING  NEXT ZONE", "STAGE %d / %s %ds" % [zone_info.get("stage", 1), "SHRINK" if zone_info.get("moving", false) else "HOLD", ceili(zone_info.get("remaining", 0))], "PALE BLOCKS BUILDINGS", "GRAY STRIPS ROADS", "GRID CELL   40 m", "", "ZONE RADIUS  %d m" % zone_radius, "ROUND TIME   %02d:%02d" % [int(time_left) / 60, int(time_left) % 60], "", "WORLD CONTINUES WHILE OPEN"]
 	if waypoint is Vector2:
 		lines.append("WAYPOINT     %d m" % roundi(operator_position.distance_to(waypoint)))
 	for index in range(lines.size()):

@@ -40,6 +40,10 @@ var local_position := Vector3.ZERO
 var local_yaw := 0.0
 var radius := 110.0
 var zone_info: Dictionary = {}
+const Bindings = preload("res://scripts/control_bindings.gd")
+var bindings
+var controls
+var controls_hint: Label
 var sensitivity := 0.0022
 var volume := 0.65
 var settings := ConfigFile.new()
@@ -114,10 +118,11 @@ func _ready() -> void:
 	left.add_child(history_buttons)
 	button(history_buttons, "SERVICE LEADERBOARD", func(): leaderboard_requested.emit(endpoint.text.trim_suffix("/")))
 	button(history_buttons, "LOCAL OPERATIONS", func(): local_history_requested.emit())
+	button(left, "KEYBOARD CONTROLS", func(): controls.open())
 	var bottom := Control.new()
 	bottom.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left.add_child(bottom)
-	label(left, "WASD  Move    •    SHIFT  Sprint    •    SPACE  Jump\nR  Reload    •    E  Loot    •    H  Heal\n1/2/3  Weapons    •    RMB  Aim    •    ESC  Menu\nB  Inventory    •    M  Map    •    G  Frag    •    Z/C  Lean\nV  Smoke grenade", 16, Color("b7c6c8"))
+	controls_hint = label(left, "WASD  Move    •    SHIFT  Sprint    •    SPACE  Jump\nR  Reload    •    E  Loot    •    H  Heal\n1/2/3  Weapons    •    RMB  Aim    •    ESC  Menu\nB  Inventory    •    M  Map    •    G  Frag    •    Z/C  Lean\nV  Smoke grenade", 16, Color("b7c6c8"))
 	var right := VBoxContainer.new()
 	right.custom_minimum_size.x = 390
 	right.add_theme_constant_override("separation", 13)
@@ -195,6 +200,7 @@ func _ready() -> void:
 	pause_panel.add_child(pause_box)
 	label(pause_box, "FIELD MENU", 28, ACCENT)
 	pause_description = label(pause_box, "Operation paused.", 16)
+	button(pause_box, "KEYBOARD CONTROLS", func(): controls.open())
 	button(pause_box, "RESUME", func(): set_pause(false))
 	button(pause_box, "RETURN TO DEPLOYMENT", func(): leave_requested.emit())
 	pause_panel.visible = false
@@ -259,6 +265,18 @@ func _ready() -> void:
 	local_exit_button.visible = false
 	button(local_box, "BACK", hide_local_history)
 	local_history_panel.visible = false
+	if bindings == null:
+		bindings = Bindings.new()
+	controls = preload("res://scripts/controls_panel.gd").new()
+	controls.bindings = bindings
+	controls.theme = theme
+	add_child(controls)
+	controls.changed.connect(update_controls_hint)
+	controls.closed.connect(update_controls_hint)
+	update_controls_hint()
+
+func update_controls_hint() -> void:
+	controls_hint.text = "%s/%s/%s/%s  Move   •   %s  Sprint   •   %s  Jump\n%s  Reload   •   %s  Loot   •   %s  Heal\n%s/%s/%s  Weapons   •   RMB  Aim   •   ESC  Menu\n%s  Inventory   •   %s  Map   •   %s  Frag\n%s/%s  Lean   •   %s  Smoke" % [Bindings.key_label("forward"), Bindings.key_label("back"), Bindings.key_label("left"), Bindings.key_label("right"), Bindings.key_label("sprint"), Bindings.key_label("jump"), Bindings.key_label("reload"), Bindings.key_label("loot"), Bindings.key_label("heal"), Bindings.key_label("weapon1"), Bindings.key_label("weapon2"), Bindings.key_label("weapon3"), Bindings.key_label("inventory"), Bindings.key_label("map"), Bindings.key_label("throw"), Bindings.key_label("lean_left"), Bindings.key_label("lean_right"), Bindings.key_label("smoke_throw")]
 
 func label(parent: Node, text: String, font_size: int, color := Color("e0e9e8")) -> Label:
 	var l := Label.new()
@@ -316,6 +334,7 @@ func save_settings() -> void:
 	settings.save("user://settings.cfg")
 
 func show_menu(message := "") -> void:
+	controls.close()
 	set_map(false)
 	tactical_map.waypoint = null
 	set_inventory(false)
@@ -333,6 +352,7 @@ func show_menu(message := "") -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func show_game() -> void:
+	controls.close()
 	set_map(false)
 	tactical_map.waypoint = null
 	set_inventory(false)
@@ -425,14 +445,14 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 	if not circle.is_empty() and phase == "live":
 		headline.text += "   /   ZONE %d · %s %ds" % [circle.stage, "SHRINKING" if circle.moving else "CLOSES IN", ceili(circle.remaining)]
 	weapon.text = "%s    %02d / %03d" % [actor.NAMES[actor.weapon], actor.ammo, actor.reserve]
-	loadout_label.text = "1  AR %02d   |   2  SG %02d   |   3  SR %02d" % [actor.magazines[0], actor.magazines[1], actor.magazines[2]]
+	loadout_label.text = "%s  AR %02d   |   %s  SG %02d   |   %s  SR %02d" % [Bindings.key_label("weapon1"), actor.magazines[0], Bindings.key_label("weapon2"), actor.magazines[1], Bindings.key_label("weapon3"), actor.magazines[2]]
 	if actor.crouched:
 		weapon.text += "  [CROUCHED]"
 	if absf(actor.lean) > 0.05:
 		weapon.text += "  [LEAN L]" if actor.lean < 0 else "  [LEAN R]"
 	health_bar.value = actor.health
 	armor_bar.value = actor.armor
-	prompt.text = ("H  Medkit ×%d   |   G  Frag ×%d   |   V  Smoke ×%d" % [actor.medkits, actor.grenades, actor.smokes]) if supply_prompt == "" else supply_prompt
+	prompt.text = ("%s  Medkit ×%d   |   %s  Frag ×%d   |   %s  Smoke ×%d" % [Bindings.key_label("heal"), actor.medkits, Bindings.key_label("throw"), actor.grenades, Bindings.key_label("smoke_throw"), actor.smokes]) if supply_prompt == "" else supply_prompt
 	if actor.throw_left > 0:
 		prompt.text = "THROWING GRENADE"
 	elif actor.reload_left > 0:
@@ -444,7 +464,7 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 	elif actor.weapon_blocked and not spectating:
 		prompt.text = "MUZZLE BLOCKED / STEP BACK OR REPOSITION"
 	elif actor.ammo == 0 and not spectating:
-		prompt.text = "R  RELOAD / EMPTY MAGAZINE" if actor.reserve > 0 else "NO RESERVE AMMUNITION / FIND SUPPLIES"
+		prompt.text = Bindings.key_label("reload") + "  RELOAD / EMPTY MAGAZINE" if actor.reserve > 0 else "NO RESERVE AMMUNITION / FIND SUPPLIES"
 	if grenade_warning_distance < 9:
 		prompt.text = "FRAG NEARBY / %dm — MOVE TO COVER" % ceili(grenade_warning_distance)
 	feed.text = "\n".join(events)
@@ -457,7 +477,7 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 	waypoint_label.visible = tactical_map.waypoint is Vector2 and not spectating
 	if waypoint_label.visible:
 		var distance: float = Vector2(actor.position.x, actor.position.z).distance_to(tactical_map.waypoint)
-		waypoint_label.text = "WAYPOINT  %dm  /  M MAP" % roundi(distance)
+		waypoint_label.text = "WAYPOINT  %dm  /  %s MAP" % [roundi(distance), Bindings.key_label("map")]
 	hud.queue_redraw()
 
 func set_spectator(enabled: bool, nickname: String, placement: int) -> void:
@@ -466,7 +486,7 @@ func set_spectator(enabled: bool, nickname: String, placement: int) -> void:
 	if enabled:
 		spectator_label.text = "SPECTATING  /  " + (nickname if nickname != "" else "AWAITING RESULT")
 		spectator_label.text += "\nYOUR PLACEMENT  #%d" % placement
-		prompt.text = "Q / E  Switch operator   |   Mouse  Orbit   |   Wheel  Zoom   |   ESC  Menu"
+		prompt.text = "%s / %s  Switch operator   |   Mouse  Orbit   |   Wheel  Zoom   |   ESC  Menu" % [Bindings.key_label("spectate_previous"), Bindings.key_label("spectate_next")]
 		hit_until = 0
 		damage_until = 0
 		hit_text.text = ""
@@ -489,7 +509,7 @@ func update_scoreboard(roster: Array, enabled: bool) -> void:
 	if not enabled:
 		return
 	roster.sort_custom(func(a, b): return a.kills > b.kills)
-	var lines := PackedStringArray(["FIELD ROSTER  /  HOLD TAB", "", "OPERATOR                         KILLS     STATUS"])
+	var lines := PackedStringArray(["FIELD ROSTER  /  HOLD " + Bindings.key_label("scoreboard"), "", "OPERATOR                         KILLS     STATUS"])
 	for actor in roster:
 		lines.append("%-24s      %02d        %s" % [actor.display_name, actor.kills, "LIVE" if actor.alive else "OUT"])
 	scoreboard_label.text = "\n".join(lines)

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+timeout 30s ./tools/godot --headless --path client --script ../tests/smoke_grenade_rules.gd > artifacts/smoke-grenade-rules.log 2>&1
+rg -q SMOKE_GRENADE_RULES_PASS artifacts/smoke-grenade-rules.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/smoke-grenade-rules.log; then cat artifacts/smoke-grenade-rules.log; exit 1; fi
 timeout 30s ./tools/godot --headless --path client --script ../tests/lean_rules.gd > artifacts/lean-rules.log 2>&1
 rg -q LEAN_RULES_PASS artifacts/lean-rules.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/lean-rules.log; then cat artifacts/lean-rules.log; exit 1; fi
@@ -113,3 +116,5 @@ timeout 25s xvfb-run -a ./tools/godot --path client --audio-driver Dummy --scrip
 rg -q TACTICAL_MAP_RULES_PASS artifacts/tactical-map-rules.log
 if rg -q 'SCRIPT ERROR|Assertion failed|ObjectDB instances leaked' artifacts/tactical-map-rules.log; then cat artifacts/tactical-map-rules.log; exit 1; fi
 .venv/bin/python tools/test_map_network.py
+
+.venv/bin/python tools/test_smoke_network.py

@@ -117,7 +117,7 @@ func _ready() -> void:
 	var bottom := Control.new()
 	bottom.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left.add_child(bottom)
-	label(left, "WASD  Move    •    SHIFT  Sprint    •    SPACE  Jump\nR  Reload    •    E  Loot    •    H  Heal\n1/2/3  Weapons    •    RMB  Aim    •    ESC  Menu\nB  Inventory    •    M  Map    •    G  Frag    •    Z/C  Lean", 16, Color("b7c6c8"))
+	label(left, "WASD  Move    •    SHIFT  Sprint    •    SPACE  Jump\nR  Reload    •    E  Loot    •    H  Heal\n1/2/3  Weapons    •    RMB  Aim    •    ESC  Menu\nB  Inventory    •    M  Map    •    G  Frag    •    Z/C  Lean\nV  Smoke grenade", 16, Color("b7c6c8"))
 	var right := VBoxContainer.new()
 	right.custom_minimum_size.x = 390
 	right.add_theme_constant_override("separation", 13)
@@ -432,9 +432,9 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 		weapon.text += "  [LEAN L]" if actor.lean < 0 else "  [LEAN R]"
 	health_bar.value = actor.health
 	armor_bar.value = actor.armor
-	prompt.text = ("H  Medkit ×%d   |   G  Frag ×%d" % [actor.medkits, actor.grenades]) if supply_prompt == "" else supply_prompt
+	prompt.text = ("H  Medkit ×%d   |   G  Frag ×%d   |   V  Smoke ×%d" % [actor.medkits, actor.grenades, actor.smokes]) if supply_prompt == "" else supply_prompt
 	if actor.throw_left > 0:
-		prompt.text = "THROWING FRAG"
+		prompt.text = "THROWING GRENADE"
 	elif actor.reload_left > 0:
 		prompt.text = "RELOADING   %.1fs" % actor.reload_left
 	elif actor.heal_left > 0:

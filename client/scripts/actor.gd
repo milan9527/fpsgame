@@ -41,6 +41,7 @@ var ammo: int:
 var reserve := 120
 var medkits := 2
 var grenades := 2
+var smokes := 0
 var throw_left := 0.0
 var alive := true
 var yaw := 0.0
@@ -346,7 +347,7 @@ func apply_damage(amount: float) -> void:
 		gun.visible = false
 
 func pack() -> Dictionary:
-	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "mags": magazines.duplicate(), "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "lean": lean, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "throw": throw_left, "ack": last_sequence}
+	return {"id": actor_id, "n": display_name, "b": is_bot, "p": position, "y": yaw, "v": pitch, "h": health, "a": armor, "k": kills, "r": rank, "w": weapon, "m": ammo, "mags": magazines.duplicate(), "s": reserve, "med": medkits, "live": alive, "reload": reload_left, "heal": heal_left, "crouched": crouched, "lean": lean, "ads": aiming, "recoil": recoil, "vel": velocity, "ground": grounded, "frags": grenades, "smokes": smokes, "throw": throw_left, "ack": last_sequence}
 
 func unpack(data: Dictionary, local: bool) -> void:
 	target_position = data.p
@@ -375,6 +376,7 @@ func unpack(data: Dictionary, local: bool) -> void:
 	velocity = data.vel
 	grounded = data.ground
 	grenades = data.frags
+	smokes = data.get("smokes", 0)
 	throw_left = data.throw
 	if alive and not data.live:
 		apply_damage(10000)

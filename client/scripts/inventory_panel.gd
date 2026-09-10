@@ -77,7 +77,7 @@ func _ready() -> void:
 	var drop_row := HBoxContainer.new()
 	right.add_child(drop_row)
 	drop_kind = OptionButton.new()
-	for kind in [0, 1, 3]:
+	for kind in [0, 1, 3, 4]:
 		drop_kind.add_item(SupplyRules.NAMES[kind], kind)
 	drop_row.add_child(drop_kind)
 	drop_count = SpinBox.new()
@@ -98,7 +98,7 @@ func _ready() -> void:
 	hide()
 
 func refresh(actor, supplies: Array) -> void:
-	stock.text = "CARRIED SUPPLIES\n\nAMMUNITION  %d / 300\nMEDKITS  %d / 5     FRAGS  %d / 4\nARMOR  %d / 100\n\nWEAPONS / LOADED MAGAZINES" % [actor.reserve, actor.medkits, actor.grenades, actor.armor]
+	stock.text = "CARRIED SUPPLIES\n\nAMMUNITION  %d / 300\nMEDKITS  %d / 5     FRAGS  %d / 4\nSMOKE  %d / 3     ARMOR  %d / 100\n\nWEAPONS / LOADED MAGAZINES" % [actor.reserve, actor.medkits, actor.grenades, actor.smokes, actor.armor]
 	for index in range(3):
 		weapons[index].text = "%s  %s   %d / %d" % ["EQUIPPED" if index == actor.weapon else "EQUIP", ["AR-30", "SG-8", "SR-5"][index], actor.magazines[index], actor.CAPACITY[index]]
 		weapons[index].disabled = index == actor.weapon or actor.reload_left > 0 or actor.throw_left > 0

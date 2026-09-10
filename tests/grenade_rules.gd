@@ -104,7 +104,7 @@ func run() -> void:
 	game.online = true
 	game.network_round_id = "grenade-test"
 	game.grenade_exploded("grenade-test", 777, Vector3.ZERO)
-	var stale := {"round": "grenade-test", "states": [{"id": 777, "p": Vector3.ZERO, "f": 1, "owner": 1}], "ids": [777]}
+	var stale := {"round": "grenade-test", "states": [{"id": 777, "p": Vector3.ZERO, "f": 1, "owner": 1, "kind": 0}], "ids": [777]}
 	game.grenade_snapshot(var_to_bytes(stale).compress(FileAccess.COMPRESSION_DEFLATE))
 	assert(not game.grenades.has(777), "Exploded projectile cannot reappear from stale snapshot")
 	stale.round = "old-round"

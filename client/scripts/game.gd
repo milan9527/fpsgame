@@ -30,6 +30,9 @@ var participants: Dictionary = {}
 var loot: Dictionary = {}
 var next_loot_id := 48
 var grenades: Dictionary = {}
+const SmokeRules = preload("res://scripts/smoke_rules.gd")
+var smoke_clouds: Dictionary = {}
+var smoke_visuals: Dictionary = {}
 var next_grenade_id := 1
 var grenade_tombstones: Dictionary = {}
 var last_loot_hash := 0
@@ -222,7 +225,7 @@ func request_quit(code := 0, discard_local := false) -> void:
 	get_tree().quit(code)
 
 func setup_input() -> void:
-	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "lean_left": KEY_Z, "lean_right": KEY_C, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "inventory": KEY_B, "map": KEY_M, "scoreboard": KEY_TAB, "spectate_previous": KEY_Q, "spectate_next": KEY_E}
+	var keys := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "lean_left": KEY_Z, "lean_right": KEY_C, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "smoke_throw": KEY_V, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "inventory": KEY_B, "map": KEY_M, "scoreboard": KEY_TAB, "spectate_previous": KEY_Q, "spectate_next": KEY_E}
 	for action in keys:
 		InputMap.add_action(action)
 		var e := InputEventKey.new()
@@ -355,7 +358,7 @@ func reset_round() -> void:
 	for i in range(48):
 		# Supplies are placed along open approaches, outside building walls.
 		var p := Vector3([-18.0, 18.0, -90.0, 90.0][i % 4], 0.1, -88 + (i / 4) * 16)
-		loot[i] = {"p": p, "kind": i % 4}
+		loot[i] = {"p": p, "kind": 4 if i % 8 == 7 else i % 4}
 	world.show_loot(loot)
 	phase = "lobby"
 	phase_time = 18
@@ -511,7 +514,7 @@ func receive_drop(actor, round_id: String, seq, kind, count) -> bool:
 	if seq < actor.last_sequence - 120 or actor.action_tokens < 1:
 		return false
 	actor.action_tokens -= 1
-	if kind not in [0, 1, 3] or count <= 0 or count > 300:
+	if kind not in [0, 1, 3, 4] or count <= 0 or count > 300:
 		return false
 	# Healing consumes its medkit at completion; keep it reserved until then.
 	if kind == 1 and actor.heal_left > 0:
@@ -673,7 +676,7 @@ func _physics_process(dt: float) -> void:
 
 func local_command(actor) -> Dictionary:
 	sequence += 1
-	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "loot": false, "throw": false, "weapon": -1, "lean": 0.0}
+	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "loot": false, "throw": false, "smoke_throw": false, "weapon": -1, "lean": 0.0}
 	if ui.pause_panel.visible or ui.inventory.visible or ui.tactical_map.visible or not actor.alive:
 		action_latch.clear()
 		return cmd
@@ -688,13 +691,13 @@ func local_command(actor) -> Dictionary:
 		inventory_pointer_guard = Input.is_action_pressed("fire") or Input.is_action_pressed("aim")
 		cmd.fire = false
 		cmd.ads = false
-	for action in ["jump", "reload", "heal", "loot", "throw"]:
+	for action in ["jump", "reload", "heal", "loot", "throw", "smoke_throw"]:
 		cmd[action] = Input.is_action_just_pressed(action)
 	for i in range(3):
 		if Input.is_action_just_pressed("weapon" + str(i + 1)):
 			cmd.weapon = i
 	if online:
-		for action in ["jump", "reload", "heal", "loot", "throw"]:
+		for action in ["jump", "reload", "heal", "loot", "throw", "smoke_throw"]:
 			if cmd[action]:
 				action_latch[action] = true
 			cmd[action] = action_latch.get(action, false)
@@ -735,11 +738,11 @@ func input_command(cmd: Dictionary) -> void:
 	apply_command(actor, without_actions(cmd))
 
 func has_actions(cmd: Dictionary) -> bool:
-	return cmd.jump or cmd.reload or cmd.heal or cmd.loot or cmd.throw or cmd.weapon >= 0
+	return cmd.jump or cmd.reload or cmd.heal or cmd.loot or cmd.throw or cmd.smoke_throw or cmd.weapon >= 0
 
 func without_actions(cmd: Dictionary) -> Dictionary:
 	var movement := cmd.duplicate()
-	for action in ["jump", "reload", "heal", "loot", "throw"]:
+	for action in ["jump", "reload", "heal", "loot", "throw", "smoke_throw"]:
 		movement[action] = false
 	movement.weapon = -1
 	return movement
@@ -777,14 +780,14 @@ func receive_actions(actor, round_id: String, cmd: Dictionary, loot_target = -1)
 	return true
 
 func valid_command(cmd: Dictionary) -> bool:
-	if cmd.size() != 16:
+	if cmd.size() != 17:
 		return false
 	for key in ["seq", "x", "z", "yaw", "pitch", "weapon", "lean"]:
 		if not cmd.has(key) or not (cmd[key] is float or cmd[key] is int):
 			return false
 		if not is_finite(float(cmd[key])):
 			return false
-	for key in ["fire", "sprint", "crouch", "ads", "jump", "reload", "heal", "loot", "throw"]:
+	for key in ["fire", "sprint", "crouch", "ads", "jump", "reload", "heal", "loot", "throw", "smoke_throw"]:
 		if not cmd.has(key) or not cmd[key] is bool:
 			return false
 	return absf(cmd.lean) <= 1 and absf(cmd.x) <= 1 and absf(cmd.z) <= 1 and absf(cmd.yaw) <= PI + 0.01 and absf(cmd.pitch) <= 1.46 and cmd.weapon >= -1 and cmd.weapon <= 2
@@ -814,6 +817,8 @@ func apply_actions(actor, cmd: Dictionary, loot_target := -1, explicit_pickup :=
 		pickup(actor, loot_target)
 	if cmd.throw:
 		throw_grenade(actor)
+	if cmd.smoke_throw:
+		throw_grenade(actor, 1)
 
 func bot_input(actor, dt: float) -> void:
 	if not actor.alive:
@@ -920,6 +925,8 @@ func bot_input(actor, dt: float) -> void:
 	pickup(actor)
 
 func visible_target(actor, other) -> bool:
+	if smoke_blocks(actor.eye_position(), other.aim_position()):
+		return false
 	var query := PhysicsRayQueryParameters3D.create(actor.eye_position(), other.aim_position(), 3, [actor.get_rid()])
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	return not hit.is_empty() and hit.collider == other
@@ -1039,7 +1046,7 @@ func damage(target, amount: float, attacker_id: int, bypass_protection := false,
 func drop_inventory(actor) -> void:
 	if actor.alive or (online and not dedicated):
 		return
-	var amounts := [actor.total_ammunition(), actor.medkits, actor.armor, actor.grenades]
+	var amounts := [actor.total_ammunition(), actor.medkits, actor.armor, actor.grenades, actor.smokes]
 	for kind in range(amounts.size()):
 		if amounts[kind] <= 0:
 			continue
@@ -1052,6 +1059,7 @@ func drop_inventory(actor) -> void:
 	actor.medkits = 0
 	actor.armor = 0
 	actor.grenades = 0
+	actor.smokes = 0
 
 func supply_accessible(actor, item: Dictionary) -> bool:
 	if actor.position.distance_to(item.p) >= SupplyRules.RANGE:
@@ -1169,6 +1177,7 @@ func _process(dt: float) -> void:
 		actors[id].render_frame(dt, online, id == local_id, Input.is_action_pressed("aim"))
 	spectator.update_view(actors, local_id, phase)
 	sound.update_actors(actors, world, get_viewport().get_camera_3d())
+	update_smoke_visuals()
 	world.show_loot(loot)
 	world.set_zone(zone, zone_center)
 	ui.update_scoreboard(actors.values(), Input.is_action_pressed("scoreboard") and not ui.pause_panel.visible and not ui.inventory.visible and not ui.tactical_map.visible)
@@ -1207,6 +1216,8 @@ func _process(dt: float) -> void:
 		ui.sight_aiming = not spectator.active and actor.first_person.aim_blend > 0.5
 		ui.grenade_warning_distance = INF
 		for grenade in grenades.values():
+			if grenade.kind != 0:
+				continue
 			ui.grenade_warning_distance = minf(ui.grenade_warning_distance, viewed_actor.position.distance_to(grenade.position))
 		ui.update_hud(viewed_actor, alive_count(), phase, phase_time, zone, events, message, zone_state)
 		ui.set_spectator(spectator.active, spectator.target_name, actor.rank)
@@ -1318,6 +1329,11 @@ func broadcast_snapshot() -> void:
 	for id in sessions:
 		if not peer_ready(id):
 			continue
+		var clouds: Array = []
+		for cloud_id in smoke_clouds:
+			clouds.append({"id": cloud_id, "p": smoke_clouds[cloud_id].p, "age": smoke_clouds[cloud_id].age})
+		for offset in range(0, maxi(1, clouds.size()), 6):
+			smoke_snapshot.rpc_id(id, match_id, clouds.slice(offset, offset + 6), smoke_clouds.keys())
 		for offset in range(0, maxi(1, grenade_states.size()), 6):
 			var data := {"round": match_id, "states": grenade_states.slice(offset, offset + 6), "ids": grenades.keys()}
 			grenade_snapshot.rpc_id(id, var_to_bytes(data).compress(FileAccess.COMPRESSION_DEFLATE))
@@ -1644,14 +1660,23 @@ func peer_ready(id: int) -> bool:
 	return peer != null and peer.get_state() == ENetPacketPeer.STATE_CONNECTED and peer.get_channels() > 0
 
 func clear_grenades() -> void:
+	smoke_clouds.clear()
+	for visual in smoke_visuals.values():
+		visual.queue_free()
+	smoke_visuals.clear()
 	for grenade in grenades.values():
 		remove_child(grenade)
 		grenade.queue_free()
 	grenades.clear()
 	grenade_tombstones.clear()
 
-func throw_grenade(actor) -> bool:
-	if phase != "live" or not actor.alive or actor.grenades <= 0 or actor.throw_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or grenades.size() >= 32:
+func throw_grenade(actor, kind := 0) -> bool:
+	if kind not in [0, 1]:
+		return false
+	var stock := "smokes" if kind == 1 else "grenades"
+	if kind == 1 and smoke_clouds.size() + grenades.size() >= 32:
+		return false
+	if phase != "live" or not actor.alive or actor.get(stock) <= 0 or actor.throw_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or grenades.size() >= 32:
 		return false
 	var direction := Basis(Vector3.UP, actor.yaw) * Basis(Vector3.RIGHT, actor.pitch) * Vector3.FORWARD
 	var origin: Vector3 = actor.eye_position()
@@ -1673,16 +1698,21 @@ func throw_grenade(actor) -> bool:
 	grenade.grenade_id = next_grenade_id
 	next_grenade_id += 1
 	grenade.owner_id = actor.actor_id
+	grenade.kind = kind
 	grenade.position = destination
 	add_child(grenade)
 	grenade.linear_velocity = direction * 17 + Vector3.UP * 3 + actor.velocity * 0.4
 	grenade.angular_velocity = Vector3(5, 3, 4)
 	grenades[grenade.grenade_id] = grenade
-	actor.grenades -= 1
+	actor.set(stock, actor.get(stock) - 1)
 	actor.throw_left = 0.7
 	return true
 
 func advance_grenades(dt: float) -> void:
+	for id in smoke_clouds.keys():
+		smoke_clouds[id].age += dt
+		if smoke_clouds[id].age >= SmokeRules.LIFETIME:
+			smoke_clouds.erase(id)
 	for id in grenades.keys():
 		var grenade = grenades[id]
 		grenade.fuse -= dt
@@ -1705,6 +1735,10 @@ func detonate_grenade(id: int) -> void:
 	var attacker_id: int = grenade.owner_id
 	grenades.erase(id)
 	grenade.queue_free()
+	if grenade.kind == 1:
+		if phase == "live":
+			smoke_clouds[id] = {"p": origin + Vector3.UP * 2, "age": 0.0}
+		return
 	if phase == "live":
 		for actor in actors.values():
 			if not actor.alive:
@@ -1737,6 +1771,7 @@ func grenade_snapshot(packet: PackedByteArray) -> void:
 			grenade.process_mode = Node.PROCESS_MODE_PAUSABLE
 			grenade.authoritative = false
 			grenade.grenade_id = state.id
+			grenade.kind = state.kind
 			grenade.position = state.p
 			add_child(grenade)
 			grenades[state.id] = grenade
@@ -1771,3 +1806,50 @@ func ticket_payload(value: String) -> Dictionary:
 	var payload := build_info.duplicate()
 	payload.ticket = value
 	return payload
+
+func smoke_blocks(from: Vector3, to: Vector3) -> bool:
+	var depth := 0.0
+	for cloud in smoke_clouds.values():
+		depth += SmokeRules.optical_depth(from, to, cloud.p, cloud.age)
+	return depth >= 1.5
+
+@rpc("authority", "call_remote", "unreliable_ordered", 5)
+func smoke_snapshot(round_id: String, states: Array, ids: Array) -> void:
+	if dedicated or round_id != network_round_id:
+		return
+	for state in states:
+		smoke_clouds[state.id] = {"p": state.p, "age": state.age}
+	for id in smoke_clouds.keys():
+		if not ids.has(id):
+			smoke_clouds.erase(id)
+
+func update_smoke_visuals() -> void:
+	if dedicated:
+		return
+	for id in smoke_visuals.keys():
+		if not smoke_clouds.has(id):
+			smoke_visuals[id].queue_free()
+			smoke_visuals.erase(id)
+	for id in smoke_clouds:
+		var cloud: Dictionary = smoke_clouds[id]
+		if not smoke_visuals.has(id):
+			var visual := MeshInstance3D.new()
+			var sphere := SphereMesh.new()
+			sphere.radius = 1
+			sphere.height = 2
+			sphere.radial_segments = 32
+			sphere.rings = 16
+			visual.mesh = sphere
+			visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			var material := ShaderMaterial.new()
+			material.shader = preload("res://shaders/smoke.gdshader")
+			visual.material_override = material
+			add_child(visual)
+			smoke_visuals[id] = visual
+		var radius := maxf(0.001, SmokeRules.radius(cloud.age))
+		var visual: MeshInstance3D = smoke_visuals[id]
+		visual.position = cloud.p
+		visual.scale = Vector3.ONE * radius
+		visual.material_override.set_shader_parameter("radius", radius)
+		visual.material_override.set_shader_parameter("density", SmokeRules.density(cloud.age))
+		visual.material_override.set_shader_parameter("age", cloud.age)

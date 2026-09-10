@@ -2,6 +2,7 @@ extends RigidBody3D
 
 var grenade_id := 0
 var owner_id := 0
+var kind := 0
 var authoritative := true
 var fuse := 2.6
 var target_position := Vector3.ZERO
@@ -25,8 +26,9 @@ func _ready() -> void:
 	sphere.radius = 0.12
 	collider.shape = sphere
 	add_child(collider)
-	if ResourceLoader.exists("res://assets/grenade.glb"):
-		add_child(load("res://assets/grenade.glb").instantiate())
+	var model_path := "res://assets/smoke_grenade.glb" if kind == 1 else "res://assets/grenade.glb"
+	if ResourceLoader.exists(model_path):
+		add_child(load(model_path).instantiate())
 		return
 	var mesh := MeshInstance3D.new()
 	var model := SphereMesh.new()
@@ -36,7 +38,7 @@ func _ready() -> void:
 	model.rings = 6
 	mesh.mesh = model
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("c0a260")
+	material.albedo_color = Color("c2d6c9") if kind == 1 else Color("c0a260")
 	mesh.material_override = material
 	add_child(mesh)
 	var cap := MeshInstance3D.new()
@@ -47,7 +49,7 @@ func _ready() -> void:
 	add_child(cap)
 
 func pack() -> Dictionary:
-	return {"id": grenade_id, "p": position, "f": fuse, "owner": owner_id}
+	return {"id": grenade_id, "p": position, "f": fuse, "owner": owner_id, "kind": kind}
 
 func _process(dt: float) -> void:
 	if not authoritative:

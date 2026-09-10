@@ -203,7 +203,7 @@ func show_loot(items: Dictionary) -> void:
 			loot_nodes.erase(id)
 			if highlighted_supply == id:
 				highlighted_supply = -1
-	var colors := ["e8c77b", "77d7ad", "7bbee8", "d9844e"]
+	var colors := ["e8c77b", "77d7ad", "7bbee8", "d9844e", "c2d6c9"]
 	var stack_heights := {}
 	for id in items:
 		var item: Dictionary = items[id]

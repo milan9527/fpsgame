@@ -28,6 +28,10 @@ SH
 chmod +x artifacts/IronMeridian-Linux/play.sh
 cp docs/SAFE_ZONES.md artifacts/IronMeridian-Linux/docs/SAFE_ZONES.md
 cp docs/LEANING.md artifacts/IronMeridian-Linux/docs/LEANING.md
+cp docs/SMOKE_GRENADES.md artifacts/IronMeridian-Linux/docs/SMOKE_GRENADES.md
+timeout 30s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/smoke_grenade_rules.gd" > artifacts/packed-smoke-grenade.log 2>&1
+rg -q SMOKE_GRENADE_RULES_PASS artifacts/packed-smoke-grenade.log
+if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-smoke-grenade.log; then cat artifacts/packed-smoke-grenade.log; exit 1; fi
 timeout 30s artifacts/IronMeridian-Linux/play.sh --headless --script "$PWD/tests/lean_rules.gd" > artifacts/packed-lean.log 2>&1
 rg -q LEAN_RULES_PASS artifacts/packed-lean.log
 if rg -q "SCRIPT ERROR|Assertion failed|ObjectDB instances leaked" artifacts/packed-lean.log; then cat artifacts/packed-lean.log; exit 1; fi

@@ -1,9 +1,9 @@
 extends RefCounted
 
-const DEFAULT_AMOUNT := [45.0, 1.0, 40.0, 1.0]
-const LIMITS := [300.0, 5.0, 100.0, 4.0]
-const FIELDS := ["reserve", "medkits", "armor", "grenades"]
-const NAMES := ["AMMUNITION", "MEDKIT", "ARMOR", "FRAG"]
+const DEFAULT_AMOUNT := [45.0, 1.0, 40.0, 1.0, 1.0]
+const LIMITS := [300.0, 5.0, 100.0, 4.0, 3.0]
+const FIELDS := ["reserve", "medkits", "armor", "grenades", "smokes"]
+const NAMES := ["AMMUNITION", "MEDKIT", "ARMOR", "FRAG", "SMOKE"]
 const RANGE := 2.8
 
 static func amount(item: Dictionary) -> float:

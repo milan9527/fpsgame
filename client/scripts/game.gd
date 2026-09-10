@@ -1390,11 +1390,11 @@ func finish_round() -> void:
 		save_local_operation()
 
 func save_local_operation() -> void:
-	if match_mode != "solo" or training != null or local_profile == null or online or phase not in ["live", "finished"] or not actors.has(local_id) or match_id == local_recorded_id:
+	if training != null or local_profile == null or online or phase not in ["live", "finished"] or not actors.has(local_id) or match_id == local_recorded_id:
 		return
 	var actor = actors[local_id]
-	var completed: bool = phase == "finished" or not actor.alive
-	var record := {"id": match_id, "finished_at": int(Time.get_unix_time_from_system()), "status": "completed" if completed else "abandoned", "rank": actor.rank if completed else 0, "kills": actor.kills, "seconds": int(clampf(elapsed, 0, ROUND_SECONDS)), "map": "ash_valley"}
+	var completed: bool = phase == "finished" or (not actor.alive and (match_mode == "solo" or actor.rank > 0))
+	var record := {"id": match_id, "finished_at": int(Time.get_unix_time_from_system()), "status": "completed" if completed else "abandoned", "rank": actor.rank if completed else 0, "kills": actor.kills, "seconds": int(clampf(elapsed, 0, ROUND_SECONDS)), "map": "ash_valley", "mode": match_mode, "team_id": actor.team_id}
 	local_outbox.append(record)
 	local_recorded_id = match_id
 	flush_local_results()

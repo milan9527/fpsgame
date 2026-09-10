@@ -61,11 +61,11 @@ with tempfile.TemporaryDirectory(prefix='meridian-profile-') as folder:
     result = summary()
     assert result['completed'] == 2 and result['unreadable'] == 1
     future = base / 'records' / ids[1] / 'result.json'
-    future.write_text(json.dumps({'version': 2}))
+    future.write_text(json.dumps({'version': 99}))
     result = summary()
     assert result['completed'] == 1 and result['newer'] == 1
     invoke('write', ids[1], '2', expected=2)
-    assert json.loads(future.read_text())['version'] == 2
+    assert json.loads(future.read_text())['version'] == 99
     # Checksum and schema are both verified, even for parseable JSON.
     valid_dir = base / 'records' / ids[2]
     envelope = json.loads(original)
@@ -96,5 +96,17 @@ with tempfile.TemporaryDirectory(prefix='meridian-profile-') as folder:
     assert ui.returncode == 0 and 'LOCAL_PROFILE_UI_PASS' in ui.stdout, ui.stdout + ui.stderr
     assert not any(error in ui.stdout + ui.stderr for error in ['SCRIPT ERROR', 'ObjectDB instances leaked']), ui.stdout + ui.stderr
     print(ui.stdout)
+    duo_command = ui_command.copy()
+    duo_command[duo_command.index(str(ROOT / 'tests/local_profile_ui.gd'))] = str(ROOT / 'tests/local_duo_profile.gd')
+    duo_env = dict(env, LOCAL_TEST_ROOT=str(base / 'duo'), LOCAL_CAPTURE_PATH=str(ROOT / 'artifacts/local-duo-history.png'))
+    duo = subprocess.run(duo_command, env=duo_env, capture_output=True, text=True, timeout=30)
+    assert duo.returncode == 0 and 'LOCAL_DUO_PROFILE_PASS' in duo.stdout, duo.stdout + duo.stderr
+    assert not any(error in duo.stdout + duo.stderr for error in ['SCRIPT ERROR', 'ObjectDB instances leaked']), duo.stdout + duo.stderr
+    reopened = subprocess.run(command + ['read'], env=duo_env, capture_output=True, text=True, timeout=15)
+    assert reopened.returncode == 0 and 'SCRIPT ERROR' not in reopened.stdout + reopened.stderr
+    ledger = json.loads(next(line.removeprefix('LOCAL_PROFILE_JSON ') for line in reopened.stdout.splitlines() if line.startswith('LOCAL_PROFILE_JSON ')))
+    assert ledger['modes']['solo']['completed'] == 1 and ledger['modes']['duo']['completed'] == 3
+    assert ledger['modes']['duo']['abandoned'] == 1 and len(ledger['records']) == 5
+    print(duo.stdout)
 
 print('LOCAL_PROFILE_STORAGE_PASS independent_processes=ok concurrent=ok idempotent=ok conflict=ok path_validation=ok partial_publish=ok recovery=ok future_version=ok strict_schema=ok')

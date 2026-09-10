@@ -305,7 +305,7 @@ func _ready() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	local_box.add_child(scroll)
 	local_history_grid = GridContainer.new()
-	local_history_grid.columns = 4
+	local_history_grid.columns = 5
 	local_history_grid.add_theme_constant_override("h_separation", 30)
 	local_history_grid.add_theme_constant_override("v_separation", 10)
 	scroll.add_child(local_history_grid)
@@ -590,6 +590,8 @@ func show_local_history(summary: Dictionary) -> void:
 	local_history_panel.visible = true
 	local_history_backdrop.visible = true
 	local_summary_label.text = "%d COMPLETED   /   %d ABANDONED   /   %d WINS\n%d ELIMINATIONS   /   %d MINUTES PLAYED" % [summary.completed, summary.abandoned, summary.wins, summary.kills, int(summary.seconds) / 60]
+	if summary.has("modes"):
+		local_summary_label.text += "\nSOLO  %d WINS / %d COMPLETED   ·   DUO  %d WINS / %d COMPLETED" % [summary.modes.solo.wins, summary.modes.solo.completed, summary.modes.duo.wins, summary.modes.duo.completed]
 	var warnings := PackedStringArray()
 	if summary.get("read_error", "") != "":
 		warnings.append(summary.read_error)
@@ -607,10 +609,11 @@ func show_local_history(summary: Dictionary) -> void:
 	for child in local_history_grid.get_children():
 		local_history_grid.remove_child(child)
 		child.queue_free()
-	for heading in ["DATE (UTC)", "PLACEMENT", "ELIMINATIONS", "DURATION"]:
+	for heading in ["DATE (UTC)", "MODE", "PLACEMENT", "KILLS", "DURATION"]:
 		label(local_history_grid, heading, 16, ACCENT)
 	for record in summary.records.slice(0, 100):
 		label(local_history_grid, Time.get_datetime_string_from_unix_time(int(record.finished_at), true).left(16), 16)
+		label(local_history_grid, str(record.get("mode", "solo")).to_upper(), 16)
 		label(local_history_grid, "#%d" % record.rank if record.status == "completed" else "ABANDONED", 16)
 		label(local_history_grid, str(int(record.kills)), 16)
 		label(local_history_grid, "%02d:%02d" % [int(record.seconds) / 60, int(record.seconds) % 60], 16)

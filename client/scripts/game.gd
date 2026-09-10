@@ -42,6 +42,8 @@ var next_grenade_id := 1
 var grenade_tombstones: Dictionary = {}
 var last_loot_hash := 0
 var events: Array = []
+var network_status = preload("res://scripts/network_status.gd").new()
+var network_sample_due := 0
 var last_eliminated_name := ""
 var dedicated := false
 var online := false
@@ -473,6 +475,7 @@ func begin_round() -> void:
 @rpc("authority", "call_remote", "reliable")
 func new_round(id: String) -> void:
 	network_round_id = id
+	network_status.begin(Time.get_ticks_msec())
 	clear_actors()
 	ui.result_label.text = ""
 	ui.show_game()
@@ -1339,6 +1342,7 @@ func add_event(message: String) -> void:
 func _process(dt: float) -> void:
 	if dedicated or not running or get_tree().paused:
 		return
+	update_network_status()
 	for id in actors:
 		actors[id].render_frame(dt, online, id == local_id, Input.is_action_pressed("aim"))
 	spectator.update_view(actors, local_id, phase)
@@ -1393,6 +1397,22 @@ func _process(dt: float) -> void:
 			ui.stats.text = "PRACTICE / NO MATCH RESULTS"
 		ui.set_spectator(spectator.active, spectator.target_name, actor.rank)
 		ui.recap_panel.visible = not actor.alive and not ui.death_recap.is_empty()
+
+func update_network_status() -> void:
+	ui.network_label.visible = online
+	if not online:
+		network_status.reset()
+		return
+	var now := Time.get_ticks_msec()
+	if now >= network_sample_due:
+		network_sample_due = now + 250
+		if multiplayer.multiplayer_peer is ENetMultiplayerPeer:
+			var peer: ENetPacketPeer = multiplayer.multiplayer_peer.get_peer(1)
+			if peer != null and peer.get_state() == ENetPacketPeer.STATE_CONNECTED:
+				network_status.sample(peer.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME), peer.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME_VARIANCE))
+	var status: Dictionary = network_status.describe(now)
+	ui.network_label.text = status.text
+	ui.network_label.modulate = [Color.WHITE, Color("f6c477"), Color("ff826c")][status.severity]
 
 func peer_connected(id: int) -> void:
 	if dedicated:
@@ -1487,6 +1507,8 @@ func accepted(id: String) -> void:
 	network_round_id = id
 	running = true
 	authenticated_at = Time.get_ticks_msec()
+	network_status.begin(authenticated_at)
+	network_sample_due = 0
 	ui.show_game()
 
 func broadcast_snapshot() -> void:
@@ -1531,6 +1553,7 @@ func snapshot(packet: PackedByteArray) -> void:
 	var payload: Dictionary = bytes_to_var(packet.decompress_dynamic(65536, FileAccess.COMPRESSION_DEFLATE))
 	if network_round_id != "" and payload.round_id != network_round_id:
 		return
+	network_status.received(Time.get_ticks_msec())
 	for data in payload.actors:
 		if not actors.has(data.id):
 			spawn_actor(data.id, data.n, data.b, data.p)
@@ -1677,6 +1700,8 @@ func leave(message := "") -> void:
 	if dedicated or shutdown_requested:
 		return
 	save_local_operation()
+	network_status.reset()
+	ui.network_label.hide()
 	training = null
 	ui.training_label.hide()
 	connection_attempt += 1

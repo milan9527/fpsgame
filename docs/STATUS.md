@@ -4,6 +4,8 @@
 
 ## 已实际实现
 
+- 联机 HUD 网络状态：实际 ENet RTT/波动、有效快照更新时间、延迟与更新停顿提示、自动恢复及回合隔离。详见 [网络状态](NETWORK_STATUS.md)。
+
 - 淘汰报告：观战时显示权威致命一击的攻击者、武器或环境原因、爆头、距离及实际生命/护甲损失；只向受害者发送，新回合清理。详见 [淘汰报告](DEATH_RECAP.md)。
 
 - 单机单槽保存/继续：回合 ID、角色库存与计时、缩圈、随机状态、物资、在途投掷物和烟雾；校验、原子替换、上一份备份、失败留在暂停界面及已结算回合恢复隔离。详见 [单机保存](SOLO_CHECKPOINTS.md)。
@@ -268,3 +270,9 @@
 新增观战中的致命一击报告，包含来源、武器/环境原因、爆头、米级距离以及最后一击扣除的生命/护甲。生命/护甲展示取整，底层保留实际数值，不将过量伤害当作已扣除数值。报告仅可靠发送给受害者，使用在线回合编号隔离；新回合清除。安全区、坠落、手雷爆心、自伤及断线投掷者分别处理。它不包含录像回放或整场交火累计伤害。
 
 单机规则与实际渲染、两个真实客户端的报告接收/观战/隐私、协议门禁、完整对局落库、账户退出回归及 Linux 打包玩法门禁通过。证据：`artifacts/death-recap-rules.log`、`artifacts/death-recap.png`、`artifacts/death-recap-network.log`、`artifacts/recap-protocol.log`、`artifacts/recap-full-round.log`、`artifacts/recap-session-regression.log`、`artifacts/recap-package.log`、`artifacts/packed-death-recap.log`。
+
+### 联机网络状态（0.31 / 协议仍为 14）
+
+新增 ENet 往返延迟和波动、有效快照更新时间、同步等待/高延迟/更新停顿提示；超过一秒未更新时告警，恢复更新后解除。单机隐藏，新回合重新测量，返回菜单清除，旧回合包不刷新状态。数据不代表丢包率、全体角色同帧到达或后台数据库健康，也不提供自动重连。
+
+规则与打包规则通过。实际战斗中使用双向各 75ms 的 UDP 延迟，测得 RTT 180ms；阻断下行 1.8 秒、丢弃 302 个下行数据报，HUD 显示更新停顿，恢复转发后回到正常更新并保持连接。已检查实际截图。证据：`artifacts/network-status-rules.log`、`artifacts/packed-network-status.log`、`artifacts/network-status-proxy.log`、`artifacts/network-status-client.log`、`artifacts/network-status-stalled.png`。

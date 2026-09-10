@@ -36,6 +36,7 @@ var stats: Label
 var weapon: Label
 var prompt: Label
 var feed: Label
+var network_label: Label
 var death_recap: Dictionary = {}
 var recap_panel: PanelContainer
 var recap_label: Label
@@ -208,6 +209,11 @@ func _ready() -> void:
 	armor_bar = bar(Vector2(40, 829), Color("7ebce4"))
 	prompt = placed_label(hud, Vector2(480, 735), 18, ACCENT)
 	feed = placed_label(hud, Vector2(40, 118), 16)
+	network_label = placed_label(hud, Vector2(1130, 230), 15)
+	network_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	network_label.add_theme_constant_override("shadow_offset_x", 1)
+	network_label.add_theme_constant_override("shadow_offset_y", 1)
+	network_label.hide()
 	hit_text = placed_label(hud, Vector2(610, 505), 16, ACCENT)
 	result_label = placed_label(hud, Vector2(430, 290), 38, ACCENT)
 	spectator_label = placed_label(hud, Vector2(430, 140), 22, ACCENT)

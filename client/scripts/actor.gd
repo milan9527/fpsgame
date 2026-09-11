@@ -540,7 +540,7 @@ func weapon_segment_blocked(from: Vector3, to: Vector3) -> bool:
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = weapon_probe
 	query.transform = Transform3D(Basis.IDENTITY, from)
-	query.collision_mask = 1 | 4 # Terrain and vehicles, never actors or grenades.
+	query.collision_mask = 1 | 16 # Terrain and vehicle mesh, never movement hulls.
 	var space := get_world_3d().direct_space_state
 	if not space.intersect_shape(query, 1).is_empty():
 		return true
@@ -551,6 +551,11 @@ func eye_position() -> Vector3:
 	return position + Basis(Vector3.UP, yaw) * lean_point(Vector3.UP * eye_height())
 
 func aim_position() -> Vector3:
+	if is_seated():
+		var pose: Dictionary = preload("res://scripts/seated_hit_pose.gd").capture(self)
+		for box in pose.boxes:
+			if box.bone == "Hips":
+				return pose.p + pose.basis * (box.transform * box.bounds.get_center())
 	return position + Basis(Vector3.UP, yaw) * lean_point(Vector3.UP * (0.72 if crouched else 1.1))
 
 func lean_basis() -> Basis:

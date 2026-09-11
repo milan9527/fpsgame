@@ -1274,8 +1274,7 @@ func visible_target(actor, other) -> bool:
 		return false
 	if smoke_blocks(actor.eye_position(), other.aim_position()):
 		return false
-	var query := PhysicsRayQueryParameters3D.create(actor.eye_position(), other.aim_position(), 7, [actor.get_rid()])
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var hit := trace_shot(actor, actor.eye_position(), other.aim_position() - actor.eye_position(), 0)
 	return not hit.is_empty() and hit.collider == other
 
 func shot_rewind_age(actor) -> float:
@@ -1285,14 +1284,30 @@ func shot_rewind_age(actor) -> float:
 	return HitHistory.rewind_age(peer.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME))
 
 func trace_shot(actor, origin: Vector3, direction: Vector3, rewind: float) -> Dictionary:
+	if not origin.is_finite() or not direction.is_finite() or direction.length_squared() < 0.0001:
+		return {}
+	direction = direction.normalized()
 	rewind = clampf(rewind, 0, HitHistory.MAX_REWIND) if is_finite(rewind) else 0
 	if rewind <= 0 or hit_history.poses_at(elapsed - rewind).is_empty():
-		var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 7, [actor.get_rid()])
-		return get_world_3d().direct_space_state.intersect_ray(query)
-	# Terrain and present-time vehicle cover are never rewound. Historical capsules are queried
-	# analytically, so no live physics body is moved or exposed to other systems.
-	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 5)
-	var wall := get_world_3d().direct_space_state.intersect_ray(query)
+		var excluded: Array[RID] = [actor.get_rid()]
+		for target in actors.values():
+			if target.is_seated():
+				excluded.append(target.get_rid())
+		var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 1 | 2 | 16, excluded)
+		var result: Dictionary = preload("res://scripts/vehicle_ballistics.gd").resolve(get_world_3d().direct_space_state.intersect_ray(query))
+		var limit: float = 180 if result.is_empty() else origin.distance_to(result.position)
+		for target in actors.values():
+			if target == actor or not target.alive or not target.is_seated():
+				continue
+			var hit: Dictionary = HitHistory.SeatedPose.trace(HitHistory.SeatedPose.capture(target), origin, direction, limit)
+			if not hit.is_empty():
+				limit = hit.distance
+				result = hit
+				result.collider = target
+		return result
+	# Present-time terrain and mesh cover bound analytic historical actor hits.
+	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 1 | 16)
+	var wall: Dictionary = preload("res://scripts/vehicle_ballistics.gd").resolve(get_world_3d().direct_space_state.intersect_ray(query))
 	var limit: float = 180 if wall.is_empty() else origin.distance_to(wall.position)
 	var hit: Dictionary = hit_history.trace(elapsed - rewind, origin, direction, limit, actor.actor_id, actors)
 	return wall if hit.is_empty() else hit

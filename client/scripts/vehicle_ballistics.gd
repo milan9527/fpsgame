@@ -1,7 +1,7 @@
 extends RefCounted
 
 # Dedicated query layer; never participates in movement or grenade physics.
-# Kept separate until seated actor hit poses and rewind use the same geometry.
+# Used by direct shots, rewind cover and weapon clearance queries.
 const LAYER := 16
 var bodies: Array[StaticBody3D] = []
 

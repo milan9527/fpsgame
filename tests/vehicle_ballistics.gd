@@ -13,8 +13,7 @@ func run() -> void:
 	root.add_child(root_3d)
 	var car = load("res://scripts/vehicle.gd").new()
 	root_3d.add_child(car)
-	var geometry = Ballistics.new()
-	geometry.build(car)
+	var geometry = car.ballistics
 	await sync_physics()
 	assert(geometry.bodies.size() > 20)
 	var space := root_3d.get_world_3d().direct_space_state

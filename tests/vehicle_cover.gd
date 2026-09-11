@@ -23,7 +23,8 @@ func run() -> void:
 	shooter.position = Vector3(0, 0.02, 5)
 	target.position = Vector3(0, 0.02, -5)
 	shooter.yaw = 0
-	shooter.pitch = 0
+	shooter.pitch = atan2(0.93 - shooter.eye_position().y, 6.03)
+	shooter.aiming = true # Center the shot on the hood, below the open cabin.
 	var car = load("res://scripts/vehicle.gd").new()
 	game.add_child(car)
 	await sync_physics()
@@ -38,7 +39,12 @@ func run() -> void:
 	var ammo: int = shooter.ammo
 	game.shoot(shooter)
 	assert(target.health == health and shooter.ammo == ammo - 1, "Vehicle hits must not invoke Actor-only headshot/damage methods")
-	assert(not game.visible_target(shooter, target))
+	assert(game.visible_target(shooter, target), "The gap between seats is not opaque cover")
+	target.crouch = true
+	target.update_stance()
+	assert(not game.visible_target(shooter, target), "The solid hood still conceals a crouched target")
+	target.crouch = false
+	target.update_stance()
 	assert(game.explosion_exposure(Vector3(0, 0.6, 4), target) == 0)
 	target.position.x = 6
 	await sync_physics()
@@ -49,8 +55,18 @@ func run() -> void:
 	assert(shooter.position.z > 2.15 and shooter.position.z < 2.4, "Infantry must stop at the vehicle hull")
 	shooter.move_input = Vector2.ZERO
 	shooter.position = Vector3(0, 0.02, 1.95)
+	shooter.pitch = 0
 	await sync_physics()
-	assert(shooter.weapon_obstructed(false))
+	assert(not shooter.weapon_obstructed(true), "Aiming through the gap must not hit the broad movement box")
+	shooter.position = Vector3(0, 0.02, -2.2)
+	shooter.yaw = PI
+	shooter.crouch = true
+	shooter.update_stance()
+	await sync_physics()
+	assert(shooter.weapon_obstructed(true), "The solid hood blocks a crouched muzzle")
+	shooter.crouch = false
+	shooter.update_stance()
+	shooter.yaw = 0
 	shooter.position = Vector3(1.3, 0.02, 0)
 	target.position = Vector3(-1.3, 0.02, 0)
 	shooter.team_id = 1

@@ -35,6 +35,7 @@ var collision_shape: CollisionShape3D
 var visual: Node3D
 var wheel_rigs: Array[Dictionary] = []
 var seats
+var ballistics = preload("res://scripts/vehicle_ballistics.gd").new()
 
 func _ready() -> void:
 	add_to_group("vehicles")
@@ -64,6 +65,7 @@ func _ready() -> void:
 			turn.add_child(roll)
 			wheel.reparent(roll, true)
 			wheel_rigs.append({"turn": turn, "roll": roll, "front": name.begins_with("Wheel_F")})
+	ballistics.build(self)
 
 func reset_controls() -> void:
 	throttle = 0

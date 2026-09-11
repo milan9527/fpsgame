@@ -43,9 +43,10 @@ func run() -> void:
 	car.simulate(1.0 / 60)
 	assert(car.fuel == 0 and absf(car.speed) < 0.01)
 	assert(car.take_damage(NAN) == 0 and car.take_damage(-1) == 0 and car.health == car.MAX_HEALTH)
-	shooter.position = Vector3(0, 0.02, 6)
-	shooter.yaw = 0
-	shooter.pitch = 0
+	shooter.position = Vector3(0, 0.02, -6)
+	shooter.yaw = PI
+	shooter.pitch = atan2(0.93 - shooter.eye_position().y, 4.97)
+	shooter.aiming = true # Aim at the solid hood, not the open gap between seats.
 	await sync_physics()
 	game.shoot(shooter)
 	assert(car.health < car.MAX_HEALTH and car.health > car.MAX_HEALTH - 100)

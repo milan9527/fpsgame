@@ -49,12 +49,15 @@ func run() -> void:
 	await render_view()
 	assert(spectator.arm.get_hit_length() > 4.3)
 	for sequence in range(90):
+		await physics_frame
 		assert(car.command(ally.actor_id, sequence, 1, 0, false, car.seats.epoch))
 		car.simulate(1.0 / 60)
 		await render_view()
 		assert(spectator.position.is_equal_approx(car.position + Vector3.UP * 1.4))
+	print("VEHICLE_SPECTATOR_MOTION speed=%.3f position=%s grounded=%s fuel=%.3f" % [car.speed, car.position, car.grounded, car.fuel])
 	assert(car.speed > 10 and car.position.z < -5)
 	for sequence in range(90, 180):
+		await physics_frame
 		assert(car.command(ally.actor_id, sequence, 0, 0, true, car.seats.epoch))
 		car.simulate(1.0 / 60)
 	assert(car.seats.exit(ally))

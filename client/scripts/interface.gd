@@ -71,6 +71,7 @@ var voice_listen := false
 var voice_microphone := false
 var voice_volume := 0.8
 var voice_indicator: Label
+var voice_setup
 var settings := ConfigFile.new()
 var busy := false
 var grenade_warning_distance := INF
@@ -299,6 +300,7 @@ func _ready() -> void:
 	voice_slider.value = voice_volume
 	voice_slider.value_changed.connect(func(value): voice_volume = value; save_settings())
 	pause_box.add_child(voice_slider)
+	button(pause_box, "MICROPHONE SETUP", func(): voice_setup.open())
 	button(pause_box, "RESUME", func(): set_pause(false))
 	checkpoint_save_button = Button.new()
 	checkpoint_save_button.text = "SAVE OPERATION & RETURN"
@@ -374,6 +376,12 @@ func _ready() -> void:
 	controls.bindings = bindings
 	controls.theme = theme
 	add_child(controls)
+	voice_setup = preload("res://scripts/voice_settings.gd").new()
+	voice_setup.device = str(settings.get_value("voice", "device", "Default"))
+	voice_setup.gain = clampf(float(settings.get_value("voice", "gain", 1.0)), 0.25, 4.0)
+	voice_setup.theme = theme
+	add_child(voice_setup)
+	voice_setup.changed.connect(save_settings)
 	controls.changed.connect(update_controls_hint)
 	controls.closed.connect(update_controls_hint)
 	update_controls_hint()
@@ -436,6 +444,9 @@ func online(register: bool) -> void:
 		online_requested.emit(username.text, password.text, register, endpoint.text.trim_suffix("/"))
 
 func save_settings() -> void:
+	if voice_setup != null:
+		settings.set_value("voice", "device", voice_setup.device)
+		settings.set_value("voice", "gain", voice_setup.gain)
 	settings.set_value("voice", "listen", voice_listen)
 	settings.set_value("voice", "volume", voice_volume)
 	settings.set_value("controls", "sensitivity", sensitivity)
@@ -445,6 +456,7 @@ func save_settings() -> void:
 	settings.save("user://settings.cfg")
 
 func show_menu(message := "") -> void:
+	voice_setup.close()
 	party_lobby.dismiss()
 	controls.close()
 	set_map(false)
@@ -464,6 +476,7 @@ func show_menu(message := "") -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func show_game() -> void:
+	voice_setup.close()
 	party_lobby.dismiss()
 	return_to_party_button.hide()
 	return_to_party_button.disabled = false
@@ -498,6 +511,8 @@ func receive_death_recap(report: Dictionary) -> void:
 	recap_label.text += "\nFINAL HIT  /  %d HEALTH  ·  %d ARMOR" % [roundi(report.health_damage), roundi(report.armor_damage)]
 
 func set_pause(enabled: bool) -> void:
+	if not enabled:
+		voice_setup.close()
 	if enabled:
 		set_map(false)
 		set_inventory(false)

@@ -216,3 +216,5 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 ## 队内语音客户端接入
 
 已接入默认关闭的麦克风、可改键按住说话、抖动缓冲播放、收听开关与音量设置。四真实客户端使用合成音频通过专服转发到客户端混音器，并继续通过救援、共享胜负和 PostgreSQL 战绩核对。麦克风采集组件使用合成设备采样验证，未宣称真实设备验收。设置截图、详细行为与日志见 [语音开发](VOICE.md)。发布包仍为 0.34，未覆盖。
+
+语音设备设置进一步接入：驱动输入选择与刷新、0.25–4 倍增益、按住本地测试、电平和削波提示。监测模式不发包，失焦/离场清理与界面验证通过；没有物理声卡，仍保留硬件验收缺口。详见语音开发文档与 `artifacts/voice-input-meter.log`、`artifacts/voice-device-ui.log`。

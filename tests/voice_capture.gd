@@ -40,8 +40,26 @@ func run() -> void:
 	assert(source.pending.is_empty())
 	source.reset_round()
 	assert(source.sequence == 0 and not source.transmitting)
+	# Monitor mode never encodes, increments sequence or transmits test audio.
+	source.monitoring = true
+	source.gain = 4.0
+	var loud := PackedVector2Array([Vector2.ONE * 0.4, Vector2(INF, NAN)])
+	source.feed(loud)
+	assert(source.peak == 1.0 and source.clipped and source.last_signal > 0)
+	assert(packets.size() == 8 and source.sequence == 0 and source.pending.is_empty())
+	source.last_input = Time.get_ticks_msec() - 200
+	source.last_tick = Time.get_ticks_msec()
+	source._process(0.02)
+	assert(source.peak == 0 and not source.clipped, "Disconnected input cannot leave stale clipping meter")
+	source.gain = 0.5
+	source.feed(PackedVector2Array([Vector2.ONE * 0.4]))
+	assert(is_equal_approx(source.peak, 0.2) and not source.clipped)
+	source.feed(PackedVector2Array([Vector2.ZERO, Vector2(INF, NAN)]))
+	assert(source.peak == 0 and not source.clipped)
+	source.reset_round()
+	assert(not source.monitoring and source.peak == 0)
 	source.queue_free()
 	await process_frame
 	assert(AudioServer.bus_count == buses)
-	print("VOICE_CAPTURE_PASS synthetic_only=ok default_off=ok no_local_echo=ok ptt_sequence=ok backlog_discard=ok round_reset=ok")
+	print("VOICE_CAPTURE_PASS synthetic_only=ok default_off=ok no_local_echo=ok ptt_sequence=ok backlog_discard=ok round_reset=ok monitor_no_send=ok input_gain=ok clipping=ok nonfinite=ok")
 	quit()

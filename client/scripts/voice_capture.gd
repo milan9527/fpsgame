@@ -10,6 +10,12 @@ var resampler
 var pending := PackedVector2Array()
 var bus_name := ""
 var transmitting := false
+var monitoring := false
+var gain := 1.0
+var peak := 0.0
+var clipped := false
+var last_signal := 0
+var last_input := 0
 var last_tick := 0
 
 func _ready() -> void:
@@ -29,13 +35,21 @@ func _ready() -> void:
 	resampler = Resampler.new(int(AudioServer.get_mix_rate()))
 
 func set_transmitting(value: bool) -> void:
-	if value == transmitting:
+	set_activity(value, false)
+
+func set_activity(send: bool, monitor: bool) -> void:
+	if send == transmitting and monitor == monitoring:
 		return
-	transmitting = value
+	transmitting = send
+	monitoring = monitor
+	peak = 0
+	clipped = false
+	last_signal = 0
+	last_input = 0
 	pending.clear()
 	resampler.reset()
 	capture.clear_buffer()
-	if value:
+	if transmitting or monitoring:
 		last_tick = Time.get_ticks_msec()
 		player.play()
 	else:
@@ -46,13 +60,31 @@ func reset_round() -> void:
 	sequence = 0
 
 func feed(frames: PackedVector2Array) -> void:
-	if not transmitting:
+	if not transmitting and not monitoring:
 		return
 	if frames.size() > 8192:
 		pending.clear()
 		resampler.reset()
+		peak = 0
+		clipped = false
+		last_signal = 0
 		return
-	pending.append_array(resampler.push(frames))
+	var adjusted := PackedVector2Array()
+	last_input = Time.get_ticks_msec()
+	peak = 0
+	clipped = false
+	for frame in frames:
+		var value := (frame.x + frame.y) * 0.5
+		value = value * clampf(gain, 0.25, 4.0) if is_finite(value) else 0.0
+		peak = maxf(peak, absf(value))
+		clipped = clipped or absf(value) >= 0.99
+		adjusted.append(Vector2.ONE * clampf(value, -1.0, 1.0))
+	peak = minf(peak, 1.0)
+	if peak > 0.005:
+		last_signal = Time.get_ticks_msec()
+	if not transmitting:
+		return
+	pending.append_array(resampler.push(adjusted))
 	while pending.size() >= Codec.FRAMES:
 		if sequence >= 2147483647:
 			set_transmitting(false)
@@ -63,7 +95,7 @@ func feed(frames: PackedVector2Array) -> void:
 		sequence += 1
 
 func _process(_dt: float) -> void:
-	if not transmitting:
+	if not transmitting and not monitoring:
 		return
 	var now := Time.get_ticks_msec()
 	var count := capture.get_frames_available()
@@ -71,8 +103,14 @@ func _process(_dt: float) -> void:
 		capture.clear_buffer()
 		pending.clear()
 		resampler.reset()
+		peak = 0
+		clipped = false
+		last_signal = 0
 	elif count > 0:
 		feed(capture.get_buffer(count))
+	elif now - last_input > 100:
+		peak = 0
+		clipped = false
 	last_tick = now
 
 func _exit_tree() -> void:

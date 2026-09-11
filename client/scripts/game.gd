@@ -599,6 +599,17 @@ func _unhandled_input(event: InputEvent) -> void:
 				elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 					spectator.zoom(0.5)
 		return
+	if actor.is_seated():
+		if not ui.pause_panel.visible and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			actor.vehicle_camera.begin(actor.vehicle_ref.get_ref())
+			if event is InputEventMouseMotion:
+				actor.vehicle_camera.orbit(event.relative, ui.sensitivity)
+			elif event is InputEventMouseButton and event.pressed:
+				if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+					actor.vehicle_camera.zoom(-0.5)
+				elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+					actor.vehicle_camera.zoom(0.5)
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var scale_aim := 0.55 if Input.is_action_pressed("aim") else 1.0
 		actor.yaw = wrapf(actor.yaw - event.relative.x * ui.sensitivity * scale_aim, -PI, PI)

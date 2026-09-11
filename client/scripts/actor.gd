@@ -97,6 +97,7 @@ var head: Node3D
 var body_mesh: Node3D
 var gun: Node3D
 var camera: Camera3D
+var vehicle_camera = preload("res://scripts/vehicle_camera.gd").new()
 var muzzle: MeshInstance3D
 var flash_left := 0.0
 var material: StandardMaterial3D
@@ -480,6 +481,8 @@ func unpack(data: Dictionary, local: bool) -> void:
 	alive = data.live
 
 func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> void:
+	if local and not is_seated():
+		vehicle_camera.end(self)
 	update_weapon_visuals()
 	gun.visible = local_view and alive and not downed and not is_seated()
 	character_animation.update(self, dt)
@@ -494,6 +497,9 @@ func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> vo
 	weapon_kick = move_toward(weapon_kick, 0, dt * 8)
 	gun.rotation.x = weapon_kick * 0.06
 	if local:
+		if is_seated():
+			vehicle_camera.update(self, dt)
+			return
 		camera.position = Vector3.ZERO
 		if network_client:
 			camera_error = camera_error.lerp(Vector3.ZERO, minf(1, dt * 18))

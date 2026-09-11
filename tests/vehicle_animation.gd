@@ -16,6 +16,7 @@ func run() -> void:
 		# Animation fixture: collision and entry validation have a separate physics test.
 		actor.vehicle_ref = weakref(car)
 		actor.vehicle_seat = index
+		car.seats.slots[index] = {"actor": weakref(actor), "mask": actor.collision_mask, "layer": actor.collision_layer}
 		actor.local_view = true
 		actor.position = car.seats.ANCHORS[index]
 		actor.pitch = 0.8
@@ -61,8 +62,7 @@ func run() -> void:
 	assert(is_equal_approx(time, animation.player.current_animation_position))
 	driver.alive = true
 	driver.downed = false
-	driver.vehicle_ref = null
-	driver.vehicle_seat = -1
+	car.seats.release(driver, driver.global_position)
 	driver.grounded = true
 	driver.render_frame(0.1, false, true, false)
 	assert(animation.active_clip == "Idle" and driver.gun.visible and driver.third_person_gun.visible)

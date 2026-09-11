@@ -29,7 +29,7 @@ xvfb-run -a tools/godot --audio-driver Dummy --path client --script ../tests/veh
 
 ## 接入对局前仍需完成
 
-1. 将座位规则接入正式对局交互，完成驾驶视角。
+1. 将座位规则接入正式对局交互，接入驾驶输入和载具界面。
 2. 地图出生位置、驾驶操作与界面提示；步兵碰撞、射击/爆炸掩体查询适配车辆层。现有射击处理会把 CharacterBody3D 当成人物，必须明确区分车辆和角色后才能在对局中生成车辆。
 3. 车辆生命、燃料、伤害、撞击、摧毁和乘员后果；不能只把车辆作为无敌移动掩体。
 4. 服务器驾驶输入与座位代次校验、输入超时、车辆快照、客户端显示、多人上下车竞争；同步和地图规则改变时更新协议/资源版本。
@@ -39,7 +39,7 @@ xvfb-run -a tools/godot --audio-driver Dummy --path client --script ../tests/veh
 
 `vehicle_seats.gd` 管理驾驶位和乘客位，以角色弱引用保存占用关系。角色不能同时占用多个座位或多辆车。进入要求角色存活、未倒地、未正在救援，车辆着地且速度不超过 2 m/s；角色必须在相应车门 2.8 m 内，眼睛到车门的视线不能被遮挡。进入时中断换弹和治疗但不扣除弹药、医疗包，清除步行输入和预测历史；乘员身体仍保留人物命中层，关闭自身步行碰撞移动。
 
-乘员随车辆位置与方向更新，当前阶段禁止步行、射击、投掷、换弹和治疗。正式驾驶输入与相机仍未接入，不能据此宣称对局中已有可驾驶车辆。
+乘员随车辆位置与方向更新，当前阶段禁止步行、射击、投掷、换弹和治疗。正式驾驶输入与地图生成仍未接入，不能据此宣称对局中已有可驾驶车辆。
 
 退出要求车辆着地且速度不超过 2 m/s。依次检查座位侧门、对侧门和后方位置：有效地面、坡度不超过 35 度、与车底高差不超过 0.65 m、完整站立胶囊空间以及从座位到出口的扫掠路径。检查包含静态墙体、人物和其他车辆。没有安全出口时保留占用关系，不把角色传送到障碍内部；离开时恢复原碰撞设置，尸体保持无碰撞。
 
@@ -54,3 +54,13 @@ xvfb-run -a tools/godot --audio-driver Dummy --path client --script ../tests/veh
 座位状态优先于步行、空中及换弹动画；上下车立即切换姿态，不混合出站立穿车的过渡。乘员不叠加步兵脊柱瞄准旋转，隐藏第一/第三人称武器及枪口火光。出口被挡时，倒地乘员使用座内低头姿势，死亡后停止呼吸动画；安全离座后恢复相应步兵动画。
 
 `tests/vehicle_animation.gd` 在实际渲染器下检查双座动画选择、手部和骨盆位置、皮肤包围盒、武器隐藏、倒地/死亡及离座恢复。证据：`artifacts/vehicle-animation.log` 和 `artifacts/vehicle-seated.png`。原有角色动画、倒地动画和座位物理规则分别回归于 `artifacts/animation-vehicle-regression.log`、`artifacts/downed-vehicle-regression.log`、`artifacts/vehicle-seats-animation-regression.log`。当前坐姿尚未与驾驶方向盘转动联动。
+
+## 乘车相机
+
+`vehicle_camera.gd` 在角色已占用座位时启用第三人称跟随相机，鼠标环绕独立于车辆和角色朝向，滚轮在 3–8 m 间调整距离。默认距离 6 m、视野 78 度，不受步兵瞄准缩放影响。车辆旋转和位置变化直接更新观察中心；退出座位后恢复第一人称相机和本地身体隐藏。
+
+半径 0.22 m 的球形扫掠检查静态障碍、步兵和其他车辆，排除本车和乘员。遮挡出现时立即收回镜头，清除后以 5 m/s 恢复距离；观察中心已处于障碍内部时不穿出其另一侧。贴近本地角色时隐藏其模型，死亡角色保留可见性供观战。菜单、地图、背包、按键设置和未捕获鼠标时不接受乘车观察输入；死亡后沿用观战输入。
+
+验证：`tests/vehicle_camera.gd` 覆盖薄墙扫掠、恢复速度、车辆转向/传送、其他车辆遮挡、初始重叠及离座恢复，日志 `artifacts/vehicle-camera.log`。`tests/vehicle_camera_input.gd` 通过实际 Game 输入入口验证鼠标、滚轮、各菜单隔离、死亡观战及步行鼠标恢复，日志 `artifacts/vehicle-camera-input.log`，实际视角截图 `artifacts/vehicle-camera-view.png`。座位、动画和原有观战回归日志分别为 `artifacts/vehicle-seats-camera-regression.log`、`artifacts/vehicle-animation-camera-regression.log`、`artifacts/spectator-vehicle-camera-regression.log`。
+
+整张场景退出时，座位清理也会释放已离开场景树但尚未销毁的角色关联，不再尝试设置其全局坐标。

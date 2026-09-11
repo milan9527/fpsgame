@@ -108,7 +108,8 @@ func release(actor, point: Vector3) -> void:
 	actor.vehicle_seat = -1
 	actor.collision_mask = saved.mask if actor.alive else 0
 	actor.collision_layer = saved.layer if actor.alive else 0
-	actor.global_position = point
+	if actor.is_inside_tree():
+		actor.global_position = point
 	actor.velocity = Vector3.ZERO
 	actor.move_input = Vector2.ZERO
 	actor.prediction_history.clear()

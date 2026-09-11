@@ -82,10 +82,10 @@ func drive(actor, dt: float) -> void:
 	var stopping_distance: float = car.speed * car.speed / (2 * car.BRAKING) + 4
 	var probe_end: Vector3 = car.position - car.global_basis.z * maxf(4, stopping_distance)
 	stopping = stopping or distance <= stopping_distance or trip_time > 20 or car.fuel <= 0 or car.destroyed or not corridor(car, probe_end, actor)
-	var error := wrapf(atan2(-delta.x, -delta.z) - car.rotation.y, -PI, PI)
+	var error := 0.0 if distance < 0.001 else wrapf(atan2(-delta.x, -delta.z) - car.rotation.y, -PI, PI)
 	stopping = stopping or absf(error) > 1.1
 	car.command(actor.actor_id, car.input_sequence + 1, 1.0 if not stopping and car.speed < 12 else 0.0,
-		clampf(-error * 1.8, -1, 1), stopping, car.seats.epoch)
+		0.0 if stopping else clampf(-error * 1.8, -1, 1), stopping, car.seats.epoch)
 	if stopping and absf(car.speed) < 0.1 and car.seats.exit(actor):
 		cooldown = 8
 		destination = Vector3.INF

@@ -97,3 +97,13 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 ## 组队检查点与离线入口
 
 开发版主菜单现在可以直接启动人机双人对局。新增格式 2 保存队伍、倒地、流血归因和救援进度；队友仍存活时可挂起阵亡观战，恢复后仍可随队获得胜利。单人格式 1 和已结算旧档隔离继续保留。实际渲染/恢复测试、六进程反复保存读取及旧单人回归分别见 `artifacts/duo-checkpoint.log`、`artifacts/duo-checkpoint-process.log`、`artifacts/duo-checkpoint-solo-regression.log`。主菜单截图为 `artifacts/duo-deployment-menu.png`。
+
+## 邀请后端基础（尚未接入整队匹配）
+
+开发 API 提供 `POST /parties`、`GET /parties/current`、`POST /parties/accept`（`invitation` 字段）和 `DELETE /parties/current`。所有操作需要有效账号令牌，使用 Redis Lua 原子管理一人一队及双人上限。创建者得到 32 字节随机邀请码，有效期 15 分钟；接受后单次邀请立即失效，不延长组队有效期。只有未满队的创建者可读取邀请码，响应禁用缓存；成员列表不返回会话版本或邀请码哈希。任一成员离开会解散双人队伍。
+
+正常全设备注销按会话版本清理旧队伍，延迟清理不能误删新会话创建的队伍。接受邀请还在数据库共享锁下核验邀请者会话版本，防止注销提交后缓存清理失败留下有效旧邀请。缓存/数据库不可用继续使用既有依赖错误处理。
+
+`backend/tests/test_parties.py` 验证单次邀请、16 个并发接受请求仅一个成功、成员唯一性、过期、解散、会话版本清理、HTTP 认证和验证错误隐私。连同房间/会话/故障/战绩回归共 46 项通过，证据 `artifacts/party-backend-tests.log`。已部署到独立开发 API 8001，两个隔离测试账号的真实 HTTP 创建/接受/查询/解散通过，证据 `artifacts/party-live-http.log`。
+
+尚未把邀请队伍接入普通房间预约，当前普通匹配不会读取队伍。下一步必须实现两人共同预约容量、将队伍身份绑定入场票据、保证交错入场不拆队、核验全部成员会话并处理取消/失约，然后接入客户端邀请/准备/开始界面。不能仅用这组接口宣称完整在线邀请已交付。

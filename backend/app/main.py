@@ -12,6 +12,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, InvalidHashError
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from .validation import validation_error
 from .availability import dependency_unavailable
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -23,11 +24,13 @@ from .models import User, Match, Result
 from .database import engine
 from .protocol import BUILD, BuildInfo, require_compatible
 from .rooms import CancelRoomTicket, RoomDirectory, RoomHeartbeat, RoomJoin, RoomTicket
+from .parties import AcceptInvitation, PartyDirectory
 
 JWT_SECRET = os.environ['JWT_SECRET']
 SERVER_SECRET = os.environ['SERVER_SECRET']
 cache = redis.Redis.from_url(os.environ['REDIS_URL'], decode_responses=True, socket_connect_timeout=2, socket_timeout=2, retry_on_timeout=False)
 rooms = RoomDirectory(cache)
+parties = PartyDirectory(cache)
 passwords = PasswordHasher(time_cost=2, memory_cost=19456, parallelism=1)
 # One real verification for unknown accounts keeps timing comparable.
 DUMMY_HASH = passwords.hash(secrets.token_urlsafe(32))
@@ -92,6 +95,7 @@ def logout_all(credentials: HTTPAuthorizationCredentials = Depends(auth), sessio
         raise HTTPException(401, 'Session expired; sign in again')
     session.commit()
     rooms.revoke_reservation(uid, changed)
+    parties.revoke(uid, changed)
     return {'status': 'signed_out'}
 
 
@@ -165,6 +169,40 @@ def leaderboard(session: Session = Depends(db)):
 @app.get('/protocol')
 def protocol():
     return BUILD
+
+
+@app.post('/parties')
+def create_party(uid: str = Depends(user_token), session: Session = Depends(db)):
+    limit('party:' + uid, 20, 60)
+    user = session.get(User, uid)
+    return JSONResponse(parties.create(uid, user.username, user.session_version), headers={'Cache-Control': 'no-store'})
+
+
+@app.get('/parties/current')
+def current_party(uid: str = Depends(user_token)):
+    limit('party-poll:' + uid, 120, 60)
+    return JSONResponse(parties.get(uid), headers={'Cache-Control': 'no-store'})
+
+
+@app.post('/parties/accept')
+def accept_party(body: AcceptInvitation, uid: str = Depends(user_token), session: Session = Depends(db)):
+    limit('party:' + uid, 20, 60)
+    # Hold the inviter's session generation stable through the Redis accept.
+    # This also rejects old invitations if logout committed while Redis was down.
+    for member in parties.invitation_members(body.invitation):
+        inviter = session.scalar(select(User).where(User.id == member['uid']).with_for_update(read=True))
+        if inviter is None or inviter.session_version != member['version']:
+            if inviter is not None:
+                parties.revoke(inviter.id, inviter.session_version)
+            raise HTTPException(404, 'Invitation expired or unavailable')
+    user = session.get(User, uid)
+    return JSONResponse(parties.accept(uid, user.username, body.invitation, user.session_version), headers={'Cache-Control': 'no-store'})
+
+
+@app.delete('/parties/current')
+def leave_party(uid: str = Depends(user_token)):
+    limit('party:' + uid, 20, 60)
+    return JSONResponse(parties.leave(uid), headers={'Cache-Control': 'no-store'})
 
 
 @app.post('/internal/build/check', dependencies=[Depends(server_auth)])

@@ -187,7 +187,13 @@ func simulate(dt: float, engine_enabled := true) -> void:
 	var extent := horizontal_extent(rotation.y)
 	velocity.x = clampf(velocity.x, (-ARENA_LIMIT + extent.x - global_position.x) / dt, (ARENA_LIMIT - extent.x - global_position.x) / dt)
 	velocity.z = clampf(velocity.z, (-ARENA_LIMIT + extent.y - global_position.z) / dt, (ARENA_LIMIT - extent.y - global_position.z) / dt)
-	velocity.y -= 24.0 * dt
+	# Ground snapping keeps contact on driveable slopes. Applying gravity here
+	# would project a downward impulse sideways on every cross-slope frame,
+	# bypassing the tires' lateral grip. Airborne/steep-slope motion keeps gravity.
+	if grounded:
+		velocity.y = 0.0
+	else:
+		velocity.y -= 24.0 * dt
 	var before := global_position
 	var incoming := velocity
 	var impact_driver := driver_id

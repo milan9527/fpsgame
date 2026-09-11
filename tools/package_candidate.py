@@ -20,6 +20,7 @@ CASES = [
     "foregrip_rules", "input_timeout_rules", "damage_indicators_rules",
     "zone_rules", "inventory_rules", "death_loot_rules", "drop_rules",
     "voice_resampler", "voice_relay", "voice_playback", "voice_capture",
+    "vehicle_slopes",
 ]
 
 
@@ -95,7 +96,7 @@ def main():
                 if len(markers) != 1:
                     raise RuntimeError(f"{name} requires an explicit single success marker")
                 run(name, [str(launcher), "--headless", "--script", str(script)],
-                    markers[0], env)
+                    markers[0], env, timeout=60 if name == "vehicle_slopes" else 45)
         # Export must not have generated uncommitted source assets or changed the build.
         if subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).strip():
             raise RuntimeError("Source changed during candidate creation; commit and rebuild.")

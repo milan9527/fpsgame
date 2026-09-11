@@ -98,7 +98,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 开发版主菜单现在可以直接启动人机双人对局。新增格式 2 保存队伍、倒地、流血归因和救援进度；队友仍存活时可挂起阵亡观战，恢复后仍可随队获得胜利。单人格式 1 和已结算旧档隔离继续保留。实际渲染/恢复测试、六进程反复保存读取及旧单人回归分别见 `artifacts/duo-checkpoint.log`、`artifacts/duo-checkpoint-process.log`、`artifacts/duo-checkpoint-solo-regression.log`。主菜单截图为 `artifacts/duo-deployment-menu.png`。
 
-## 邀请后端基础（尚未接入整队匹配）
+## 邀请后端基础
 
 开发 API 提供 `POST /parties`、`GET /parties/current`、`POST /parties/accept`（`invitation` 字段）和 `DELETE /parties/current`。所有操作需要有效账号令牌，使用 Redis Lua 原子管理一人一队及双人上限。创建者得到 32 字节随机邀请码，有效期 15 分钟；接受后单次邀请立即失效，不延长组队有效期。只有未满队的创建者可读取邀请码，响应禁用缓存；成员列表不返回会话版本或邀请码哈希。任一成员离开会解散双人队伍。
 
@@ -106,7 +106,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 `backend/tests/test_parties.py` 验证单次邀请、16 个并发接受请求仅一个成功、成员唯一性、过期、解散、会话版本清理、HTTP 认证和验证错误隐私。连同房间/会话/故障/战绩回归共 46 项通过，证据 `artifacts/party-backend-tests.log`。已部署到独立开发 API 8001，两个隔离测试账号的真实 HTTP 创建/接受/查询/解散通过，证据 `artifacts/party-live-http.log`。
 
-尚未把邀请队伍接入普通房间预约，当前普通匹配不会读取队伍。下一步必须实现两人共同预约容量、将队伍身份绑定入场票据、保证交错入场不拆队、核验全部成员会话并处理取消/失约，然后接入客户端邀请/准备/开始界面。不能仅用这组接口宣称完整在线邀请已交付。
+邀请通过下述专用预约入口接入整队容量；普通逐人匹配目前仍不读取队伍。客户端邀请/准备/开始界面及真实邀请队伍交错入场验收尚未完成，不能仅用后端接口宣称完整在线邀请已交付。
 
 ## 整队预约内部能力与专服配队
 
@@ -118,6 +118,14 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 52 项后端回归通过，包含 12 支队伍并发争夺 6 个位置、容量不足整队失败、成员忙碌无部分写入、票据绑定、整批取消及部分入场租约保留；日志 `artifacts/party-reservation-tests.log`。原生交错配对、缺席伙伴、满人类不完整队伍与既有队伍回归见 `artifacts/party-team-rules.log`、`artifacts/party-team-regression.log`。
 
-**此方法仍为内部原语，没有 HTTP 入口。** 邀请队伍目前尚未调用它；下一步需要在预约入口核验并冻结实际邀请成员、将重试结果按账号分发、处理解散/超时，再接入客户端邀请界面和真实交错入场验收。当前普通匹配不会自动把已接受邀请的两人送进同一房间。
+该原语现由下述 `POST /parties/reserve` 入口调用。当前普通匹配不会自动把已接受邀请的两人送进同一房间，客户端需要显式使用整队入口。
 
 更新后的共享分配器和专服继续通过既有四客户端真实救援/胜负/战绩落库回归：`artifacts/party-reservation-network-regression.log`。该回归尚不使用邀请队伍预约，不代替后续整队 HTTP 流程验收。
+
+## 邀请队伍预约入口
+
+开发 API 的 `POST /parties/reserve` 接收构建信息和可选 `room_id`，只允许满双人队的队长调用。数据库共享锁下核验两人的当前会话版本，随后 Redis 在一次操作中核对队伍快照、预约两个名额并保存该批票据。并发重试返回同批预约，不重复占位。队伍剩余寿命不足 45 秒时拒绝预约，避免队伍先过期。
+
+响应以及 `GET /parties/current` 只返回请求者自己的 `admission`，包含房间绑定、模式、构建信息和实际票据剩余秒数；不会返回同伴票据、内部预约对象或会话版本。已消费或过期票据不再返回，状态为 `consumed_or_expired`。目前此状态需要离队后重新组队，没有自动重新排队。任一成员解散会释放同批未使用票据；已经连接的成员保留连接租约，由专服正常管理。
+
+61 项后端回归通过，证据 `artifacts/party-coordinator-tests.log`：包括并发幂等、队长权限、响应隐私、无可用房间重试、过期快照、注销失效、解散竞争、部分入场后解散及队伍即将过期。开发 API 8001 已更新；运行 `.venv/bin/python tools/test_party_http.py` 使用两个可复用隔离账号，对运行中的 UDP 27031 房间完成邀请、预约、幂等重试、按人取票及解散后容量再预约，日志 `artifacts/party-coordinator-http.log`。此 HTTP 验收不消费 ENet 票据，真实邀请队伍交错入场与客户端界面仍待完成。

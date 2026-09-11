@@ -24,7 +24,8 @@ from .models import User, Match, Result
 from .database import engine
 from .protocol import BUILD, BuildInfo, require_compatible
 from .rooms import CancelRoomTicket, RoomDirectory, RoomHeartbeat, RoomJoin, RoomTicket
-from .parties import AcceptInvitation, PartyDirectory
+from .parties import AcceptInvitation, PartyDirectory, ReserveParty
+from .rooms import PartyMember
 
 JWT_SECRET = os.environ['JWT_SECRET']
 SERVER_SECRET = os.environ['SERVER_SECRET']
@@ -203,6 +204,27 @@ def accept_party(body: AcceptInvitation, uid: str = Depends(user_token), session
 def leave_party(uid: str = Depends(user_token)):
     limit('party:' + uid, 20, 60)
     return JSONResponse(parties.leave(uid), headers={'Cache-Control': 'no-store'})
+
+
+@app.post('/parties/reserve')
+def reserve_party(body: ReserveParty, uid: str = Depends(user_token), session: Session = Depends(db)):
+    require_compatible(body)
+    limit('party:' + uid, 20, 60)
+    key, raw, party = parties.snapshot(uid)
+    if party['leader'] != uid:
+        raise HTTPException(403, 'Only the party leader can start matchmaking')
+    if len(party['members']) != 2:
+        raise HTTPException(409, 'Waiting for the invited teammate')
+    members = []
+    for member in sorted(party['members'], key=lambda entry: entry['uid']):
+        user = session.scalar(select(User).where(User.id == member['uid']).with_for_update(read=True))
+        if user is None or user.session_version != member['version']:
+            if user is not None:
+                parties.revoke(user.id, user.session_version)
+            raise HTTPException(409, 'A party member must sign in again')
+        members.append(PartyMember(uid=user.id, username=user.username, session_version=user.session_version))
+    rooms.allocate_party(party['id'], members, body.room_id, key, raw)
+    return JSONResponse(parties.get(uid), headers={'Cache-Control': 'no-store'})
 
 
 @app.post('/internal/build/check', dependencies=[Depends(server_auth)])

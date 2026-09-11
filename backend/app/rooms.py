@@ -118,6 +118,18 @@ ALLOCATE = """
 local p=ARGV[1]; local uid=ARGV[2]
 local members={{uid=uid,username=ARGV[3],digest=ARGV[7],session_version=tonumber(ARGV[8])}}
 if ARGV[10] and ARGV[10]~='' then members=cjson.decode(ARGV[10]) end
+local party=nil
+local party_ttl=0
+if ARGV[13] and ARGV[13]~='' then
+    local current=redis.call('GET',ARGV[13])
+    if not current then return {'party_changed'} end
+    party=cjson.decode(current)
+    if party.id~=ARGV[11] then return {'party_changed'} end
+    if party.reservation then return {'existing',cjson.encode(party.reservation)} end
+    if current~=ARGV[14] then return {'party_changed'} end
+    party_ttl=redis.call('PTTL',ARGV[13])
+    if party_ttl<45000 then return {'party_changed'} end
+end
 for _,member in ipairs(members) do
     if redis.call('EXISTS',p..'user:'..member.uid)==1 then return {'busy'} end
 end
@@ -142,6 +154,14 @@ for _,id in ipairs(ids) do
                     redis.call('ZADD',held,now+45,member.uid)
                 end
                 if #members>1 then redis.call('SET',p..'group:'..ARGV[12],cjson.encode(members),'EX',45) end
+                if party then
+                    local admissions={}
+                    for _,member in ipairs(members) do
+                        admissions[member.uid]={ticket=member.ticket,room_id=id,instance_id=room.instance_id,generation=room.generation,host=room.host,port=room.port,expires_in=45,mode='duo',party_id=ARGV[11],group_id=ARGV[12],build={protocol=room.protocol,content_revision=room.content_revision,client_version=room.client_version}}
+                    end
+                    party.reservation={party_id=ARGV[11],group_id=ARGV[12],admissions=admissions,members=members,room_prefix=p}
+                    redis.call('SET',ARGV[13],cjson.encode(party),'PX',party_ttl)
+                end
                 redis.call('EXPIRE',held,60)
                 return {'ok',raw}
             end
@@ -246,7 +266,7 @@ class RoomDirectory:
             end
         """, 0, self.prefix, uid, str(version))
 
-    def allocate_party(self, party_id: str, members: list[PartyMember], requested_room=''):
+    def allocate_party(self, party_id: str, members: list[PartyMember], requested_room='', party_key='', expected_party=''):
         """Internal primitive; caller must authorize and freeze the party first."""
         party_id = str(uuid.UUID(party_id))
         if len(members) != 2 or len({member.uid for member in members}) != 2:
@@ -254,12 +274,17 @@ class RoomDirectory:
         group_id = str(uuid.uuid4())
         tickets = {str(member.uid): secrets.token_urlsafe(32) for member in members}
         encoded = [
-            dict(member.model_dump(mode='json'), digest=hashlib.sha256(tickets[str(member.uid)].encode()).hexdigest())
+            dict(member.model_dump(mode='json'), ticket=tickets[str(member.uid)], digest=hashlib.sha256(tickets[str(member.uid)].encode()).hexdigest())
             for member in members
         ]
         result = self.cache.eval(ALLOCATE, 0, self.prefix, '', '', str(BUILD['protocol']),
                                  BUILD['content_revision'], requested_room, '', '0', 'duo',
-                                 json.dumps(encoded), party_id, group_id)
+                                 json.dumps(encoded), party_id, group_id, party_key, expected_party)
+        if result[0] == 'existing':
+            saved = json.loads(result[1])
+            return {key: saved[key] for key in ('party_id', 'group_id', 'admissions')}
+        if result[0] == 'party_changed':
+            raise HTTPException(409, 'Party changed or is expiring; refresh and retry')
         if result[0] == 'busy':
             raise HTTPException(409, 'A party member is already connected or reserved')
         if result[0] != 'ok':

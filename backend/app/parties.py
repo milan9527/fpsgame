@@ -5,10 +5,14 @@ import secrets
 import uuid
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
+from .protocol import BuildInfo
 
 
 class AcceptInvitation(BaseModel):
     invitation: str = Field(min_length=32, max_length=64, pattern=r'^[A-Za-z0-9_-]+$')
+
+class ReserveParty(BuildInfo):
+    room_id: str = Field(default='', max_length=64, pattern=r'^[a-zA-Z0-9_-]*$')
 
 
 SCRIPT = """
@@ -22,6 +26,26 @@ local function read(id)
   return nil
 end
 local function disband(p)
+  if p.reservation then
+    local reservation=p.reservation
+    local rp=reservation.room_prefix
+    for _,member in ipairs(reservation.members) do
+      local key=rp..'ticket:'..member.digest
+      local raw=redis.call('GET',key)
+      if raw then
+        local ticket=cjson.decode(raw)
+        if ticket.group_id==reservation.group_id then
+          local owner=ticket.room_id..'/'..ticket.instance_id..'/'..ticket.generation
+          if redis.call('GET',rp..'user:'..ticket.uid)==owner and tonumber(redis.call('GET',rp..'user_version:'..ticket.uid) or '0')==tonumber(ticket.session_version) then
+            redis.call('ZREM',rp..'held:'..ticket.room_id,ticket.uid)
+            redis.call('DEL',rp..'user:'..ticket.uid,rp..'user_version:'..ticket.uid)
+          end
+          redis.call('DEL',key)
+        end
+      end
+    end
+    redis.call('DEL',rp..'group:'..reservation.group_id)
+  end
   for _, m in ipairs(p.members) do
     local key = prefix .. 'user:' .. m.uid
     if redis.call('GET', key) == p.id then redis.call('DEL', key) end
@@ -85,6 +109,17 @@ class PartyDirectory:
             raise RuntimeError('Invalid party operation response')
         party = json.loads(raw)
         if party:
+            reservation = party.pop('reservation', None)
+            party['status'] = 'reserved' if reservation else 'forming'
+            if reservation:
+                admission = reservation['admissions'].get(uid)
+                digest = hashlib.sha256(admission['ticket'].encode()).hexdigest() if admission else ''
+                remaining = self.cache.ttl(reservation['room_prefix'] + 'ticket:' + digest)
+                if admission and remaining > 0:
+                    admission['expires_in'] = remaining
+                    party['admission'] = admission
+                else:
+                    party['admission_status'] = 'consumed_or_expired'
             party.pop('invite_hash', None)
             if party['leader'] != uid or len(party['members']) != 1:
                 party.pop('invitation', None)
@@ -114,6 +149,14 @@ class PartyDirectory:
 
     def get(self, uid):
         return self.execute('get', uid)
+
+    def snapshot(self, uid):
+        identity = self.cache.get(self.prefix + 'user:' + uid)
+        key = self.prefix + 'party:' + identity if identity else ''
+        raw = self.cache.get(key) if key else None
+        if not raw:
+            raise HTTPException(404, 'No current party')
+        return key, raw, json.loads(raw)
 
     def leave(self, uid):
         return self.execute('leave', uid)

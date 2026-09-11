@@ -25,7 +25,7 @@ func run() -> void:
 	root.add_child(game)
 	game.local_profile = null
 	game.sound.volume = 0
-	deadline = Time.get_ticks_msec() + 45000
+	deadline = Time.get_ticks_msec() + 65000
 	while not game.running:
 		assert(Time.get_ticks_msec() < deadline)
 		await process_frame
@@ -57,9 +57,20 @@ func run() -> void:
 	var request_due := 0
 	var observed_team_view := false
 	var observed_downed_hud := false
+	var revoke_case := OS.get_environment("TEST_REVOKE_MEMBER") == "1"
+	var observed_departure := false
 	while game.phase != "finished":
 		assert(Time.get_ticks_msec() < deadline, "Network rescue scenario timed out")
 		await process_frame
+		if revoke_case and not game.running:
+			assert(observed_knock and observed_progress and observed_revive and interrupts == 2)
+			assert(game.token.is_empty() and not game.online)
+			print("REVOKED_MEMBER_CLIENT_PASS rescue_observed=ok token_cleared=ok connection_closed=ok")
+			game.request_quit()
+			return
+		if revoke_case and not is_instance_valid(patient):
+			observed_departure = true
+			continue
 		if game.local_id == helper_id and "DOWNED" in game.ui.team_label.text:
 			observed_downed_hud = true
 		if game.local_id == patient_id and not patient.alive and game.spectator.active:
@@ -83,12 +94,15 @@ func run() -> void:
 			requests += 1
 			await interact()
 	assert(observed_knock and observed_progress and observed_revive and interrupts == 2)
-	assert(patient.rank == 1 and helper.rank == 1 and helper.kills == 2)
+	assert((revoke_case or patient.rank == 1) and helper.rank == 1 and helper.kills == 2)
 	await process_frame
 	await process_frame
-	assert(game.ui.team_markers.size() == 1 and game.ui.tactical_map.teammates.size() == 1)
-	var marker: Dictionary = game.ui.team_markers[0]
-	assert(marker.id != game.local_id and game.actors[marker.id].team_id == game.actors[game.local_id].team_id)
+	if revoke_case and game.local_id == helper_id:
+		assert(observed_departure and game.ui.team_markers.is_empty() and game.ui.tactical_map.teammates.is_empty())
+	else:
+		assert(game.ui.team_markers.size() == 1 and game.ui.tactical_map.teammates.size() == 1)
+		var marker: Dictionary = game.ui.team_markers[0]
+		assert(marker.id != game.local_id and game.actors[marker.id].team_id == game.actors[game.local_id].team_id)
 	if game.local_id == patient_id:
 		assert(observed_team_view and game.spectator.target_id == helper_id)
 	if game.actors[game.local_id].team_id == 2:

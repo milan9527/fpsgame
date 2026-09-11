@@ -14,9 +14,14 @@ ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument("--parties", action="store_true", help="Reserve two invitation parties and admit A,B,A,B")
 parser.add_argument("--return-to-party", action="store_true", help="Use the result button to return to each invitation lobby")
+parser.add_argument("--revoke-member", action="store_true", help="Revoke a revived teammate and verify their eventual team result")
+parser.add_argument("--drop-member", action="store_true", help="Kill a revived client process without graceful leave")
 options = parser.parse_args()
+departure_case = options.revoke_member or options.drop_member
 if options.return_to_party and not options.parties:
     parser.error("--return-to-party requires --parties")
+if departure_case and (not options.parties or options.return_to_party or (options.revoke_member and options.drop_member)):
+    parser.error("Departure tests require --parties and exactly one departure option")
 credentials = [account(f"duo-network-{i}", base="http://127.0.0.1:8001") for i in range(4)]
 base = "http://127.0.0.1:8001"
 auth = [{"Authorization": "Bearer " + identity["token"]} for identity in credentials]
@@ -63,10 +68,18 @@ env = dict(os.environ, GAME_PORT="27032", GAME_MODE="duo", API_URL="http://127.0
            XDG_DATA_HOME=str(ROOT / "artifacts/rescue-network-server-data"))
 if options.parties:
     env["TEST_INVITED_PARTIES"] = "1"
+if departure_case:
+    env["TEST_REVOKE_MEMBER"] = "1"
 env["SERVER_SECRET"] = next(line.split("=", 1)[1] for line in
     (ROOT / "artifacts/duo-dev.env").read_text().splitlines()
     if line.startswith("DUO_SERVER_SECRET="))
-log_prefix = "post-match-party" if options.return_to_party else ("invited-party-network" if options.parties else "rescue-network")
+log_prefix = "rescue-network"
+for enabled, prefix in [(options.parties, "invited-party-network"),
+                        (options.return_to_party, "post-match-party"),
+                        (options.revoke_member, "revoked-party"),
+                        (options.drop_member, "departed-party")]:
+    if enabled:
+        log_prefix = prefix
 server_path = ROOT / "artifacts" / f"{log_prefix}-server.log"
 processes = []
 with server_path.open("w") as log:
@@ -87,6 +100,8 @@ with server_path.open("w") as log:
         for i, identity in enumerate(credentials):
             variables = dict(os.environ, TEST_USERNAME=identity["username"], TEST_PASSWORD=identity["password"],
                              TEST_GAME_PORT="27032", TEST_GAME_MODE="duo", API_URL="http://127.0.0.1:8001")
+            if departure_case:
+                variables["TEST_REVOKE_MEMBER"] = "1"
             if options.parties:
                 variables.update(TEST_PARTY_TOKEN=identity["token"],
                                  TEST_PARTY_UID=identity["user_id"],
@@ -107,11 +122,37 @@ with server_path.open("w") as log:
                     time.sleep(0.05)
                 else:
                     raise AssertionError("Invited client did not authenticate: " + str(path))
-        for process, output, path in processes:
-            code = process.wait(timeout=55)
+        departed_index = -1
+        if departure_case:
+            for _ in range(500):
+                ready = re.search(r"READY_FOR_MEMBER_REVOCATION uid=([0-9a-f-]+)", server_path.read_text())
+                if ready:
+                    break
+                assert server.poll() is None
+                time.sleep(0.1)
+            else:
+                raise AssertionError("Revocation stage not reached")
+            departed_index = next(i for i, identity in enumerate(credentials) if identity["user_id"] == ready.group(1))
+            partner = 2 if departed_index == 0 else 0
+            assert departed_index in [0, 2]
+            if options.revoke_member:
+                response = httpx.post(base + "/auth/logout-all", headers=auth[departed_index])
+                response.raise_for_status()
+                assert httpx.get(base + "/profile", headers=auth[departed_index]).status_code == 401
+                assert httpx.get(base + "/parties/current", headers=auth[partner]).json() == {}
+            else:
+                processes[departed_index][0].kill()
+                assert httpx.get(base + "/profile", headers=auth[departed_index]).status_code == 200
+                assert httpx.get(base + "/parties/current", headers=auth[partner]).json()["id"] == admissions[partner]["party_id"]
+        for index, (process, output, path) in enumerate(processes):
+            code = process.wait(timeout=75)
             output.close()
             text = path.read_text()
-            assert code == 0 and "RESCUE_NETWORK_CLIENT_PASS" in text, str(path)
+            marker = "REVOKED_MEMBER_CLIENT_PASS" if index == departed_index else "RESCUE_NETWORK_CLIENT_PASS"
+            if options.drop_member and index == departed_index:
+                assert code < 0, str(path)
+            else:
+                assert code == 0 and marker in text, str(path)
             if options.return_to_party:
                 assert "POST_MATCH_PARTY_RETURN_PASS" in text, str(path)
         assert "RESCUE_NETWORK_SERVER_PASS" in server_path.read_text(), str(server_path)
@@ -141,6 +182,10 @@ with server_path.open("w") as log:
             teams = [by_uid[identity["user_id"]]["team"] for identity in credentials]
             assert teams[0] == teams[2] and teams[1] == teams[3] and teams[0] != teams[1]
         for identity in credentials:
+            if options.revoke_member and identity["user_id"] == credentials[departed_index]["user_id"]:
+                response = httpx.post(base + "/auth/login", json={"username": identity["username"], "password": identity["password"]})
+                response.raise_for_status()
+                identity["token"] = response.json()["token"]
             row = next(row for row in rows if row["uid"] == identity["user_id"])
             previous = before[identity["user_id"]]["duo"]
             after = stats(identity, "duo")
@@ -157,6 +202,10 @@ with server_path.open("w") as log:
             print("INVITED_PARTY_NETWORK_PASS parties=2 interleaved=A_B_A_B tickets=4 authoritative_teams=ok persisted_pairs=ok")
         if options.return_to_party:
             print("POST_MATCH_PARTY_RETURN_NETWORK_PASS clients=4 winners_and_losers=ok auth_retained=ok result_rows=4")
+        if options.drop_member:
+            print("DROPPED_PARTY_NETWORK_PASS abrupt_process_kill=ok peer_timeout=ok party_retained=ok departed_member_rank=1 results=4 stats=ok")
+        if options.revoke_member:
+            print("REVOKED_PARTY_NETWORK_PASS logout_all=ok party_disband=ok peer_removed=ok surviving_ally_wins=ok departed_member_rank=1 results=4 stats=ok")
     finally:
         for process, output, _ in processes:
             if process.poll() is None:
@@ -166,5 +215,6 @@ with server_path.open("w") as log:
         server.terminate()
         server.wait(timeout=10)
         if options.parties:
-            for header in auth:
-                httpx.delete(base + "/parties/current", headers=header).raise_for_status()
+            for identity in credentials:
+                response = httpx.delete(base + "/parties/current", headers={"Authorization": "Bearer " + identity["token"]})
+                assert response.status_code in [200, 401]

@@ -56,13 +56,13 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 `tests/rescue_rules.gd` 在实际 Godot 世界中验证倒地、动作限制、真实墙体遮挡、快照复制/恢复、受伤/移动/距离/再次交互中断、可靠动作重放、完成、机器人救援、流血归因、整队淘汰及单人立即死亡。证据 `artifacts/rescue-rules.log`。旧存档和单人完整对局分别见 `artifacts/rescue-solo-checkpoint.log` 与 `artifacts/rescue-solo-smoke.log`。
 
-四客户端倒地/扶起/两次受伤中断/队伍胜负同步已通过专门验收，战绩落库已接入本轮验收，退出/会话撤销组合验收仍待完成。原有入场脚本仍只证明入场与队伍快照。当前倒地使用蹲姿，没有专用倒地动画；队伍观战、地图及邀请大厅已实现。开发协议 16 扩展快照字段 `downed`、`down_health`、`bleed`、`revive_target`、`revive_left`；旧单人检查点不包含这些字段。
+四客户端倒地/扶起/两次受伤中断/队伍胜负同步已通过专门验收，战绩落库已接入本轮验收，退出/会话撤销组合验收现已通过（见后文）。原有入场脚本仍只证明入场与队伍快照。当前倒地使用蹲姿，没有专用倒地动画；队伍观战、地图及邀请大厅已实现。开发协议 16 扩展快照字段 `downed`、`down_health`、`bleed`、`revive_target`、`revive_left`；旧单人检查点不包含这些字段。
 
 ## 四客户端救援网络验收
 
 运行 `.venv/bin/python tools/test_rescue_network.py`：临时专服连接独立开发 API，监听 UDP 27032；四个真实客户端使用各自账号完成房间票据鉴权。夹具控制伤害时机并关闭机器人攻击，以稳定制造倒地、救援者受伤、伤员受伤、扶起完成和对方整队淘汰。救援者实际注入拾取交互输入，由客户端正常可靠动作链路发送，未直接调用专服救援方法。四个客户端都必须看到倒地、进度、两次中断、恢复 30 生命及两队名次，专服另检查击杀与排名。
 
-证据：`artifacts/rescue-network.log`、`artifacts/rescue-network-server.log`、`artifacts/rescue-network-client-0.log` 至 `-3.log`。测试不是自由对战压力测试，也不证明全部战绩与生产压力：组队结果现在进入模式适配后的专服接口，后续验收还需包含断开与会话撤销。
+证据：`artifacts/rescue-network.log`、`artifacts/rescue-network-server.log`、`artifacts/rescue-network-client-0.log` 至 `-3.log`。测试不是自由对战压力测试，也不证明全部战绩与生产压力：组队结果现在进入模式适配后的专服接口，断开与会话撤销现有下述独立组合验收。
 
 同时修正倒地补枪的护甲重复扣除及淘汰报告：补枪仅消耗倒地生命，剩余护甲进入死亡掉落，报告显示该次倒地生命损失。`tests/rescue_rules.gd` 验证 82 点剩余护甲完整回收以及 100 点补枪伤害报告；`artifacts/rescue-death-recap.log` 验证既有报告规则回归。
 
@@ -177,3 +177,14 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 玩家可留在现有房间等待下一场，或主动返回队伍；两人返回后队长使用 RESET MATCHMAKING，再分别准备和开始。此行为不自动延长队伍 15 分钟寿命，队伍到期仍需重建。
 
 `.venv/bin/python tools/test_rescue_network.py --parties --return-to-party` 已通过四个真实客户端完整场景：邀请队伍交错入场、救援/两次中断、阵亡成员随队胜利、败方整队淘汰、结算按钮返回原队伍、令牌保持和游戏连接关闭。测试继续核对四条 PostgreSQL 战绩及分模式统计。主日志 `artifacts/post-match-party-network.log`，服务端 `artifacts/post-match-party-server.log`，客户端 `artifacts/post-match-party-client-{0,1,2,3}.log`。界面规则回归 `artifacts/post-match-party-ui.log`。源码尚未打包发布。
+
+## 断线、注销与队伍结果验收
+
+扩展真实四客户端救援场景，在成功扶起一名成员后再触发离场，让其队友继续击败另一队：
+
+- `.venv/bin/python tools/test_rescue_network.py --parties --revoke-member` 对伤员账号调用全设备注销。旧令牌访问立即返回 401，邀请队伍解散，客户端收到撤销通知清空令牌并返回菜单，专服移除连接。存活队友保持战斗连接，最终获胜；数据库仍保存被撤销成员与其队友的共同第 1 名，以及败方两条第 2 名。重新登录后核对被撤销账号统计增量，单人统计未变。
+- `.venv/bin/python tools/test_rescue_network.py --parties --drop-member` 直接终止该客户端进程，不发送正常离场通知。专服检测连接超时后移除角色，原邀请队伍和登录令牌仍有效。存活队友完成胜利，被终止客户端对应的账号仍得到相同队伍名次；四条战绩及模式统计均通过核对。被终止的进程按异常退出验收，另外三个客户端须完成同步断言。
+
+主证据 `artifacts/revoked-party-network.log`、`artifacts/departed-party-network.log`；各自 `*-server.log` 和 `*-client-{0,1,2,3}.log` 保留专服与客户端记录。该扩展复用已有服务器断线和队伍排名实现，本轮未修改游戏运行代码。
+
+`tests/duo_disconnect_rules.gd` 进一步调用实际断线清理：正在扶起倒地成员的唯一站立队友断线后，救援中断，倒地成员因失去站立队友而淘汰；两个参与者共享第 8 名，原击倒者只记一次击杀，离线成员仍进入结果队列。日志 `artifacts/duo-disconnect-rules.log`。该原生测试覆盖最后站立队友离场，与网络测试中的存活队友获胜为不同边界。

@@ -28,6 +28,7 @@ def main():
                 ("animation_rules", "ANIMATION_RULES_PASS"),
                 ("downed_animation", "DOWNED_ANIMATION_PASS"),
                 ("team_voice_ui", "TEAM_VOICE_UI_PASS"),
+                ("vehicle_spectator", "VEHICLE_SPECTATOR_PASS"),
             ]:
                 log = output / (name + ".log")
                 with log.open("w") as stream:

@@ -24,6 +24,7 @@ var local_profile
 var local_outbox: Array[Dictionary] = []
 var local_recorded_id := ""
 var actors: Dictionary = {}
+var vehicle_fleet = preload("res://scripts/vehicle_fleet.gd").new()
 var sessions: Dictionary = {}
 var pending: Dictionary = {}
 var participants: Dictionary = {}
@@ -417,6 +418,7 @@ func start_solo(mode := "solo") -> void:
 	ui.show_game()
 
 func clear_actors() -> void:
+	vehicle_fleet.clear()
 	voice_relay.reset()
 	if team_voice != null:
 		team_voice.reset_round()
@@ -804,6 +806,8 @@ func _physics_process(dt: float) -> void:
 					push_error("Online smoke test failed to reach active match")
 					request_quit(1)
 		return
+	if not online:
+		vehicle_fleet.step(dt, phase == "live")
 	for id in pending.keys():
 		if Time.get_ticks_msec() - pending[id].at > 8000:
 			multiplayer.multiplayer_peer.disconnect_peer(id)
@@ -881,6 +885,7 @@ func local_command(actor) -> Dictionary:
 	var cmd := {"seq": sequence, "x": 0.0, "z": 0.0, "yaw": actor.yaw, "pitch": actor.pitch, "fire": false, "sprint": false, "crouch": false, "ads": false, "jump": false, "reload": false, "heal": false, "cancel_heal": false, "loot": false, "throw": false, "smoke_throw": false, "weapon": -1, "lean": 0.0}
 	if ui.controls.visible or ui.pause_panel.visible or ui.inventory.visible or ui.tactical_map.visible or not actor.alive:
 		action_latch.clear()
+		cmd.crouch = actor.is_seated() # Open UI requests the vehicle brake.
 		return cmd
 	var movement := Input.get_vector("left", "right", "forward", "back")
 	cmd.x = movement.x
@@ -889,6 +894,8 @@ func local_command(actor) -> Dictionary:
 	cmd.lean = Input.get_axis("lean_left", "lean_right")
 	for action in ["fire", "sprint", "crouch"]:
 		cmd[action] = Input.is_action_pressed(action)
+	if actor.is_seated() and not online:
+		cmd.crouch = Input.is_action_pressed("jump") # Vehicle handbrake uses the jump binding.
 	if inventory_pointer_guard:
 		inventory_pointer_guard = Input.is_action_pressed("fire") or Input.is_action_pressed("aim")
 		cmd.fire = false
@@ -1010,6 +1017,10 @@ func valid_command(cmd: Dictionary) -> bool:
 	return not (cmd.heal and cmd.cancel_heal) and absf(cmd.lean) <= 1 and absf(cmd.x) <= 1 and absf(cmd.z) <= 1 and absf(cmd.yaw) <= PI + 0.01 and absf(cmd.pitch) <= 1.46 and cmd.weapon >= -1 and cmd.weapon <= 2
 
 func apply_command(actor, cmd: Dictionary) -> void:
+	if actor.is_seated():
+		if not online:
+			vehicle_fleet.controls(actor, cmd, phase == "live")
+		return
 	actor.move_input = Vector2(cmd.x, cmd.z).limit_length()
 	actor.yaw = cmd.yaw
 	actor.pitch = cmd.pitch
@@ -1026,6 +1037,8 @@ func apply_actions(actor, cmd: Dictionary, loot_target := -1, explicit_pickup :=
 	if cmd.jump or cmd.reload or cmd.heal or cmd.weapon >= 0 or cmd.throw or cmd.smoke_throw:
 		rescue.cancel(actor)
 	if cmd.loot and loot_target < 0 and match_mode == "duo" and rescue.interact(self, actor):
+		return
+	if cmd.loot and loot_target < 0 and not online and vehicle_fleet.interact(actor):
 		return
 	actor.jump_requested = actor.jump_requested or cmd.jump
 	if cmd.cancel_heal:
@@ -1503,6 +1516,10 @@ func _process(dt: float) -> void:
 			var quantity_text := str(int(quantity)) if is_equal_approx(quantity, roundf(quantity)) else String.num(quantity, 1)
 			ui.supply_prompt = ("%s  %s ×%s" % [Bindings.key_label("loot"), item_name, quantity_text]) if supply.usable else item_name + " / INVENTORY FULL"
 		var message := ""
+		if not online and phase == "live" and actor.alive and not actor.downed and not actor.is_seated():
+			var seats: Array = vehicle_fleet.candidates(actor)
+			if not seats.is_empty():
+				ui.supply_prompt = Bindings.key_label("loot") + ("  DRIVE BUGGY" if seats[0].seat == 0 else "  ENTER PASSENGER SEAT")
 		if match_mode == "duo":
 			var rescue_target = rescue.target(self, actor)
 			if rescue_target != null:

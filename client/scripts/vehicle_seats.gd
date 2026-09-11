@@ -15,7 +15,7 @@ func occupant(index: int):
 		return null
 	return slots[index].actor.get_ref()
 
-func enter(actor, index: int) -> bool:
+func can_enter(actor, index: int) -> bool:
 	if index < 0 or index >= slots.size() or slots[index] != null:
 		return false
 	if not actor.alive or actor.downed or actor.is_seated() or actor.revive_target != 0:
@@ -28,6 +28,11 @@ func enter(actor, index: int) -> bool:
 	var ray := PhysicsRayQueryParameters3D.create(actor.eye_position(), door, 7, [actor.get_rid(), vehicle.get_rid()])
 	ray.hit_from_inside = true
 	if not vehicle.get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
+		return false
+	return true
+
+func enter(actor, index: int) -> bool:
+	if not can_enter(actor, index):
 		return false
 	slots[index] = {"actor": weakref(actor), "mask": actor.collision_mask, "layer": actor.collision_layer}
 	actor.vehicle_ref = weakref(vehicle)

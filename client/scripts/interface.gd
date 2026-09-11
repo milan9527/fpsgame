@@ -92,6 +92,7 @@ var local_history_grid: GridContainer
 var local_exit_button: Button
 var spectating := false
 var sight_aiming := false
+var vehicle_view := false
 var weapon_blocked := false
 var supply_prompt := ""
 var spectator_label: Label
@@ -549,10 +550,10 @@ func pause_feedback(enabled: bool) -> void:
 func draw_hud() -> void:
 	var center := hud.size / 2
 	var white := Color(0.9, 0.95, 0.92, 0.85)
-	if not spectating and weapon_blocked:
+	if not spectating and not vehicle_view and weapon_blocked:
 		hud.draw_arc(center, 12, 0, TAU, 24, ACCENT, 2)
 		hud.draw_line(center + Vector2(-8, 8), center + Vector2(8, -8), ACCENT, 2)
-	elif not spectating and not sight_aiming:
+	elif not spectating and not vehicle_view and not sight_aiming:
 		for direction in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 			hud.draw_line(center + direction * 5, center + direction * 12, white, 2)
 	var now := feedback_pause_time if feedback_pause_time >= 0 else Time.get_ticks_msec()
@@ -623,6 +624,7 @@ func update_team(actors: Dictionary, local_id: int) -> void:
 	tactical_map.queue_redraw()
 
 func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: float, events: Array, message: String, circle: Dictionary = {}) -> void:
+	vehicle_view = actor.is_seated()
 	weapon_blocked = actor.weapon_blocked
 	headline.text = "ASH VALLEY   /   " + phase.to_upper()
 	stats.text = "%02d ALIVE    •    %02d ELIMINATIONS    •    ZONE %dm    •    %02d:%02d" % [alive_count, actor.kills, zone, int(time_left) / 60, int(time_left) % 60]
@@ -637,6 +639,13 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 	health_bar.value = actor.health
 	armor_bar.value = actor.armor
 	prompt.text = ("%s  Medkit ×%d   |   %s  Frag ×%d   |   %s  Smoke ×%d" % [Bindings.key_label("heal"), actor.medkits, Bindings.key_label("throw"), actor.grenades, Bindings.key_label("smoke_throw"), actor.smokes]) if supply_prompt == "" else supply_prompt
+	if vehicle_view:
+		var vehicle = actor.vehicle_ref.get_ref()
+		weapon.text = "BUGGY / %s   %03d km/h" % ["DRIVER" if actor.vehicle_seat == 0 else "PASSENGER", roundi(absf(vehicle.speed) * 3.6)]
+		loadout_label.text = "%s/%s THROTTLE   %s/%s STEER   %s BRAKE" % [Bindings.key_label("forward"), Bindings.key_label("back"), Bindings.key_label("left"), Bindings.key_label("right"), Bindings.key_label("jump")] if actor.vehicle_seat == 0 else "MOUSE LOOK / WHEEL ZOOM"
+		prompt.text = Bindings.key_label("loot") + ("  EXIT VEHICLE" if vehicle.grounded and absf(vehicle.speed) <= 2 else "  SLOW TO EXIT")
+		if vehicle.grounded and absf(vehicle.speed) <= 2 and vehicle.seats.find_exit(actor) == null:
+			prompt.text = "EXIT BLOCKED / MOVE TO CLEAR GROUND"
 	if actor.throw_left > 0:
 		prompt.text = "THROWING GRENADE"
 	elif actor.reload_left > 0:
@@ -645,9 +654,9 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 		prompt.text = "APPLYING MEDKIT   %.1fs   /   %s CANCEL" % [actor.heal_left, Bindings.key_label("heal")]
 	elif Vector2(actor.position.x, actor.position.z).distance_to(circle.get("center", Vector2.ZERO)) > zone:
 		prompt.text = "WARNING  /  RETURN TO THE SAFE ZONE"
-	elif actor.weapon_blocked and not spectating:
+	elif actor.weapon_blocked and not spectating and not vehicle_view:
 		prompt.text = "MUZZLE BLOCKED / STEP BACK OR REPOSITION"
-	elif actor.ammo == 0 and not spectating:
+	elif actor.ammo == 0 and not spectating and not vehicle_view:
 		prompt.text = Bindings.key_label("reload") + "  RELOAD / EMPTY MAGAZINE" if actor.reserve > 0 else "NO RESERVE AMMUNITION / FIND SUPPLIES"
 	if grenade_warning_distance < 9:
 		prompt.text = "FRAG NEARBY / %dm — MOVE TO COVER" % ceili(grenade_warning_distance)

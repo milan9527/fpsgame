@@ -11,7 +11,7 @@ func clear() -> void:
 
 func protected(world, at: Vector3, threat: Vector3) -> bool:
 	for height in [1.0, 1.65]:
-		var ray := PhysicsRayQueryParameters3D.create(threat + Vector3.UP * 1.6, at + Vector3.UP * height, 1)
+		var ray := PhysicsRayQueryParameters3D.create(threat + Vector3.UP * 1.6, at + Vector3.UP * height, 5)
 		if world.get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
 			return false
 	return true

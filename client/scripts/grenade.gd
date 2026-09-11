@@ -11,8 +11,8 @@ const MAX_DAMAGE := 180.0
 
 func _ready() -> void:
 	mass = 0.4
-	collision_layer = 4 if authoritative else 0
-	collision_mask = 1 if authoritative else 0
+	collision_layer = 8 if authoritative else 0
+	collision_mask = 1 | 4 if authoritative else 0
 	freeze = not authoritative
 	continuous_cd = true
 	linear_damp = 0.35

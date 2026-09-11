@@ -103,7 +103,7 @@ func run() -> void:
 	wall = obstacle(Vector3(-1.25, 1, 0.1), Vector3(0.05, 2, 0.8))
 	await sync_space()
 	assert(car.seats.exit(a) and a.position.x > 1.5, "Blocked driver door must use a clear alternative")
-	assert(not a.is_seated() and a.vehicle_seat == -1 and a.collision_mask == 3 and car.driver_id == 0)
+	assert(not a.is_seated() and a.vehicle_seat == -1 and a.collision_mask == 7 and car.driver_id == 0)
 	wall.queue_free()
 	await process_frame
 	await sync_space()
@@ -169,7 +169,7 @@ func run() -> void:
 	assert(car.seats.enter(a, 0))
 	car.queue_free()
 	await process_frame
-	assert(not a.is_seated() and a.vehicle_seat == -1 and a.collision_mask == 3)
+	assert(not a.is_seated() and a.vehicle_seat == -1 and a.collision_mask == 7)
 	far.position = Vector3(6, 0, 0.1)
 	await sync_space()
 	assert(other.seats.enter(far, 0))

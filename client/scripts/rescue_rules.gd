@@ -11,7 +11,7 @@ func accessible(game, actor, other) -> bool:
 		return false
 	if actor.position.distance_to(other.position) > 2.8:
 		return false
-	var query := PhysicsRayQueryParameters3D.create(actor.position + Vector3.UP * 0.6, other.position + Vector3.UP * 0.6, 1)
+	var query := PhysicsRayQueryParameters3D.create(actor.position + Vector3.UP * 0.6, other.position + Vector3.UP * 0.6, 5)
 	query.hit_from_inside = true
 	return game.world.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 

@@ -113,7 +113,7 @@ func is_seated() -> bool:
 func _ready() -> void:
 	weapon_probe.radius = 0.055
 	collision_layer = 2
-	collision_mask = 1 | 2
+	collision_mask = 1 | 2 | 4
 	var shape := CollisionShape3D.new()
 	body_shape = shape
 	var capsule := CapsuleShape3D.new()
@@ -506,7 +506,7 @@ func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> vo
 			var origin := camera.global_position
 			var desired := origin + camera_error
 			if camera_error.length_squared() > 0.000001:
-				var query := PhysicsRayQueryParameters3D.create(origin, desired, 1)
+				var query := PhysicsRayQueryParameters3D.create(origin, desired, 5)
 				var hit := get_world_3d().direct_space_state.intersect_ray(query)
 				if not hit.is_empty():
 					var distance := maxf(0, origin.distance_to(hit.position) - 0.12)
@@ -533,7 +533,7 @@ func weapon_segment_blocked(from: Vector3, to: Vector3) -> bool:
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = weapon_probe
 	query.transform = Transform3D(Basis.IDENTITY, from)
-	query.collision_mask = 1 # World cover, never the shooter or other actors.
+	query.collision_mask = 1 | 4 # Terrain and vehicles, never actors or grenades.
 	var space := get_world_3d().direct_space_state
 	if not space.intersect_shape(query, 1).is_empty():
 		return true
@@ -585,7 +585,7 @@ func update_lean(dt: float) -> void:
 	probe.radius = 0.37
 	probe.height = body_shape.shape.height - 0.02
 	query.shape = probe
-	query.collision_mask = 3
+	query.collision_mask = 7
 	query.exclude = [get_rid()]
 	for i in range(1, steps + 1):
 		var amount := lerpf(initial, candidate, float(i) / steps)
@@ -614,7 +614,7 @@ func can_stand() -> bool:
 	query.shape = shape
 	# A small floor clearance avoids mistaking the supporting floor for a ceiling.
 	query.transform = Transform3D(lean_basis(), global_position + Basis(Vector3.UP, yaw) * lean_point(Vector3.UP * (STANDING_HEIGHT / 2)) + Vector3.UP * 0.015)
-	query.collision_mask = 3
+	query.collision_mask = 7
 	query.exclude = [get_rid()]
 	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
 

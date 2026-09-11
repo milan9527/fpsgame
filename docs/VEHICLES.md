@@ -30,7 +30,7 @@ xvfb-run -a tools/godot --audio-driver Dummy --path client --script ../tests/veh
 ## 接入对局前仍需完成
 
 1. 将座位规则接入正式对局交互，接入驾驶输入和载具界面。
-2. 地图出生位置、驾驶操作与界面提示；步兵碰撞、射击/爆炸掩体查询适配车辆层。现有射击处理会把 CharacterBody3D 当成人物，必须明确区分车辆和角色后才能在对局中生成车辆。
+2. 地图出生位置、驾驶操作与界面提示；车辆移动时与步兵的推挤/撞击规则。
 3. 车辆生命、燃料、伤害、撞击、摧毁和乘员后果；不能只把车辆作为无敌移动掩体。
 4. 服务器驾驶输入与座位代次校验、输入超时、车辆快照、客户端显示、多人上下车竞争；同步和地图规则改变时更新协议/资源版本。
 5. 单机检查点、队伍观战、机器人交互、音效及完整单人/双人网络回归，再构建新发布包。
@@ -64,3 +64,11 @@ xvfb-run -a tools/godot --audio-driver Dummy --path client --script ../tests/veh
 验证：`tests/vehicle_camera.gd` 覆盖薄墙扫掠、恢复速度、车辆转向/传送、其他车辆遮挡、初始重叠及离座恢复，日志 `artifacts/vehicle-camera.log`。`tests/vehicle_camera_input.gd` 通过实际 Game 输入入口验证鼠标、滚轮、各菜单隔离、死亡观战及步行鼠标恢复，日志 `artifacts/vehicle-camera-input.log`，实际视角截图 `artifacts/vehicle-camera-view.png`。座位、动画和原有观战回归日志分别为 `artifacts/vehicle-seats-camera-regression.log`、`artifacts/vehicle-animation-camera-regression.log`、`artifacts/spectator-vehicle-camera-regression.log`。
 
 整张场景退出时，座位清理也会释放已离开场景树但尚未销毁的角色关联，不再尝试设置其全局坐标。
+
+## 步兵和掩体碰撞接入
+
+碰撞层明确分为地形 1、人物 2、车辆 4、手雷 8，避免原有手雷层与新增车辆重叠。人物移动、侧身和站起空间检测包含车辆；武器阻挡、可见目标、物品拾取、救援视线、机器人掩体和爆炸暴露检测也包含车辆。手雷仍不碰撞人物，但会与地形及车辆碰撞，不会成为子弹、镜头或车辆转向的障碍。
+
+射击命中只对 `Actor` 执行人物伤害和爆头方法，车辆不会再误入人物处理分支。延迟补偿仍只回溯人物，射线首先受当前地形和车辆位置约束；不移动真实车体来重演过去。当前完整车体碰撞盒作为遮挡，尚未增加车窗/车架细分命中、车辆耐久和乘员受损规则，因此本阶段仍不在正式地图生成车辆。
+
+`tests/vehicle_cover.gd` 验证普通/回溯射击、命中类型、步兵停止、枪口阻挡、爆炸遮挡、救援/拾取隔离、真实手雷撞车反弹及手雷层分离；日志 `artifacts/vehicle-cover.log`。原有手雷、烟雾弹、延迟补偿、机器人掩体、侧身、救援，以及座位和相机规则分别记录在 `artifacts/*-vehicle-cover-regression.log`。

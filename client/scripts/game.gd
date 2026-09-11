@@ -1173,7 +1173,7 @@ func visible_target(actor, other) -> bool:
 		return false
 	if smoke_blocks(actor.eye_position(), other.aim_position()):
 		return false
-	var query := PhysicsRayQueryParameters3D.create(actor.eye_position(), other.aim_position(), 3, [actor.get_rid()])
+	var query := PhysicsRayQueryParameters3D.create(actor.eye_position(), other.aim_position(), 7, [actor.get_rid()])
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	return not hit.is_empty() and hit.collider == other
 
@@ -1186,11 +1186,11 @@ func shot_rewind_age(actor) -> float:
 func trace_shot(actor, origin: Vector3, direction: Vector3, rewind: float) -> Dictionary:
 	rewind = clampf(rewind, 0, HitHistory.MAX_REWIND) if is_finite(rewind) else 0
 	if rewind <= 0 or hit_history.poses_at(elapsed - rewind).is_empty():
-		var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 3, [actor.get_rid()])
+		var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 7, [actor.get_rid()])
 		return get_world_3d().direct_space_state.intersect_ray(query)
-	# Static world cover is never rewound. Historical capsules are queried
+	# Terrain and present-time vehicle cover are never rewound. Historical capsules are queried
 	# analytically, so no live physics body is moved or exposed to other systems.
-	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 1)
+	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 5)
 	var wall := get_world_3d().direct_space_state.intersect_ray(query)
 	var limit: float = 180 if wall.is_empty() else origin.distance_to(wall.position)
 	var hit: Dictionary = hit_history.trace(elapsed - rewind, origin, direction, limit, actor.actor_id, actors)
@@ -1219,7 +1219,7 @@ func shoot(actor) -> void:
 		var direction := Basis(Vector3.UP, actor.yaw) * Basis(Vector3.RIGHT, clampf(actor.pitch + actor.recoil, -1.5, 1.5)) * Vector3(rng.randf_range(-spread, spread), rng.randf_range(-spread, spread), -1).normalized()
 		var hit := trace_shot(actor, origin, direction, rewind)
 		last_end = origin + direction * 100 if hit.is_empty() else hit.position
-		if not hit.is_empty() and hit.collider is CharacterBody3D:
+		if not hit.is_empty() and hit.collider is Actor:
 			var target = hit.collider
 			var headshot: bool = hit.get("headshot", target.is_headshot(hit.position))
 			var amount: float = actor.DAMAGE[actor.weapon] * (1.65 if headshot else 1.0)
@@ -1350,7 +1350,7 @@ func drop_inventory(actor) -> void:
 func supply_accessible(actor, item: Dictionary) -> bool:
 	if actor.position.distance_to(item.p) >= SupplyRules.RANGE:
 		return false
-	var query := PhysicsRayQueryParameters3D.create(actor.eye_position(), item.p + Vector3.UP * 0.35, 1)
+	var query := PhysicsRayQueryParameters3D.create(actor.eye_position(), item.p + Vector3.UP * 0.35, 5)
 	query.hit_from_inside = true
 	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
@@ -2121,7 +2121,7 @@ func throw_grenade(actor, kind := 0) -> bool:
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = shape
 	query.transform = Transform3D(Basis.IDENTITY, origin)
-	query.collision_mask = 1
+	query.collision_mask = 5
 	if not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty():
 		return false
 	query.motion = destination - origin
@@ -2156,7 +2156,7 @@ func advance_grenades(dt: float) -> void:
 func explosion_exposure(origin: Vector3, actor) -> float:
 	var visible := 0.0
 	for point in [actor.position + Vector3.UP * 0.25, actor.aim_position(), actor.eye_position()]:
-		var ray := PhysicsRayQueryParameters3D.create(origin, point, 1)
+		var ray := PhysicsRayQueryParameters3D.create(origin, point, 5)
 		if get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
 			visible += 1
 	return visible / 3.0

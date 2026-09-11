@@ -20,6 +20,8 @@ def run():
             joined = client.post("/parties/accept", headers=headers[1],
                                  json={"invitation": created.json()["invitation"]})
             joined.raise_for_status()
+            for header in headers:
+                client.post("/parties/ready", headers=header, json={"ready": True}).raise_for_status()
             payload = dict(build, room_id="room-27031")
             assert client.post("/parties/reserve", headers=headers[1], json=payload).status_code == 403
             reserved = client.post("/parties/reserve", headers=headers[0], json=payload)

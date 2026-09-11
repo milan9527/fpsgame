@@ -32,6 +32,8 @@ func run() -> void:
 		assert(file != null)
 		file.store_string(lobby.invitation.text)
 		file.close()
+		await wait_until(func(): return not lobby.busy and lobby.party.get("members", []).size() == 2)
+		lobby.ready_button.pressed.emit()
 		await wait_until(func(): return not lobby.start_button.disabled)
 		assert(lobby.party.members.size() == 2)
 		lobby.start_button.pressed.emit()
@@ -42,6 +44,7 @@ func run() -> void:
 		await wait_until(func(): return not lobby.visible or (not lobby.busy and not lobby.party.is_empty()))
 		if lobby.visible:
 			assert(lobby.start_button.disabled and lobby.invitation.text.is_empty())
+			lobby.ready_button.pressed.emit()
 	await wait_until(func(): return game.running and game.phase == "live")
 	assert(not lobby.visible and game.match_mode == "duo")
 	assert(game.actors.has(game.local_id))

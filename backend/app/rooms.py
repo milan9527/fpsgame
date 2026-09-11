@@ -127,6 +127,9 @@ if ARGV[13] and ARGV[13]~='' then
     if party.id~=ARGV[11] then return {'party_changed'} end
     if party.reservation then return {'existing',cjson.encode(party.reservation)} end
     if current~=ARGV[14] then return {'party_changed'} end
+    for _, member in ipairs(party.members) do
+        if member.ready~=true then return {'party_changed'} end
+    end
     party_ttl=redis.call('PTTL',ARGV[13])
     if party_ttl<45000 then return {'party_changed'} end
 end

@@ -19,6 +19,7 @@ var start_button: Button
 var back_button: Button
 var copy_button: Button
 var return_button: Button
+var ready_button: Button
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -41,7 +42,7 @@ func _ready() -> void:
 	box.add_theme_constant_override("separation", 14)
 	margin.add_child(box)
 	add_label(box, "DUO / TEAM LOBBY", 28)
-	add_label(box, "Invite a teammate. The leader starts when both have joined.", 16)
+	add_label(box, "Invite a teammate. Both members must be ready to start.", 16)
 	members = add_label(box, "", 20)
 	invitation = LineEdit.new()
 	invitation.editable = false
@@ -54,6 +55,7 @@ func _ready() -> void:
 	code.max_length = 64
 	box.add_child(code)
 	accept_button = add_button(box, "ACCEPT INVITATION", func(): accept_invitation())
+	ready_button = add_button(box, "READY", func(): request("/parties/ready", {"ready": not own_ready()}))
 	start_button = add_button(box, "START DUO OPERATION", func(): request("/parties/reserve", game.build_info.duplicate()))
 	status = add_label(box, "", 16)
 	status.custom_minimum_size = Vector2(550, 54)
@@ -168,8 +170,18 @@ func request(path: String, body := {}, method := HTTPClient.METHOD_POST) -> void
 		status.text = "Waiting for your teammate. Invitations expire after 15 minutes."
 	else:
 		code.text = ""
-		status.text = "Both members joined. The leader can start." if party.leader == identity else "Waiting for the leader to start…"
+		status.text = "Both members ready. The leader can start." if all_ready() else "Mark yourself ready when you are ready to deploy."
 	render()
+
+func own_ready() -> bool:
+	for member in party.get("members", []):
+		if member.uid == identity:
+			return member.get("ready", false)
+	return false
+
+func all_ready() -> bool:
+	var roster: Array = party.get("members", [])
+	return roster.size() == 2 and roster.all(func(member): return member.get("ready", false))
 
 func render() -> void:
 	var forming: bool = party.get("status", "") == "forming"
@@ -177,7 +189,10 @@ func render() -> void:
 	create_button.disabled = busy or not known or has_party
 	accept_button.disabled = create_button.disabled
 	code.editable = not accept_button.disabled
-	start_button.disabled = busy or not forming or party.get("leader", "") != identity or party.get("members", []).size() != 2
+	start_button.disabled = busy or not forming or party.get("leader", "") != identity or not all_ready()
+	ready_button.visible = has_party
+	ready_button.disabled = busy or not forming or party.get("members", []).size() != 2
+	ready_button.text = "CANCEL READY" if own_ready() else "READY"
 	back_button.disabled = busy
 	return_button.disabled = busy
 	create_button.visible = not has_party
@@ -194,5 +209,5 @@ func render() -> void:
 	if has_party:
 		var names := PackedStringArray()
 		for member in party.members:
-			names.append(str(member.username) + (" / LEADER" if member.uid == party.leader else ""))
+			names.append(str(member.username) + (" / LEADER" if member.uid == party.leader else "") + (" / READY" if member.get("ready", false) else " / NOT READY"))
 		members.text = "\n".join(names)

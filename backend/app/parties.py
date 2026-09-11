@@ -4,7 +4,7 @@ import json
 import secrets
 import uuid
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 from .protocol import BuildInfo
 
 
@@ -13,6 +13,9 @@ class AcceptInvitation(BaseModel):
 
 class ReserveParty(BuildInfo):
     room_id: str = Field(default='', max_length=64, pattern=r'^[a-zA-Z0-9_-]*$')
+
+class PartyReady(BaseModel):
+    ready: StrictBool
 
 
 SCRIPT = """
@@ -67,6 +70,15 @@ if op == 'leave' then
   if p then disband(p) end
   return '{}'
 end
+if op == 'ready' then
+  if not p then return 'no_party' end
+  if p.reservation then return 'already_reserved' end
+  for _, m in ipairs(p.members) do
+    if m.uid == uid then m.ready = ARGV[4] == 'true' end
+  end
+  redis.call('SET', prefix .. 'party:' .. p.id, cjson.encode(p), 'KEEPTTL')
+  return cjson.encode(p)
+end
 if p then return 'already_in_party' end
 if op == 'create' then
   p = cjson.decode(ARGV[4])
@@ -83,6 +95,7 @@ if op == 'accept' then
   local ttl = redis.call('PTTL', prefix .. 'party:' .. id)
   if ttl <= 0 then return 'invalid_invitation' end
   table.insert(p.members, cjson.decode(ARGV[5]))
+  for _, m in ipairs(p.members) do m.ready = false end
   redis.call('SET', prefix .. 'party:' .. id, cjson.encode(p), 'PX', ttl)
   redis.call('SET', index, id, 'PX', ttl)
   redis.call('DEL', prefix .. 'invite:' .. p.invite_hash)
@@ -105,6 +118,10 @@ class PartyDirectory:
             raise HTTPException(409, 'Leave your current party first')
         if raw == 'invalid_invitation':
             raise HTTPException(404, 'Invitation expired or unavailable')
+        if raw == 'no_party':
+            raise HTTPException(404, 'No current party')
+        if raw == 'already_reserved':
+            raise HTTPException(409, 'Party already reserved; leave to cancel')
         if not raw.startswith('{'):
             raise RuntimeError('Invalid party operation response')
         party = json.loads(raw)
@@ -126,13 +143,14 @@ class PartyDirectory:
             party['expires_in_ms'] = max(0, self.cache.pttl(self.prefix + 'party:' + party['id']))
             for member in party['members']:
                 member.pop('version', None)
+                member.setdefault('ready', False)
         return party
 
     def create(self, uid, username, version=0):
         invitation = secrets.token_urlsafe(32)
         party = {'id': str(uuid.uuid4()), 'mode': 'duo', 'leader': uid,
                  'invitation': invitation, 'invite_hash': hashlib.sha256(invitation.encode()).hexdigest(),
-                 'members': [{'uid': uid, 'username': username, 'version': version}]}
+                 'members': [{'uid': uid, 'username': username, 'version': version, 'ready': False}]}
         return self.execute('create', uid, json.dumps(party), self.ttl_ms)
 
     def accept(self, uid, username, invitation, version=0):
@@ -149,6 +167,9 @@ class PartyDirectory:
 
     def get(self, uid):
         return self.execute('get', uid)
+
+    def ready(self, uid, ready):
+        return self.execute('ready', uid, 'true' if ready else 'false')
 
     def snapshot(self, uid):
         identity = self.cache.get(self.prefix + 'user:' + uid)

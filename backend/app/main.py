@@ -24,7 +24,7 @@ from .models import User, Match, Result
 from .database import engine
 from .protocol import BUILD, BuildInfo, require_compatible
 from .rooms import CancelRoomTicket, RoomDirectory, RoomHeartbeat, RoomJoin, RoomTicket
-from .parties import AcceptInvitation, PartyDirectory, ReserveParty
+from .parties import AcceptInvitation, PartyDirectory, ReserveParty, PartyReady
 from .rooms import PartyMember
 
 JWT_SECRET = os.environ['JWT_SECRET']
@@ -215,6 +215,8 @@ def reserve_party(body: ReserveParty, uid: str = Depends(user_token), session: S
         raise HTTPException(403, 'Only the party leader can start matchmaking')
     if len(party['members']) != 2:
         raise HTTPException(409, 'Waiting for the invited teammate')
+    if not all(member.get('ready', False) for member in party['members']):
+        raise HTTPException(409, 'Both members must be ready')
     members = []
     for member in sorted(party['members'], key=lambda entry: entry['uid']):
         user = session.scalar(select(User).where(User.id == member['uid']).with_for_update(read=True))
@@ -225,6 +227,12 @@ def reserve_party(body: ReserveParty, uid: str = Depends(user_token), session: S
         members.append(PartyMember(uid=user.id, username=user.username, session_version=user.session_version))
     rooms.allocate_party(party['id'], members, body.room_id, key, raw)
     return JSONResponse(parties.get(uid), headers={'Cache-Control': 'no-store'})
+
+
+@app.post('/parties/ready')
+def party_ready(body: PartyReady, uid: str = Depends(user_token)):
+    limit('party:' + uid, 20, 60)
+    return JSONResponse(parties.ready(uid, body.ready), headers={'Cache-Control': 'no-store'})
 
 
 @app.post('/internal/build/check', dependencies=[Depends(server_auth)])

@@ -31,6 +31,9 @@ def reserve_parties():
         party.raise_for_status()
         httpx.post(base + "/parties/accept", headers=auth[member],
                    json={"invitation": party.json()["invitation"]}).raise_for_status()
+        for index in [leader, member]:
+            httpx.post(base + "/parties/ready", headers=auth[index],
+                       json={"ready": True}).raise_for_status()
         for _ in range(20):
             result = httpx.post(base + "/parties/reserve", headers=auth[leader],
                                 json=dict(build, room_id="room-27032"))

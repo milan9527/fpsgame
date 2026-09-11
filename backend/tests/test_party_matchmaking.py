@@ -13,6 +13,8 @@ def form(client, users, directory, monkeypatch):
     a, b = login(client, users[0]), login(client, users[1])
     invitation = client.post('/parties', headers=a).json()['invitation']
     assert client.post('/parties/accept', headers=b, json={'invitation': invitation}).status_code == 200
+    for auth in [a, b]:
+        assert client.post('/parties/ready', headers=auth, json={'ready': True}).status_code == 200
     return a, b
 
 
@@ -132,3 +134,60 @@ def test_expiring_party_cannot_leave_reservation_past_party_lifetime(context, di
     assert client.post('/parties/reserve', headers=a, json=main.BUILD).status_code == 409
     assert main.cache.zcard(main.rooms.prefix + 'held:a') == 0
     assert client.get('/parties/current', headers=a).json()['status'] == 'forming'
+
+
+def test_readiness_required_and_locked_after_reservation(context, directory, monkeypatch):
+    client, users, _ = context
+    a, b = form(client, users, directory, monkeypatch)
+    main.rooms.heartbeat(heartbeat(capacity=2, mode='duo'))
+    response = client.post('/parties/ready', headers=b, json={'ready': False})
+    assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
+    assert client.post('/parties/reserve', headers=a, json=main.BUILD).status_code == 409
+    assert main.cache.zcard(main.rooms.prefix + 'held:a') == 0
+    assert client.post('/parties/ready', headers=b, json={'ready': 'true'}).status_code == 422
+    client.post('/parties/ready', headers=b, json={'ready': True}).raise_for_status()
+    assert client.post('/parties/reserve', headers=a, json=main.BUILD).status_code == 200
+    assert client.post('/parties/ready', headers=b, json={'ready': False}).status_code == 409
+
+
+def test_readiness_change_invalidates_snapshot(context, directory, monkeypatch):
+    client, users, _ = context
+    a, b = form(client, users, directory, monkeypatch)
+    main.rooms.heartbeat(heartbeat(capacity=2, mode='duo'))
+    key, raw, party = directory.snapshot(users[0]['id'])
+    ttl = main.cache.pttl(key)
+    client.post('/parties/ready', headers=b, json={'ready': False}).raise_for_status()
+    assert 0 < main.cache.pttl(key) <= ttl
+    pair = [PartyMember(uid=user['id'], username=user['username']) for user in users]
+    rejected(409, lambda: main.rooms.allocate_party(party['id'], pair, '', key, raw))
+    assert main.cache.zcard(main.rooms.prefix + 'held:a') == 0
+
+
+def test_invitation_join_resets_leader_readiness(context, directory, monkeypatch):
+    client, users, _ = context
+    monkeypatch.setattr(main, 'parties', directory)
+    a, b = login(client, users[0]), login(client, users[1])
+    assert client.post('/parties/ready', headers=a, json={'ready': True}).status_code == 404
+    invitation = client.post('/parties', headers=a).json()['invitation']
+    client.post('/parties/ready', headers=a, json={'ready': True}).raise_for_status()
+    joined = client.post('/parties/accept', headers=b, json={'invitation': invitation})
+    assert joined.status_code == 200
+    assert all(member['ready'] is False for member in joined.json()['members'])
+
+
+def test_cancel_ready_races_start_atomically(context, directory, monkeypatch):
+    client, users, _ = context
+    a, b = form(client, users, directory, monkeypatch)
+    main.rooms.heartbeat(heartbeat(capacity=2, mode='duo'))
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        start = executor.submit(client.post, '/parties/reserve', headers=a, json=main.BUILD)
+        unready = executor.submit(client.post, '/parties/ready', headers=b, json={'ready': False})
+        statuses = (start.result().status_code, unready.result().status_code)
+    assert statuses in [(200, 409), (409, 200)]
+    party = client.get('/parties/current', headers=a).json()
+    if statuses[0] == 200:
+        assert party['status'] == 'reserved' and all(member['ready'] for member in party['members'])
+        assert main.cache.zcard(main.rooms.prefix + 'held:a') == 2
+    else:
+        assert party['status'] == 'forming' and not all(member['ready'] for member in party['members'])
+        assert main.cache.zcard(main.rooms.prefix + 'held:a') == 0

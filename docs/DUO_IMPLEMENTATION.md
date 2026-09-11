@@ -106,7 +106,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 `backend/tests/test_parties.py` 验证单次邀请、16 个并发接受请求仅一个成功、成员唯一性、过期、解散、会话版本清理、HTTP 认证和验证错误隐私。连同房间/会话/故障/战绩回归共 46 项通过，证据 `artifacts/party-backend-tests.log`。已部署到独立开发 API 8001，两个隔离测试账号的真实 HTTP 创建/接受/查询/解散通过，证据 `artifacts/party-live-http.log`。
 
-邀请通过下述专用预约入口接入整队容量；普通逐人匹配目前仍不读取队伍。客户端邀请/开始界面和真实邀请队伍交错入场均已有独立验收（见后文）；当前接受邀请后允许队长开始，没有单独的准备状态。
+邀请通过下述专用预约入口接入整队容量；普通逐人匹配目前仍不读取队伍。客户端邀请/开始界面和真实邀请队伍交错入场均已有独立验收（见后文）；两名成员均明确准备后才允许队长开始，详见准备状态验收。
 
 ## 整队预约内部能力与专服配队
 
@@ -142,10 +142,20 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 ## 玩家邀请大厅（开发源码）
 
-启动 `tools/godot --path client`，在线账号区域选择 `DUO`，API 地址填写 `http://127.0.0.1:8001`，登录或创建账号后进入队伍大厅。队长点击 `CREATE TEAM` 并复制邀请码，另一名玩家粘贴后点击 `ACCEPT INVITATION`；队长看到两名成员后点击 `START DUO OPERATION`。大厅每两秒查询成员及自己的票据，两人通过同一房间的独立票据入场。登录成功后清除密码输入。
+启动 `tools/godot --path client`，在线账号区域选择 `DUO`，API 地址填写 `http://127.0.0.1:8001`，登录或创建账号后进入队伍大厅。队长点击 `CREATE TEAM` 并复制邀请码，另一名玩家粘贴后点击 `ACCEPT INVITATION`；两名成员分别点击 `READY`，队长看到双方准备后点击 `START DUO OPERATION`。大厅每两秒查询成员及自己的票据，两人通过同一房间的独立票据入场。登录成功后清除密码输入。
 
-`LEAVE TEAM & RETURN` 调用后端解散并释放待使用预约，成功后返回菜单；`RETURN / KEEP TEAM` 仅关闭大厅，允许保留队伍。重新选择 DUO 登录会加载已有队伍。面板打开时隐藏主菜单以隔离键盘焦点；请求期间避免重复操作，失败后恢复按钮并显示服务错误，轮询失败退避至五秒。401 清理登录并返回菜单。队伍寿命不续期；已消费或过期预约目前需要解散后重新组队，没有准备开关、自动再排队或完整赛后保队流程。
+`LEAVE TEAM & RETURN` 调用后端解散并释放待使用预约，成功后返回菜单；`RETURN / KEEP TEAM` 仅关闭大厅，允许保留队伍。重新选择 DUO 登录会加载已有队伍。面板打开时隐藏主菜单以隔离键盘焦点；请求期间避免重复操作，失败后恢复按钮并显示服务错误，轮询失败退避至五秒。401 清理登录并返回菜单。队伍寿命不续期；已消费或过期预约目前需要解散后重新组队，准备开关现已实现；自动再排队或完整赛后保队流程仍未完成。
 
 `tests/party_lobby_rules.gd` 验证角色权限、邀请码、预约失败重试、按人入场、解散/保留返回、迟到响应与登录失效。实际渲染截图为 `artifacts/party-lobby-menu.png` 和 `artifacts/party-lobby.png`，使用合成姓名与邀请码。`artifacts/party-lobby-render.log` 为渲染和规则记录，连接取消回归见 `artifacts/party-lobby-cancel-regression.log`。
 
 `.venv/bin/python tools/test_party_lobby_network.py` 启动两个真实 Godot 客户端，操作正式登录入口与邀请面板控件，连接独立开发 API/UDP 27031，验证队长创建、成员接受、成员轮询、队长开始、ENet 入场及快照中同伴姓名/队伍编号。主日志 `artifacts/party-lobby-network.log`，客户端日志 `artifacts/party-lobby-network-0.log` 和 `-1.log`；邀请码仅通过权限 0700 的临时测试目录交换，结束后删除。此测试验证入场，完整战斗和落库由既有四客户端场景覆盖；发布包仍为 0.34。
+
+## 准备状态与并发开始
+
+`POST /parties/ready` 接收严格布尔值 `ready`，仅更改当前已认证成员自己的状态。创建队伍默认未准备，新成员加入会将双方重置为未准备。切换准备使用 Redis 原子更新并保留原过期时间。两人均准备后，队长才能预约；后端和 Redis 预约操作都核验准备状态及完整队伍快照，界面不能绕过限制。预约一旦成功，准备状态锁定，取消需要离队释放预约。
+
+大厅显示每人的 READY / NOT READY，提供 READY / CANCEL READY。开始按钮仅在当前账号为队长且两人准备时启用；取消准备后立即禁用，后端仍会处理其他成员尚未刷新时的并发请求。保留队伍返回菜单不会更改准备状态，需要撤回准备时先点击 CANCEL READY。
+
+`artifacts/party-ready-backend.log` 记录 64 项后端回归；随后包含新增“取消准备与开始同时提交”用例的 13 项预约测试通过，见 `artifacts/party-ready-race.log`。竞争只允许开始成功/取消失败，或取消成功/开始失败，不会在未准备状态分配名额。还验证布尔值校验、准备重置、保留 TTL、旧快照失效及预约后修改被拒绝。
+
+开发 API 8001 已更新。实际双客户端通过面板分别准备再入场，证据 `artifacts/party-ready-network.log` 及 `artifacts/party-lobby-network-0.log` / `-1.log`。原生规则验证准备/取消按钮和开始权限，渲染记录 `artifacts/party-ready-render.log`，更新截图 `artifacts/party-lobby.png`。现有发布包不变，赛后保队再排队仍待开发。

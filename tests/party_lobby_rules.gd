@@ -47,8 +47,22 @@ func run() -> void:
 	party.erase("invitation")
 	game.reply.body = party
 	lobby.request("/parties/current", {}, HTTPClient.METHOD_GET)
+	assert(lobby.start_button.disabled and not lobby.ready_button.disabled)
+	for member in party.members:
+		member.ready = true
+	game.reply.body = party
+	lobby.ready_button.pressed.emit()
+	assert(game.calls[-1][0] == "/parties/ready" and game.calls[-1][1].ready)
 	assert(not lobby.start_button.disabled and lobby.copy_button.disabled)
 	assert("BRAVO" in lobby.members.text)
+	party.members[0].ready = false
+	game.reply.body = party
+	lobby.ready_button.pressed.emit()
+	assert(game.calls[-1][1].ready == false and lobby.start_button.disabled)
+	party.members[0].ready = true
+	game.reply.body = party
+	lobby.ready_button.pressed.emit()
+	assert(game.calls[-1][1].ready == true and not lobby.start_button.disabled)
 	if "--capture-party-ui" in OS.get_cmdline_user_args():
 		await process_frame
 		await process_frame

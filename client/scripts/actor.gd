@@ -316,7 +316,7 @@ func move_step(dt: float) -> void:
 
 func predict_movement(cmd: Dictionary, dt: float, active: bool) -> void:
 	reconcile_movement()
-	if not active or not alive:
+	if not active or not alive or is_seated():
 		prediction_history.clear()
 		prediction_jump_held = false
 		return
@@ -331,6 +331,8 @@ func predict_movement(cmd: Dictionary, dt: float, active: bool) -> void:
 	predict_step(movement, dt)
 
 func predict_step(cmd: Dictionary, dt: float) -> void:
+	if is_seated():
+		return
 	move_input = Vector2(cmd.x, cmd.z).limit_length()
 	yaw = cmd.yaw
 	lean_input = cmd.get("lean", 0.0)
@@ -342,6 +344,11 @@ func predict_step(cmd: Dictionary, dt: float) -> void:
 	move_step(dt)
 
 func reconcile_movement() -> void:
+	if is_seated():
+		pending_correction.clear()
+		prediction_history.clear()
+		camera_error = Vector3.ZERO
+		return
 	if pending_correction.is_empty():
 		return
 	var state := pending_correction
@@ -487,7 +494,7 @@ func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> vo
 	gun.visible = local_view and alive and not downed and not is_seated()
 	character_animation.update(self, dt)
 	update_weapon_attachment()
-	if network_client and not local:
+	if network_client and not local and not is_seated():
 		position = position.lerp(target_position, minf(1, dt * 20))
 	rotation.y = yaw
 	head.rotation.x = pitch

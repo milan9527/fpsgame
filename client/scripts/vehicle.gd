@@ -16,6 +16,7 @@ var health := MAX_HEALTH
 var fuel := MAX_FUEL
 var destroyed := false
 var vehicle_id := 0
+var authoritative := true
 var collision_time := 0.0
 var collision_cooldowns: Dictionary = {}
 const BODY_SIZE := Vector3(2.25, 1.8, 3.6) # Includes tire sweep at full steering lock.
@@ -78,7 +79,7 @@ func set_driver(peer: int) -> void:
 	reset_controls()
 
 func command(peer: int, sequence: int, forward: float, turn: float, brake: bool, seat_epoch := -1) -> bool:
-	if destroyed:
+	if not authoritative or destroyed:
 		return false
 	if seats != null and seats.slots[0] != null:
 		var driver = seats.occupant(0)
@@ -96,7 +97,7 @@ func command(peer: int, sequence: int, forward: float, turn: float, brake: bool,
 	return true
 
 func take_damage(amount: float, attacker_id := 0) -> float:
-	if destroyed or not is_finite(amount) or amount <= 0:
+	if not authoritative or destroyed or not is_finite(amount) or amount <= 0:
 		return 0.0
 	var applied := minf(health, amount)
 	health -= applied
@@ -147,7 +148,7 @@ func horizontal_extent(heading: float) -> Vector2:
 		absf(sin(heading)) * BODY_SIZE.x / 2 + absf(cos(heading)) * BODY_SIZE.z / 2)
 
 func simulate(dt: float, engine_enabled := true) -> void:
-	if not is_finite(dt) or dt <= 0 or dt > 0.05:
+	if not authoritative or not is_finite(dt) or dt <= 0 or dt > 0.05:
 		return
 	seats.refresh()
 	collision_time += dt

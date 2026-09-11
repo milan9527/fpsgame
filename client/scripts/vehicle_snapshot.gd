@@ -195,4 +195,4 @@ func receive(bytes: PackedByteArray, now_msec: int) -> Dictionary:
 	for old in pending.keys():
 		if old <= sequence:
 			pending.erase(old)
-	return {"sequence": sequence, "states": states}
+	return {"round": expected_round, "sequence": sequence, "states": states}

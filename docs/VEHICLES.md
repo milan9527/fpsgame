@@ -30,7 +30,7 @@ xvfb-run -a tools/godot --audio-driver Dummy --path client --script ../tests/veh
 ## 载具发布前仍需完成
 
 1. 机器人乘车交互。
-2. 不规则地形、坡面接缝与观战跟车验证；规则坡面已验证。
+2. 不规则地形、坡面接缝及网络观战跟车验证；规则坡面和本地观战跟车已验证。
 3. 燃料补给；车体网格及乘员直接命中已接入并验证。
 4. 邀请队伍驾驶、重新入场及公网长时驾驶回归；驾驶鉴权、输入超时、快照与客户端显示已验证。
 5. 队伍观战、机器人交互、实际设备音效体验及完整单人/双人网络回归，再构建新发布包。
@@ -42,6 +42,12 @@ xvfb-run -a tools/godot --audio-driver Dummy --path client --script ../tests/veh
 `tests/vehicle_slopes.gd` 使用真实静态坡面、车辆扫掠和输入接口，检查 15°/30° 上坡加速、下坡倒车、输入超时制动、停车保持、转向、侧坡牵引，以及 40° 坡面不能靠油门攀爬、滑落后着地制动、驶离平台恢复重力。独立地面在下方接住车辆，避免把测试跑出有限坡面后的坠落误判为穿透。测试已加入候选包规则列表，正常实时步进预留 60 秒。
 
 证据：`artifacts/vehicle-slopes-slope-regression.log`、`artifacts/vehicle-slopes-realtime.log`；驾驶、移动、撞击、地图和座位回归为 `artifacts/vehicle-{driving,motion,impact,map,seats}-slope-regression.log`。该验证不涵盖悬挂、车身俯仰/翻滚、垂直撞击伤害、复杂坡面接缝或真人驾驶手感。
+
+## 载具观战
+
+观战存活的车内队友时，镜头支点使用车辆中心上方 1.4 m；弹簧臂排除当前跟随车辆，仍受地形和其他车辆遮挡。队友下车、无存活队友及重开时清除车辆碰撞排除，恢复步行支点或淘汰停留视角。原有仅观战队友的限制不变。
+
+`tests/vehicle_spectator.gd` 验证实际驾驶期间跟随、同车排除、其他车辆遮挡、下车后恢复遮挡、队伍淘汰和重开；已加入候选包规则列表。证据为 `artifacts/vehicle-spectator.log` 和 `artifacts/vehicle-spectator-rendered.log`，后者运行实际 OpenGL 渲染器。双人观战、载具驾驶相机及双人存档回归通过；真实网络车辆代理下的观战切换仍待专门验证。
 
 ## 座位与安全下车规则
 

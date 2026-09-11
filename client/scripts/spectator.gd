@@ -12,7 +12,7 @@ var camera: Camera3D
 
 func _ready() -> void:
 	arm = SpringArm3D.new()
-	arm.collision_mask = 1
+	arm.collision_mask = 1 | 4
 	arm.margin = 0.15
 	var shape := SphereShape3D.new()
 	shape.radius = 0.2
@@ -31,6 +31,7 @@ func reset() -> void:
 	target_name = ""
 	team_filter = 0
 	camera.current = false
+	arm.clear_excluded_objects()
 	distance = 4.5
 	orbit_pitch = -0.22
 
@@ -81,10 +82,15 @@ func update_view(actors: Dictionary, local_id: int, phase: String) -> void:
 	camera.current = true
 	if target_id not in candidates(actors):
 		cycle(actors, 1)
+	arm.clear_excluded_objects()
 	if target_id != 0:
 		var target = actors[target_id]
 		position = target.position + Vector3.UP * target.eye_height()
 		target_name = target.display_name
+		if target.is_seated():
+			var vehicle = target.vehicle_ref.get_ref()
+			position = vehicle.global_position + Vector3.UP * 1.4
+			arm.add_excluded_object(vehicle.get_rid())
 	else:
 		position = local.position + Vector3.UP * 1.6
 	arm.rotation = Vector3(orbit_pitch, orbit_yaw, 0)

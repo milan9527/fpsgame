@@ -196,3 +196,16 @@ E 键上下车使用可靠通道 4 和人物动作序号；命令包含明确车
 真实登录测试增加 `--departure revoke` 和 `--departure drop`。前者在行驶中调用后端 `/auth/logout-all`，验证旧令牌收到 401、服务端立即清空输入、驾驶客户端清除登录与整个游戏世界、驾驶位释放、乘客安全下车。后者实际 SIGKILL 驾驶客户端，验证丢失输入后自动制动（两秒内停稳，早于 ENet 断线检测），随后驾驶位清理和乘客下车。被杀客户端的 -9 退出码是该场景的预期结果，其日志仍检查脚本错误。
 
 `.venv/bin/python tools/test_vehicle_login.py --mode duo --departure revoke` 与 `--departure drop` 均通过；日志为 `artifacts/vehicle-login-duo-{revoke,drop}-{server,client-0,client-1}.log`。权限、座位和代理规则回归记录在 `artifacts/vehicle_{authority,seats,replica}-lifecycle.log`。这些场景覆盖本机网络的账号撤销与进程故障，不代替公网延迟/抖动、重新入场或邀请队伍驾驶验收。
+
+
+## 延迟、丢包与上行中断
+
+人物快照通道 3 改为不可靠但允许乱序接收；由应用层回合/序号与完整帧配对器防止回退。有序不可靠通道会在后发分片先到时丢弃先发分片，妨碍四个人物分片组成完整帧。车辆通道 6 保持不可靠，驾驶通道 7 保持有序不可靠，可靠上下车仍走通道 4。
+
+`.venv/bin/python tools/test_vehicle_login.py --mode duo --impaired` 为两个真实登录客户端分别建立 loopback UDP 转发器。每方向注入 50–100 ms 随机延迟、独立 3% 丢包概率，途中中断三秒上行。转发器不修改包内容，队列上限 2048，记录实际转发、随机丢弃、中断丢弃与乱序调度次数；房间票据仍指向真实专服，只有测试客户端的 UDP 连接走转发器。
+
+服务端确认输入过期后自动制动且双座不变，连接恢复后原驾驶员能继续加速；客户端确认停止和恢复均被观察到，随后正常制动、下车。三秒无确认输入也覆盖驾驶序列最多领先 64 条后的恢复。按最高车速 22 m/s、制动力 16 m/s² 和 350 ms 超时计算，最长停稳时间约 1.725 s，因此在输入年龄超过两秒时验证停稳。
+
+完整复验通过，两个客户端完整配对帧频率分别为 16.95/16.77 Hz，最大间隔 166/145 ms。转发器确实产生双向随机丢包、乱序及上行中断丢包，峰值队列 22/21。证据为 `artifacts/vehicle-login-duo-impaired-{server,client-0,client-1}.log` 和 `artifacts/vehicle-login-duo-impaired-network.json`。首次未完成流程和过严制动断言的日志保留为 `*-ordered-baseline.log`、`*-braking-bound.log`，不作为通过证据。
+
+帧配对、代理、步行预测与真实 ENet 传输回归也通过。本测试是受控网络干扰，尚未覆盖公网路由、长期拥塞或驾驶手感的人机验收；源码变更尚未进入正式发布包。

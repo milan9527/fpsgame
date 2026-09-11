@@ -1850,7 +1850,7 @@ func receive_voice(round_id: String, sender: int, sequence: int, packet: PackedB
 		return
 	voice_packet_received.emit(sender, sequence, packet)
 
-@rpc("authority", "call_remote", "unreliable_ordered", 3)
+@rpc("authority", "call_remote", "unreliable", 3)
 func snapshot(packet: PackedByteArray) -> void:
 	if dedicated or not online or packet.size() > 1150:
 		return

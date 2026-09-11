@@ -11,6 +11,9 @@ class DrivingServer:
 	var departure := OS.get_environment("VEHICLE_DEPARTURE")
 	var driver_peer := 0
 	var departure_at := 0.0
+	var impaired := OS.get_environment("VEHICLE_IMPAIRED") == "1"
+	var network_recovered := false
+	var diagnostic_second := -1
 	func reset_round() -> void:
 		super.reset_round()
 		phase_time = 8
@@ -47,12 +50,33 @@ class DrivingServer:
 		if test_car == null:
 			return
 		test_elapsed += dt
+		if impaired and int(test_elapsed) / 5 != diagnostic_second:
+			diagnostic_second = int(test_elapsed) / 5
+			print("VEHICLE_NETWORK_PROGRESS stage=%d phase=%s speed=%.2f position=%s" % [stage, phase, test_car.speed, str(test_car.position)])
 		assert(test_elapsed < 45, "Authenticated driving did not complete")
 		if stage == 0 and driver.is_seated() and passenger.is_seated():
 			assert(driver.vehicle_seat == 0 and passenger.vehicle_seat == 1)
 			stage = 1
 			events = ["VEHICLE_DRIVE"]
-		elif stage == 1 and test_car.position.z < -8:
+		elif stage == 1 and impaired and not network_recovered and test_car.position.z < -3:
+			stage = 7
+			events = ["VEHICLE_NETWORK_PAUSE"]
+			print("VEHICLE_NETWORK_BLACKOUT_READY")
+		elif stage == 7:
+			# At top speed the 350 ms expiry plus 22/16 s braking distance
+			# needs up to 1.725 s; do not demand an instantaneous stop.
+			if test_car.input_age > 2.0:
+				assert(absf(test_car.speed) < 0.01 and driver.is_seated() and passenger.is_seated())
+				assert(test_car.driver_id == driver_peer)
+				stage = 8
+				print("VEHICLE_NETWORK_TIMEOUT_BRAKED")
+		elif stage == 8:
+			if test_car.speed > 4:
+				network_recovered = true
+				stage = 1
+				events = ["VEHICLE_DRIVE"]
+				print("VEHICLE_NETWORK_RECOVERED")
+		elif stage == 1 and test_car.position.z < -8 and test_car.speed > 8:
 			assert(test_car.speed > 8 and test_car.fuel < 100)
 			assert(test_car.driver_id == driver.actor_id)
 			if departure.is_empty():

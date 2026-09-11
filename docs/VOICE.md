@@ -61,3 +61,23 @@
 HOLD TO TEST MICROPHONE 仅在按住期间启动采集，允许单机暂停菜单中检查设备。监测模式更新电平，不编码、不增长发送序号、不发送网络包，也不向本机扬声器回放。增益后峰值达到 0.99 提示削波，输入中非有限数值被清零；超过 100 ms 无新输入清除旧电平及削波状态。游戏内按键说话的 HUD 使用同一输入信号判断，最近一秒没有有效电平时提示检查输入。
 
 `artifacts/voice-input-meter.log` 覆盖合成输入增益、削波、非有限数值、监测模式零发送和断流清除旧电平；`artifacts/voice-device-ui.log` 覆盖设备列表、状态提示、窗口布局、离场关闭以及已有改键和单机禁发逻辑。`artifacts/microphone-setup.png` 为真实渲染截图。当前运行环境没有 `/dev/snd` 物理声卡，这些证据不包含真实硬件采集、操作系统权限或耳机听感验收。
+
+## PulseAudio 驱动采集验证
+
+`tools/test_voice_device.py` 启动独立 PulseAudio 进程，使用私有临时目录中的 Unix socket，创建相互隔离的合成输入和游戏输出两个 null sink。`paplay` 以 20 ms 请求缓冲播放生成的 440 Hz 信号；Godot 显式使用 PulseAudio 驱动，通过真实 AudioStreamMicrophone / AudioEffectCapture 读取输入。测试没有向 `feed()` 注入采样，也没有接入物理录音设备。测试退出或失败时清理音频进程和临时目录，不修改系统 PipeWire 服务。
+
+`tests/voice_device.gd` 验证默认未播放、监听模式检测到有效输入但不发送、切换发送时保留同一麦克风流、连续包序号、解码频率与 RMS、松开后停止、重新按下后恢复，以及实际主混音输出没有本机回声。低缓冲测试中，首次约 99 包、RMS 约 0.177、频率约 439.90 Hz；第二次按键约 50 包、RMS 约 0.172。日志 `artifacts/voice-device-test.log` 和 `artifacts/voice-device-driver.log`；合成采集规则回归见 `artifacts/voice-driver-capture-regression.log`。
+
+这次驱动测试促使采集组件在监听和发送之间切换时保留已运行的麦克风流，避免重复初始化和设备预热；停止时显式停止底层麦克风 playback，再停止播放器。初次测试源使用默认大缓冲时，重开虚拟输入出现约两秒静音；将合成源缓冲设为 20 ms 后启停验证通过。物理设备、驱动和权限仍可能有不同的启动延迟，需要另行验收。
+
+当前 Amazon Linux 2023 环境已安装 `pulseaudio-utils`、`soxr`、`speexdsp`。系统有 PipeWire，未替换其守护进程；仅下载 PulseAudio 15.0 RPM 并解包到忽略目录 `artifacts/voice-pulse-runtime`，用其中的可执行文件及模块启动测试。可复现准备命令（仓库根目录，RPM 版本随发行仓库变化时需相应调整）：
+
+```sh
+sudo dnf install -y pulseaudio-utils soxr speexdsp
+dnf download --destdir artifacts pulseaudio
+mkdir -p artifacts/voice-pulse-runtime
+rpm2cpio artifacts/pulseaudio-15.0-5.amzn2023.0.4.x86_64.rpm | (cd artifacts/voice-pulse-runtime && cpio -idm --quiet)
+.venv/bin/python tools/test_voice_device.py
+```
+
+测试工具当前使用 PulseAudio 15.0 的模块目录，可通过 `--pulse-root` 指定同结构解包目录。发布游戏不需要此测试守护进程或 Python 工具。本项证明虚拟设备上的驱动采集，不证明物理麦克风权限、声学回声、噪声环境或耳机听感已验收。

@@ -51,9 +51,18 @@ func set_activity(send: bool, monitor: bool) -> void:
 	capture.clear_buffer()
 	if transmitting or monitoring:
 		last_tick = Time.get_ticks_msec()
-		player.play()
+		# Keep the driver open across mode changes instead of interrupting capture
+		# and repeating device warm-up when switching between test and transmit.
+		if not player.playing:
+			player.play()
 	else:
-		player.stop()
+		stop_input()
+
+func stop_input() -> void:
+	# Release the microphone driver now instead of waiting for mixer cleanup.
+	if player.has_stream_playback():
+		player.get_stream_playback().stop()
+	player.stop()
 
 func reset_round() -> void:
 	set_transmitting(false)
@@ -115,7 +124,7 @@ func _process(_dt: float) -> void:
 
 func _exit_tree() -> void:
 	if player != null:
-		player.stop()
+		stop_input()
 	var index := AudioServer.get_bus_index(bus_name)
 	if index >= 0:
 		AudioServer.remove_bus(index)

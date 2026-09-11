@@ -51,7 +51,10 @@ func run() -> void:
 	crawl.render_frame(0.4, false, false, false)
 	assert(not before.is_equal_approx(crawl_skeleton.get_bone_global_pose(hand)))
 	await RenderingServer.frame_post_draw
-	assert(root.get_texture().get_image().save_png("res://../artifacts/downed-animation.png") == OK)
+	var capture_dir := OS.get_environment("CAPTURE_ARTIFACT_DIR")
+	if capture_dir.is_empty():
+		capture_dir = "res://../artifacts"
+	assert(root.get_texture().get_image().save_png(capture_dir.path_join("downed-animation.png")) == OK)
 	down.set_local()
 	down.render_frame(0.01, false, true, false)
 	assert(not down.gun.visible)

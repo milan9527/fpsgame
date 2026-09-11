@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import httpx
 from test_accounts import account
+from candidate_runtime import candidate_command
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = "http://127.0.0.1:8001"
@@ -14,7 +15,15 @@ BASE = "http://127.0.0.1:8001"
 def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--requeue", action="store_true")
+    parser.add_argument("--candidate-dir", type=Path)
     options = parser.parse_args()
+    runtime = [str(ROOT / "tools/godot"), "--headless", "--path", str(ROOT / "client")]
+    candidate = None
+    if options.candidate_dir:
+        runtime, candidate = candidate_command(options.candidate_dir)
+        response = httpx.get(BASE + "/protocol")
+        response.raise_for_status()
+        assert response.json() == candidate["manifest"], "Candidate and development API builds differ"
     identities = [account(f"duo-network-{i}", base=BASE) for i in range(2)]
     auth = [{"Authorization": "Bearer " + identity["token"]} for identity in identities]
     processes = []
@@ -25,6 +34,8 @@ def run():
             for cycle in range(2 if options.requeue else 1):
                 for index, identity in enumerate(identities):
                     log_path = ROOT / "artifacts" / (f"party-requeue-{cycle}-{index}.log" if options.requeue else f"party-lobby-network-{index}.log")
+                    if candidate:
+                        log_path = log_path.with_name("candidate-" + log_path.name)
                     output = log_path.open("w")
                     env = dict(os.environ, TEST_USERNAME=identity["username"],
                                TEST_PASSWORD=identity["password"], API_URL=BASE,
@@ -34,8 +45,7 @@ def run():
                                PARTY_TEST_ALLY=identities[1 - index]["username"],
                                PARTY_TEST_INVITATION_FILE=str(Path(private) / "invitation"))
                     process = subprocess.Popen(
-                        [str(ROOT / "tools/godot"), "--headless", "--path", "client",
-                         "--script", "../tests/party_lobby_network.gd"],
+                        runtime + ["--script", str(ROOT / "tests/party_lobby_network.gd")],
                         cwd=ROOT, env=env, stdout=output, stderr=subprocess.STDOUT)
                     processes.append((process, output, log_path))
                 for process, output, path in processes[-2:]:
@@ -51,6 +61,8 @@ def run():
                   "member_poll=ok leader_start=ok enet=ok paired_snapshot=ok")
             if options.requeue:
                 print("PARTY_REQUEUE_NETWORK_PASS cycles=2 same_party=ok fresh_round=ok ready_again=ok")
+            if candidate:
+                print("CANDIDATE_PARTY_LOBBY_PASS commit=" + candidate["commit"] + " archive_sha256=" + candidate["sha256"])
         finally:
             for process, output, _ in processes:
                 if process.poll() is None:

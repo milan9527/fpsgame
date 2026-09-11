@@ -9,6 +9,7 @@ import subprocess
 import time
 import argparse
 from test_accounts import account
+from candidate_runtime import candidate_command
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
@@ -18,10 +19,20 @@ parser.add_argument("--revoke-member", action="store_true", help="Revoke a reviv
 parser.add_argument("--drop-member", action="store_true", help="Kill a revived client process without graceful leave")
 parser.add_argument("--team-pings", action="store_true", help="Publish tactical-map markers and verify per-team delivery")
 parser.add_argument("--voice-relay", action="store_true", help="Transmit synthetic encoded audio and verify teammate-only reception")
+parser.add_argument("--candidate-dir", type=Path, help="Run server and all clients from a verified packaged candidate")
 options = parser.parse_args()
+runtime = [str(ROOT / "tools/godot"), "--headless", "--path", str(ROOT / "client")]
+candidate = None
+if options.candidate_dir:
+    runtime, candidate = candidate_command(options.candidate_dir)
+    response = httpx.get("http://127.0.0.1:8001/protocol")
+    response.raise_for_status()
+    assert response.json() == candidate["manifest"], "Candidate and development API builds differ"
 departure_case = options.revoke_member or options.drop_member
 if options.voice_relay and departure_case:
     parser.error("--voice-relay is tested separately from departure scenarios")
+if options.team_pings and departure_case:
+    parser.error("--team-pings is tested separately from departure scenarios")
 if options.return_to_party and not options.parties:
     parser.error("--return-to-party requires --parties")
 if departure_case and (not options.parties or options.return_to_party or (options.revoke_member and options.drop_member)):
@@ -86,12 +97,13 @@ for enabled, prefix in [(options.parties, "invited-party-network"),
                         (options.voice_relay, "voice-relay-network")]:
     if enabled:
         log_prefix = prefix
+if candidate:
+    log_prefix = "candidate-" + log_prefix
 server_path = ROOT / "artifacts" / f"{log_prefix}-server.log"
 processes = []
 with server_path.open("w") as log:
     server = subprocess.Popen(
-        [str(ROOT / "tools/godot"), "--headless", "--path", "client", "--script",
-         "../tests/rescue_network_server.gd", "--", "--server"],
+        runtime + ["--script", str(ROOT / "tests/rescue_network_server.gd"), "--", "--server"],
         cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
     try:
         for _ in range(250):
@@ -120,8 +132,7 @@ with server_path.open("w") as log:
             path = ROOT / "artifacts" / f"{log_prefix}-client-{i}.log"
             output = path.open("w")
             process = subprocess.Popen(
-                [str(ROOT / "tools/godot"), "--headless", "--path", "client", "--script",
-                 "../tests/rescue_network_client.gd", "--", "--bot-client"],
+                runtime + ["--script", str(ROOT / "tests/rescue_network_client.gd"), "--", "--bot-client"],
                 cwd=ROOT, env=variables, stdout=output, stderr=subprocess.STDOUT)
             processes.append((process, output, path))
             if options.parties:
@@ -224,6 +235,8 @@ with server_path.open("w") as log:
             print("VOICE_RELAY_NETWORK_PASS clients=4 synthetic_packets=ok decoded_samples=ok team_only=ok gameplay_results=ok")
         if options.revoke_member:
             print("REVOKED_PARTY_NETWORK_PASS logout_all=ok party_disband=ok peer_removed=ok surviving_ally_wins=ok departed_member_rank=1 results=4 stats=ok")
+        if candidate:
+            print("CANDIDATE_NETWORK_PASS commit=" + candidate["commit"] + " archive_sha256=" + candidate["sha256"] + " server=packed clients=4_packed")
     finally:
         for process, output, _ in processes:
             if process.poll() is None:

@@ -4,6 +4,9 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
+	var capture_dir := OS.get_environment("CAPTURE_ARTIFACT_DIR")
+	if capture_dir.is_empty():
+		capture_dir = "res://../artifacts"
 	var game = load("res://scripts/game.gd").new()
 	root.add_child(game)
 	game.local_profile = null
@@ -23,7 +26,7 @@ func run() -> void:
 	await process_frame
 	await process_frame
 	assert(game.ui.pause_panel.get_global_rect().end.y < 900, "Voice controls must fit the field menu")
-	get_root().get_texture().get_image().save_png("res://../artifacts/team-voice-settings.png")
+	assert(get_root().get_texture().get_image().save_png(capture_dir.path_join("team-voice-settings.png")) == OK)
 	game.ui.voice_setup.open()
 	await process_frame
 	assert(game.ui.voice_setup.devices.item_count >= 1)
@@ -36,7 +39,7 @@ func run() -> void:
 	game.ui.voice_setup.update_level(0, false, true, 0)
 	assert("No input detected" in game.ui.voice_setup.status.text)
 	await process_frame
-	get_root().get_texture().get_image().save_png("res://../artifacts/microphone-setup.png")
+	assert(get_root().get_texture().get_image().save_png(capture_dir.path_join("microphone-setup.png")) == OK)
 	game.ui.voice_setup.testing = true
 	game.ui.voice_setup.close()
 	assert(not game.ui.voice_setup.testing)

@@ -24,3 +24,25 @@
 解压后桌面运行 `./play.sh`。SOLO 与 DUO 离线入口不需要服务器；在线需要协议 16 的匹配服务。旧 0.34 服务使用协议 15，不兼容此候选包。候选包中附有新版玩家指南和功能文档。
 
 0.34 发布包 SHA-256 仍为 `a8fde10e73b4306a7adb509578862935588f460b8e92b5ba2fa6df72197bd1e6`，已核对未变化。完整商业级游戏目标尚未完成。
+
+## 包内联调与渲染验收
+
+测试工具的 `--candidate-dir` 指向上述候选目录。运行前，`candidate_runtime.py` 检查压缩包 SHA-256，并逐一比较已解包的执行文件、PCK、启动脚本与构建清单是否和压缩包一致。网络脚本还检查候选清单与开发 API 版本一致，防止将源码运行结果误记为候选包验证。
+
+```sh
+.venv/bin/python tools/test_rescue_network.py --parties --team-pings --voice-relay --return-to-party --candidate-dir artifacts/candidates/0.35.0-dev-9e73c12a-veg5o95w
+.venv/bin/python tools/test_party_lobby_network.py --requeue --candidate-dir artifacts/candidates/0.35.0-dev-9e73c12a-veg5o95w
+.venv/bin/python tools/test_candidate_render.py --candidate-dir artifacts/candidates/0.35.0-dev-9e73c12a-veg5o95w
+.venv/bin/python tools/test_voice_device.py --candidate-dir artifacts/candidates/0.35.0-dev-9e73c12a-veg5o95w
+```
+
+前两个脚本使用独立开发服务和复用测试账号，应顺序运行，避免同一账号的队伍与预约相互干扰。语音驱动脚本需要 [语音文档](VOICE.md) 中的隔离 PulseAudio 测试环境。
+
+本候选已通过：
+
+- 专服和四客户端均从候选 PCK 加载：两支邀请队伍交错入场，扶起/两次中断、共享标点、队友音频解码及实际混音、共享胜负、返回原队伍、PostgreSQL 四条战绩和分模式统计。`artifacts/candidate-network.log`，各客户端和服务日志以 `candidate-voice-relay-network-` 开头。
+- 两个候选客户端连接已部署开发服务，通过正式邀请控件连续两轮登录、重置预约、准备及入场；原队伍保留，新回合不同。`artifacts/candidate-party-requeue.log`。
+- 真实 OpenGL 渲染：原有九条角色动作和新增三条倒地动作、骨骼蒙皮边界、武器显示/隐藏、复活恢复及麦克风设置界面。`artifacts/candidate-render.log`；逐项日志和截图位于候选目录下 `render-verification/`。
+- 候选 PCK 的真实 PulseAudio 驱动采集：440 Hz 虚拟源、监听不发包、模式切换、按键松开后再次发送及本机零回声输出。`artifacts/candidate-voice-driver.log`。它仍不代表物理音频设备验收。
+
+验证报告的 `integration_verification` 记录这些证据；压缩包内容与校验和不变。发布服务版本切换尚未执行。

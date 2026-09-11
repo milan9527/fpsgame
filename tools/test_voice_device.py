@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 import wave
+from candidate_runtime import candidate_command
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -16,7 +17,14 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--pulse-root", type=Path, default=ROOT / "artifacts/voice-pulse-runtime")
+    parser.add_argument("--candidate-dir", type=Path)
     args = parser.parse_args()
+    runtime = [str(ROOT / "tools/godot"), "--path", str(ROOT / "client")]
+    candidate = None
+    if args.candidate_dir:
+        packed, candidate = candidate_command(args.candidate_dir)
+        runtime = packed[:-1]
+    log_prefix = "candidate-voice-device" if candidate else "voice-device"
     pulse_root = args.pulse_root.resolve()
     daemon = pulse_root / "usr/bin/pulseaudio"
     if not daemon.exists():
@@ -56,7 +64,7 @@ def main():
                 for i in range(48000)
             )
             output.writeframes(second * 30)
-        with (ROOT / "artifacts/voice-device-daemon.log").open("w") as daemon_log:
+        with (ROOT / "artifacts" / (log_prefix + "-daemon.log")).open("w") as daemon_log:
             try:
                 processes.append(subprocess.Popen([
                     str(daemon), "-n", "--daemonize=no", "--use-pid-file=no",
@@ -67,7 +75,7 @@ def main():
                 deadline = time.monotonic() + 5
                 while True:
                     if processes[0].poll() is not None:
-                        raise RuntimeError("Private audio server exited; inspect voice-device-daemon.log")
+                        raise RuntimeError(f"Private audio server exited; inspect {log_prefix}-daemon.log")
                     probe = subprocess.run(["pactl", "info"], env=env, capture_output=True, timeout=2)
                     if probe.returncode == 0:
                         break
@@ -77,11 +85,10 @@ def main():
                 processes.append(subprocess.Popen([
                     "paplay", "--latency-msec=20", "--device=fixture", str(work / "tone.wav")
                 ], env=env, stdout=subprocess.DEVNULL, stderr=daemon_log))
-                output_path = ROOT / "artifacts/voice-device-driver.log"
+                output_path = ROOT / "artifacts" / (log_prefix + "-driver.log")
                 with output_path.open("w") as output:
-                    result = subprocess.run([
-                        str(ROOT / "tools/godot"), "--display-driver", "headless",
-                        "--audio-driver", "PulseAudio", "--path", str(ROOT / "client"),
+                    result = subprocess.run(runtime + [
+                        "--display-driver", "headless", "--audio-driver", "PulseAudio",
                         "--script", str(ROOT / "tests/voice_device.gd"),
                     ], env=env, stdout=output, stderr=subprocess.STDOUT, timeout=20)
                 text = output_path.read_text()
@@ -99,6 +106,8 @@ def main():
                             process.kill()
                             process.wait(timeout=3)
     print("VOICE_VIRTUAL_DRIVER_PASS isolated_server=ok synthetic_source=ok processes_cleaned=ok")
+    if candidate:
+        print("CANDIDATE_VOICE_DRIVER_PASS commit=" + candidate["commit"] + " archive_sha256=" + candidate["sha256"])
 
 
 if __name__ == "__main__":

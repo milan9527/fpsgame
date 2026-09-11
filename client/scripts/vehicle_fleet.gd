@@ -10,6 +10,7 @@ func spawn(parent: Node3D, at: Vector3, heading := 0.0):
 	if not at.is_finite() or not is_finite(heading):
 		return null
 	var vehicle = Vehicle.new()
+	vehicle.vehicle_id = next_id
 	vehicle.name = "Vehicle_%d" % next_id
 	vehicle.position = at
 	vehicle.rotation.y = heading
@@ -35,8 +36,8 @@ func clear() -> void:
 
 func on_impact(other: Node, closing: float, driver: int, game, vehicle) -> void:
 	if other is Vehicle:
-		var a: int = vehicle.get_instance_id()
-		var b: int = other.get_instance_id()
+		var a: int = vehicle.vehicle_id
+		var b: int = other.vehicle_id
 		var pair := "%d:%d" % [mini(a, b), maxi(a, b)]
 		if pair_cooldowns.get(pair, -1.0) > simulation_time:
 			return

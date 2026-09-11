@@ -15,6 +15,7 @@ const MAX_FUEL := 100.0
 var health := MAX_HEALTH
 var fuel := MAX_FUEL
 var destroyed := false
+var vehicle_id := 0
 var collision_time := 0.0
 var collision_cooldowns: Dictionary = {}
 const BODY_SIZE := Vector3(2.25, 1.8, 3.6) # Includes tire sweep at full steering lock.
@@ -100,14 +101,27 @@ func take_damage(amount: float, attacker_id := 0) -> float:
 	if health <= 0:
 		destroyed = true
 		set_driver(0)
-		var material := StandardMaterial3D.new()
-		material.albedo_color = Color("292c2b")
-		material.roughness = 1.0
-		if visual != null:
-			for mesh in visual.find_children("*", "MeshInstance3D", true, false):
-				mesh.material_override = material
+		update_wreck_visual()
 		wrecked.emit(attacker_id)
 	return applied
+
+func update_wreck_visual() -> void:
+	if not destroyed or visual == null:
+		return
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("292c2b")
+	material.roughness = 1.0
+	for mesh in visual.find_children("*", "MeshInstance3D", true, false):
+		mesh.material_override = material
+
+func collision_key(other: Node) -> String:
+	if other.get_script() == get_script():
+		return "v:%d" % other.vehicle_id
+	if other is CharacterBody3D and (other.collision_layer & 2) != 0:
+		return "a:%d" % other.actor_id
+	if other is Node3D:
+		return "s:" + var_to_bytes(other.global_transform).hex_encode()
+	return "node:%d" % other.get_instance_id()
 
 func can_rotate(target_yaw: float) -> bool:
 	var query := PhysicsShapeQueryParameters3D.new()
@@ -173,7 +187,7 @@ func simulate(dt: float, engine_enabled := true) -> void:
 		if other is CharacterBody3D and (other.collision_layer & 2) != 0:
 			# Running into a parked car is not a vehicle run-over.
 			closing = maxf(0, -incoming.dot(collision.get_normal()))
-		var id := other.get_instance_id()
+		var id := collision_key(other)
 		if closing <= 4 or collision_cooldowns.has(id):
 			continue
 		collision_cooldowns[id] = collision_time + 1.0

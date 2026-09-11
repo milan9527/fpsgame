@@ -1,6 +1,7 @@
 extends RefCounted
 const Actor = preload("res://scripts/actor.gd")
 const Zones = preload("res://scripts/zone_rules.gd")
+const Vehicles = preload("res://scripts/vehicle_checkpoint.gd")
 const EXTRA := ["fire_left", "bot_think", "target_id", "bot_destination", "bot_patrol_left", "bot_memory_left", "bot_last_seen", "weapon_kick"]
 const MAX_BYTES := 2097152
 var path := "user://solo_checkpoint.dat"
@@ -18,8 +19,12 @@ func validate(data, content: String) -> bool:
 	for key in ["version", "content", "id", "elapsed", "zone_tick", "centers", "rng_seed", "rng_state", "actors", "loot", "grenades", "clouds", "events", "next_loot", "next_grenade", "waypoint"]:
 		if not data.has(key):
 			return false
-	var duo: bool = data.get("version") == 2 and data.get("mode") == "duo"
-	if (data.version != 1 and not duo) or data.content != content or not data.id is String:
+	var duo: bool = data.get("version") in [2, 3] and data.get("mode") == "duo"
+	if not data.version is int or (data.version < 3 and data.has("vehicles")):
+		return false
+	if data.version not in [1, 2, 3] or (data.version == 2 and not duo) or data.content != content or not data.id is String:
+		return false
+	if data.version == 3 and data.get("mode") not in ["solo", "duo"]:
 		return false
 	if data.version == 1 and data.get("mode", "solo") != "solo":
 		return false
@@ -129,6 +134,8 @@ func validate(data, content: String) -> bool:
 	for event in data.events:
 		if not event is String or event.length() > 1024:
 			return false
+	if data.version == 3 and not Vehicles.validate(data.get("vehicles"), data.actors):
+		return false
 	return data.waypoint == null or (data.waypoint is Vector2 and data.waypoint.is_finite() and absf(data.waypoint.x) <= 115 and absf(data.waypoint.y) <= 115)
 
 func validate_teams(states: Array) -> bool:

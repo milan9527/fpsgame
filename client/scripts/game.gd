@@ -2383,7 +2383,11 @@ func snapshot_solo() -> Dictionary:
 		state.linear = grenade.linear_velocity
 		state.angular = grenade.angular_velocity
 		projectiles.append(state)
-	return {"version": 2 if match_mode == "duo" else 1, "mode": match_mode, "content": build_info.content_revision, "id": match_id, "elapsed": elapsed, "zone_tick": zone_tick, "centers": zone_plan.centers.duplicate(), "rng_seed": rng.seed, "rng_state": rng.state, "actors": states, "loot": loot.duplicate(true), "grenades": projectiles, "clouds": smoke_clouds.duplicate(true), "events": events.duplicate(), "next_loot": next_loot_id, "next_grenade": next_grenade_id, "waypoint": ui.tactical_map.waypoint}
+	var snapshot := {"version": 2 if match_mode == "duo" else 1, "mode": match_mode, "content": build_info.content_revision, "id": match_id, "elapsed": elapsed, "zone_tick": zone_tick, "centers": zone_plan.centers.duplicate(), "rng_seed": rng.seed, "rng_state": rng.state, "actors": states, "loot": loot.duplicate(true), "grenades": projectiles, "clouds": smoke_clouds.duplicate(true), "events": events.duplicate(), "next_loot": next_loot_id, "next_grenade": next_grenade_id, "waypoint": ui.tactical_map.waypoint}
+	if not vehicle_fleet.vehicles.is_empty():
+		snapshot.version = 3
+		snapshot.vehicles = checkpoint.Vehicles.capture(self)
+	return snapshot
 
 func can_suspend_operation() -> bool:
 	if training != null or dedicated or online or not running or phase != "live" or not actors.has(local_id):
@@ -2419,7 +2423,7 @@ func resume_solo() -> bool:
 	get_tree().paused = false
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	online = false
-	match_mode = "duo" if state.version == 2 else "solo"
+	match_mode = state.get("mode", "solo")
 	clear_actors()
 	world.prepare_navigation()
 	local_id = 1
@@ -2447,6 +2451,8 @@ func resume_solo() -> bool:
 		teams.restore(actors)
 	else:
 		teams.configure(actors, "solo")
+	if state.version == 3:
+		checkpoint.Vehicles.restore(self, state.vehicles)
 	participants = {1: {"user_id": "", "kills": actors[1].kills, "rank": actors[1].rank, "team_id": actors[1].team_id}}
 	loot = state.loot
 	next_loot_id = state.next_loot

@@ -50,6 +50,12 @@ class CancelRoomTicket(BaseModel):
     ticket: str = Field(min_length=20, max_length=128)
 
 
+class PartyMember(BaseModel):
+    uid: uuid.UUID
+    username: str = Field(min_length=3, max_length=24, pattern=r'^[a-zA-Z0-9_]+$')
+    session_version: int = Field(default=0, strict=True, ge=0, le=9223372036854775806)
+
+
 HEARTBEAT = """
 local p=ARGV[1]; local room=cjson.decode(ARGV[2])
 local key=p..'room:'..room.room_id; local raw=redis.call('GET',key)
@@ -110,7 +116,11 @@ return 'ok'
 
 ALLOCATE = """
 local p=ARGV[1]; local uid=ARGV[2]
-if redis.call('EXISTS',p..'user:'..uid)==1 then return {'busy'} end
+local members={{uid=uid,username=ARGV[3],digest=ARGV[7],session_version=tonumber(ARGV[8])}}
+if ARGV[10] and ARGV[10]~='' then members=cjson.decode(ARGV[10]) end
+for _,member in ipairs(members) do
+    if redis.call('EXISTS',p..'user:'..member.uid)==1 then return {'busy'} end
+end
 local t=redis.call('TIME'); local now=tonumber(t[1])+tonumber(t[2])/1000000
 local ids=redis.call('SMEMBERS',p..'directory'); table.sort(ids)
 for _,id in ipairs(ids) do
@@ -121,13 +131,17 @@ for _,id in ipairs(ids) do
         if (room.phase=='waiting' or room.phase=='lobby') and tostring(room.protocol)==ARGV[4] and room.content_revision==ARGV[5] and (room.mode or 'solo')==ARGV[9] then
             local held=p..'held:'..id
             redis.call('ZREMRANGEBYSCORE',held,'-inf',now)
-            if #room.players+redis.call('ZCARD',held)<room.capacity then
+            if #room.players+redis.call('ZCARD',held)+#members<=room.capacity then
                 local owner=id..'/'..room.instance_id..'/'..room.generation
-                local ticket={uid=uid,username=ARGV[3],room_id=id,instance_id=room.instance_id,generation=room.generation,protocol=room.protocol,content_revision=room.content_revision,session_version=tonumber(ARGV[8]),mode=room.mode or 'solo'}
-                redis.call('SET',p..'ticket:'..ARGV[7],cjson.encode(ticket),'EX',45)
-                redis.call('SET',p..'user:'..uid,owner,'EX',45)
-                redis.call('SET',p..'user_version:'..uid,ARGV[8],'EX',45)
-                redis.call('ZADD',held,now+45,uid)
+                for _,member in ipairs(members) do
+                    local ticket={uid=member.uid,username=member.username,room_id=id,instance_id=room.instance_id,generation=room.generation,protocol=room.protocol,content_revision=room.content_revision,session_version=member.session_version,mode=room.mode or 'solo'}
+                    if #members>1 then ticket.party_id=ARGV[11]; ticket.group_id=ARGV[12] end
+                    redis.call('SET',p..'ticket:'..member.digest,cjson.encode(ticket),'EX',45)
+                    redis.call('SET',p..'user:'..member.uid,owner,'EX',45)
+                    redis.call('SET',p..'user_version:'..member.uid,tostring(member.session_version),'EX',45)
+                    redis.call('ZADD',held,now+45,member.uid)
+                end
+                if #members>1 then redis.call('SET',p..'group:'..ARGV[12],cjson.encode(members),'EX',45) end
                 redis.call('EXPIRE',held,60)
                 return {'ok',raw}
             end
@@ -162,6 +176,28 @@ local raw=redis.call('GET',key)
 if not raw then return 'inactive' end
 local ticket=cjson.decode(raw)
 if ticket.uid~=ARGV[3] then return 'owner' end
+if ticket.group_id then
+    local group=redis.call('GET',p..'group:'..ticket.group_id)
+    if group then
+        for _,member in ipairs(cjson.decode(group)) do
+            local member_key=p..'ticket:'..member.digest
+            local raw_member=redis.call('GET',member_key)
+            if raw_member then
+                local other=cjson.decode(raw_member)
+                if other.group_id==ticket.group_id then
+                    local expected=other.room_id..'/'..other.instance_id..'/'..other.generation
+                    if redis.call('GET',p..'user:'..other.uid)==expected and tonumber(redis.call('GET',p..'user_version:'..other.uid) or '0')==tonumber(other.session_version or 0) then
+                        redis.call('ZREM',p..'held:'..other.room_id,other.uid)
+                        redis.call('DEL',p..'user:'..other.uid,p..'user_version:'..other.uid)
+                    end
+                    redis.call('DEL',member_key)
+                end
+            end
+        end
+        redis.call('DEL',p..'group:'..ticket.group_id)
+    end
+    return 'cancelled'
+end
 local owner=ticket.room_id..'/'..ticket.instance_id..'/'..ticket.generation
 -- An old generation must never release a newer reservation for the same user.
 if redis.call('GET',p..'user:'..ticket.uid)==owner and tonumber(redis.call('GET',p..'user_version:'..ticket.uid) or '0')==tonumber(ticket.session_version or 0) then
@@ -209,6 +245,33 @@ class RoomDirectory:
                 redis.call('DEL',key,ARGV[1]..'user_version:'..ARGV[2])
             end
         """, 0, self.prefix, uid, str(version))
+
+    def allocate_party(self, party_id: str, members: list[PartyMember], requested_room=''):
+        """Internal primitive; caller must authorize and freeze the party first."""
+        party_id = str(uuid.UUID(party_id))
+        if len(members) != 2 or len({member.uid for member in members}) != 2:
+            raise ValueError('A duo reservation needs two distinct members')
+        group_id = str(uuid.uuid4())
+        tickets = {str(member.uid): secrets.token_urlsafe(32) for member in members}
+        encoded = [
+            dict(member.model_dump(mode='json'), digest=hashlib.sha256(tickets[str(member.uid)].encode()).hexdigest())
+            for member in members
+        ]
+        result = self.cache.eval(ALLOCATE, 0, self.prefix, '', '', str(BUILD['protocol']),
+                                 BUILD['content_revision'], requested_room, '', '0', 'duo',
+                                 json.dumps(encoded), party_id, group_id)
+        if result[0] == 'busy':
+            raise HTTPException(409, 'A party member is already connected or reserved')
+        if result[0] != 'ok':
+            raise HTTPException(503, 'No room has space for the entire party')
+        room = json.loads(result[1])
+        admissions = {
+            uid: {'ticket': ticket, 'room_id': room['room_id'], 'instance_id': room['instance_id'],
+                  'generation': room['generation'], 'host': room['host'], 'port': room['port'],
+                  'expires_in': 45, 'build': BUILD, 'mode': 'duo', 'party_id': party_id, 'group_id': group_id}
+            for uid, ticket in tickets.items()
+        }
+        return {'party_id': party_id, 'group_id': group_id, 'admissions': admissions}
 
     def consume(self, body: RoomTicket):
         digest = hashlib.sha256(body.ticket.encode()).hexdigest()

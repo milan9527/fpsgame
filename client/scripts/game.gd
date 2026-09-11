@@ -480,7 +480,10 @@ func begin_round() -> void:
 	var human_count := actors.size()
 	for i in range(MAX_PLAYERS - human_count):
 		spawn_actor(-i - 1, "RANGER-%02d" % (i + 1), true, spawn_position(human_count + i))
-	teams.configure(actors, match_mode)
+	var party_ids := {}
+	for id in sessions:
+		party_ids[id] = sessions[id].get("party_id", "")
+	teams.configure(actors, match_mode, party_ids)
 	if match_mode == "duo":
 		position_teams()
 	for id in actors:

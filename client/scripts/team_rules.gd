@@ -5,13 +5,46 @@ var assignments: Dictionary = {}
 var members: Dictionary = {}
 var ranks: Dictionary = {}
 
-func configure(actors: Dictionary, selected_mode: String) -> void:
+func configure(actors: Dictionary, selected_mode: String, party_ids: Dictionary = {}) -> void:
 	mode = selected_mode
 	assignments.clear()
 	members.clear()
 	ranks.clear()
+	var ordered: Array = []
+	var grouped := {}
+	var remaining: Array = []
+	for id in actors:
+		var party: String = str(party_ids.get(id, "")) if mode == "duo" else ""
+		if party.is_empty():
+			remaining.append(id)
+		else:
+			if not grouped.has(party):
+				grouped[party] = []
+			grouped[party].append(id)
+	var singletons: Array = []
+	for pair in grouped.values():
+		assert(pair.size() <= 2, "Authenticated duo parties must have at most two members")
+		if pair.size() == 2:
+			ordered.append_array(pair)
+		else:
+			singletons.append(pair[0])
+	while not singletons.is_empty():
+		ordered.append(singletons.pop_front())
+		var bot_index := -1
+		for index in range(remaining.size()):
+			if actors[remaining[index]].is_bot:
+				bot_index = index
+				break
+		if not remaining.is_empty():
+			ordered.append(remaining.pop_at(maxi(0, bot_index)))
+		elif not singletons.is_empty():
+			# Multiple incomplete parties can survive into a subsequent lobby.
+			# Preserve complete pairs first; fill remaining human seats safely.
+			ordered.append(singletons.pop_front())
+	ordered.append_array(remaining)
 	var index := 0
-	for actor in actors.values():
+	for id in ordered:
+		var actor = actors[id]
 		var team := int(index / 2) + 1 if mode == "duo" else 0
 		actor.team_id = team
 		assignments[actor.actor_id] = team

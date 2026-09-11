@@ -1731,20 +1731,26 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 		if bot_client:
 			request_quit(1)
 		return
-	if not compatible_build(response.body.get("build", {})) or response.body.get("mode", "solo") != mode:
-		cancel_ticket(str(response.body.get("ticket", "")), endpoint, attempt_token)
+	connect_admission(response.body, endpoint, attempt_token, mode, attempt_id)
+
+func connect_admission(admission: Dictionary, endpoint: String, attempt_token: String, mode: String, attempt_id: int) -> void:
+	if attempt_id != connection_attempt:
+		cancel_ticket(str(admission.get("ticket", "")), endpoint, attempt_token)
+		return
+	if not compatible_build(admission.get("build", {})) or admission.get("mode", "solo") != mode:
+		cancel_ticket(str(admission.get("ticket", "")), endpoint, attempt_token)
 		ui.show_menu("Matchmaking returned an incompatible game build or mode.")
 		return
-	ticket = response.body.ticket
+	ticket = admission.ticket
 	admission_ticket = ticket
 	admission_origin = endpoint
 	admission_token = attempt_token
-	room_id = response.body.room_id
+	room_id = admission.room_id
 	var peer := ENetMultiplayerPeer.new()
-	var target_port: int = int(response.body.port)
+	var target_port: int = int(admission.port)
 	if bot_client and OS.has_environment("TEST_GAME_PORT"):
 		target_port = int(OS.get_environment("TEST_GAME_PORT"))
-	var error := peer.create_client(response.body.host, target_port)
+	var error := peer.create_client(admission.host, target_port)
 	if error != OK:
 		cancel_admission()
 		ui.show_menu("Network error: " + str(error))

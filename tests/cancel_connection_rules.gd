@@ -44,7 +44,13 @@ func run() -> void:
 	assert(not game.online and game.running and game.phase == "live")
 	assert(game.cancelled.has(["unused-test-ticket-123456789", "http://first.invalid", "test-token"]), "Late response cancelled with its original auth origin")
 	assert(game.admission_ticket.is_empty())
+	# An invitation poll can finish after the player has cancelled or started offline.
+	game.connect_admission({"ticket": "late-party-ticket"}, "http://party.invalid",
+		"party-token", "duo", game.connection_attempt - 1)
+	assert(game.cancelled.has(["late-party-ticket", "http://party.invalid", "party-token"]))
+	assert(not game.online and game.running and game.phase == "live")
+	assert(game.admission_ticket.is_empty())
 	game.queue_free()
 	await process_frame
-	print("CANCEL_CONNECTION_RULES_PASS button=ok stale_response=ok original_auth_origin=ok solo_not_replaced=ok")
+	print("CANCEL_CONNECTION_RULES_PASS button=ok stale_response=ok original_auth_origin=ok solo_not_replaced=ok stale_party_admission=ok")
 	quit()

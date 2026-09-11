@@ -7,10 +7,45 @@ import httpx
 from pathlib import Path
 import subprocess
 import time
+import argparse
 from test_accounts import account
 
 ROOT = Path(__file__).resolve().parents[1]
+parser = argparse.ArgumentParser()
+parser.add_argument("--parties", action="store_true", help="Reserve two invitation parties and admit A,B,A,B")
+options = parser.parse_args()
 credentials = [account(f"duo-network-{i}", base="http://127.0.0.1:8001") for i in range(4)]
+base = "http://127.0.0.1:8001"
+auth = [{"Authorization": "Bearer " + identity["token"]} for identity in credentials]
+admissions = {}
+
+
+def reserve_parties():
+    build_response = httpx.get(base + "/protocol")
+    build_response.raise_for_status()
+    build = build_response.json()
+    for header in auth:
+        httpx.delete(base + "/parties/current", headers=header).raise_for_status()
+    for leader, member in [(0, 2), (1, 3)]:
+        party = httpx.post(base + "/parties", headers=auth[leader])
+        party.raise_for_status()
+        httpx.post(base + "/parties/accept", headers=auth[member],
+                   json={"invitation": party.json()["invitation"]}).raise_for_status()
+        for _ in range(20):
+            result = httpx.post(base + "/parties/reserve", headers=auth[leader],
+                                json=dict(build, room_id="room-27032"))
+            if result.status_code != 503:
+                break
+            time.sleep(0.2)
+        result.raise_for_status()
+        admissions[leader] = result.json()["admission"]
+        joined = httpx.get(base + "/parties/current", headers=auth[member])
+        joined.raise_for_status()
+        admissions[member] = joined.json()["admission"]
+        assert admissions[leader]["party_id"] == admissions[member]["party_id"]
+        assert admissions[leader]["ticket"] != admissions[member]["ticket"]
+
+
 def stats(identity, mode):
     response = httpx.get("http://127.0.0.1:8001/profile", params={"mode": mode},
                          headers={"Authorization": "Bearer " + identity["token"]})
@@ -20,10 +55,13 @@ before = {identity["user_id"]: {mode: stats(identity, mode) for mode in ["solo",
           for identity in credentials}
 env = dict(os.environ, GAME_PORT="27032", GAME_MODE="duo", API_URL="http://127.0.0.1:8001",
            XDG_DATA_HOME=str(ROOT / "artifacts/rescue-network-server-data"))
+if options.parties:
+    env["TEST_INVITED_PARTIES"] = "1"
 env["SERVER_SECRET"] = next(line.split("=", 1)[1] for line in
     (ROOT / "artifacts/duo-dev.env").read_text().splitlines()
     if line.startswith("DUO_SERVER_SECRET="))
-server_path = ROOT / "artifacts/rescue-network-server.log"
+log_prefix = "invited-party-network" if options.parties else "rescue-network"
+server_path = ROOT / "artifacts" / f"{log_prefix}-server.log"
 processes = []
 with server_path.open("w") as log:
     server = subprocess.Popen(
@@ -38,16 +76,29 @@ with server_path.open("w") as log:
             time.sleep(0.1)
         else:
             raise AssertionError("Rescue fixture readiness timeout")
+        if options.parties:
+            reserve_parties()
         for i, identity in enumerate(credentials):
             variables = dict(os.environ, TEST_USERNAME=identity["username"], TEST_PASSWORD=identity["password"],
                              TEST_GAME_PORT="27032", TEST_GAME_MODE="duo", API_URL="http://127.0.0.1:8001")
-            path = ROOT / "artifacts" / f"rescue-network-client-{i}.log"
+            if options.parties:
+                variables.update(TEST_PARTY_TOKEN=identity["token"],
+                                 TEST_PARTY_ADMISSION=json.dumps(admissions[i]))
+            path = ROOT / "artifacts" / f"{log_prefix}-client-{i}.log"
             output = path.open("w")
             process = subprocess.Popen(
                 [str(ROOT / "tools/godot"), "--headless", "--path", "client", "--script",
                  "../tests/rescue_network_client.gd", "--", "--bot-client"],
                 cwd=ROOT, env=variables, stdout=output, stderr=subprocess.STDOUT)
             processes.append((process, output, path))
+            if options.parties:
+                for _ in range(100):
+                    if "RESCUE_CLIENT_ADMITTED" in path.read_text():
+                        break
+                    assert process.poll() is None, str(path)
+                    time.sleep(0.05)
+                else:
+                    raise AssertionError("Invited client did not authenticate: " + str(path))
         for process, output, path in processes:
             code = process.wait(timeout=55)
             output.close()
@@ -74,6 +125,11 @@ with server_path.open("w") as log:
         assert sorted((row["team"], row["rank"]) for row in rows) == [(1, 1), (1, 1), (2, 2), (2, 2)]
         assert sum(row["kills"] for row in rows) == 2
         assert all(row["mode"] == "duo" for row in rows)
+        if options.parties:
+            assert "INVITED_INTERLEAVED_TEAMS_PASS" in server_path.read_text()
+            by_uid = {row["uid"]: row for row in rows}
+            teams = [by_uid[identity["user_id"]]["team"] for identity in credentials]
+            assert teams[0] == teams[2] and teams[1] == teams[3] and teams[0] != teams[1]
         for identity in credentials:
             row = next(row for row in rows if row["uid"] == identity["user_id"])
             previous = before[identity["user_id"]]["duo"]
@@ -87,6 +143,8 @@ with server_path.open("w") as log:
                            ["SCRIPT ERROR", "Assertion failed", "ObjectDB instances leaked",
                             "Snapshot exceeds target"]), str(path)
         print("FOUR_CLIENT_RESCUE_NETWORK_PASS actual_input=ok knock=ok interrupts=2 revive=ok team_victory=ok database=4_results outbox_reload=ok mode_stats=ok")
+        if options.parties:
+            print("INVITED_PARTY_NETWORK_PASS parties=2 interleaved=A_B_A_B tickets=4 authoritative_teams=ok persisted_pairs=ok")
     finally:
         for process, output, _ in processes:
             if process.poll() is None:
@@ -95,3 +153,6 @@ with server_path.open("w") as log:
             output.close()
         server.terminate()
         server.wait(timeout=10)
+        if options.parties:
+            for header in auth:
+                httpx.delete(base + "/parties/current", headers=header).raise_for_status()

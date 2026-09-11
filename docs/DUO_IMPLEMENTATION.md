@@ -106,7 +106,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 `backend/tests/test_parties.py` 验证单次邀请、16 个并发接受请求仅一个成功、成员唯一性、过期、解散、会话版本清理、HTTP 认证和验证错误隐私。连同房间/会话/故障/战绩回归共 46 项通过，证据 `artifacts/party-backend-tests.log`。已部署到独立开发 API 8001，两个隔离测试账号的真实 HTTP 创建/接受/查询/解散通过，证据 `artifacts/party-live-http.log`。
 
-邀请通过下述专用预约入口接入整队容量；普通逐人匹配目前仍不读取队伍。客户端邀请/准备/开始界面及真实邀请队伍交错入场验收尚未完成，不能仅用后端接口宣称完整在线邀请已交付。
+邀请通过下述专用预约入口接入整队容量；普通逐人匹配目前仍不读取队伍。客户端邀请/准备/开始界面尚未完成；真实邀请队伍交错入场验收现已通过（见后文），不能仅用后端接口宣称完整在线邀请已交付。
 
 ## 整队预约内部能力与专服配队
 
@@ -128,4 +128,14 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 响应以及 `GET /parties/current` 只返回请求者自己的 `admission`，包含房间绑定、模式、构建信息和实际票据剩余秒数；不会返回同伴票据、内部预约对象或会话版本。已消费或过期票据不再返回，状态为 `consumed_or_expired`。目前此状态需要离队后重新组队，没有自动重新排队。任一成员解散会释放同批未使用票据；已经连接的成员保留连接租约，由专服正常管理。
 
-61 项后端回归通过，证据 `artifacts/party-coordinator-tests.log`：包括并发幂等、队长权限、响应隐私、无可用房间重试、过期快照、注销失效、解散竞争、部分入场后解散及队伍即将过期。开发 API 8001 已更新；运行 `.venv/bin/python tools/test_party_http.py` 使用两个可复用隔离账号，对运行中的 UDP 27031 房间完成邀请、预约、幂等重试、按人取票及解散后容量再预约，日志 `artifacts/party-coordinator-http.log`。此 HTTP 验收不消费 ENet 票据，真实邀请队伍交错入场与客户端界面仍待完成。
+61 项后端回归通过，证据 `artifacts/party-coordinator-tests.log`：包括并发幂等、队长权限、响应隐私、无可用房间重试、过期快照、注销失效、解散竞争、部分入场后解散及队伍即将过期。开发 API 8001 已更新；运行 `.venv/bin/python tools/test_party_http.py` 使用两个可复用隔离账号，对运行中的 UDP 27031 房间完成邀请、预约、幂等重试、按人取票及解散后容量再预约，日志 `artifacts/party-coordinator-http.log`。此 HTTP 验收不消费 ENet 票据；交错入场由后述独立网络验收覆盖，客户端界面仍待完成。
+
+## 邀请队伍真实交错入场验收
+
+`.venv/bin/python tools/test_rescue_network.py --parties` 创建两支真实账号邀请队伍（账号 0/2 和 1/3），分别调用整队预约，再等待每名客户端鉴权完成后按 A、B、A、B 顺序启动下一名。客户端使用各自 HTTP 返回的票据，通过游戏正常 ENet 握手消费；专服根据鉴权会话检查实际入场顺序和邀请身份，并确认同伴共享队伍编号。
+
+该场景继续执行真实客户端救援交互、两次受伤中断、成功扶起、阵亡队友观战获胜、整队淘汰和结果队列磁盘重载。最终直接查询 PostgreSQL 的四条结果，按账号确认原邀请伙伴仍共享队伍和名次，并核对每人双人统计增量及单人统计不变。证据 `artifacts/invited-party-network.log`、`artifacts/invited-party-network-server.log` 和四份 `artifacts/invited-party-network-client-*.log`。
+
+客户端现在复用 `connect_admission` 完成构建/模式校验、票据登记、ENet 连接和握手超时处理。连接尝试编号会拒绝迟到预约并用原始账号来源取消票据；`artifacts/party-admission-cancellation.log` 验证取消与单机启动之后的迟到响应隔离。此轮邀请创建/接受/开始由测试驱动完成，尚未提供面向玩家的邀请界面，不能把该验收等同于界面流程交付。
+
+共享入场入口改动后，普通逐人双人匹配仍通过四客户端救援、观战和战绩回归：`artifacts/party-admission-solo-queue-regression.log`（文件名中的 solo-queue 指单人排队，实际对局模式为 duo）。

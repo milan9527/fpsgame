@@ -1,4 +1,14 @@
 extends SceneTree
+class InvitedClient:
+	extends "res://scripts/game.gd"
+	func sign_in(_username: String, _password: String, _register: bool, endpoint: String, _mode := "solo") -> void:
+		connection_attempt += 1
+		api_url = endpoint
+		token = OS.get_environment("TEST_PARTY_TOKEN")
+		token_origin = endpoint
+		ui.busy = true
+		var admission: Dictionary = JSON.parse_string(OS.get_environment("TEST_PARTY_ADMISSION"))
+		connect_admission(admission, endpoint, token, "duo", connection_attempt)
 var game
 var deadline: int
 func _initialize() -> void:
@@ -9,7 +19,7 @@ func interact() -> void:
 	await physics_frame
 	Input.action_release("loot")
 func run() -> void:
-	game = load("res://scripts/game.gd").new()
+	game = InvitedClient.new() if OS.has_environment("TEST_PARTY_ADMISSION") else load("res://scripts/game.gd").new()
 	game.name = "Game"
 	root.add_child(game)
 	game.local_profile = null
@@ -18,6 +28,7 @@ func run() -> void:
 	while not game.running:
 		assert(Time.get_ticks_msec() < deadline)
 		await process_frame
+	print("RESCUE_CLIENT_ADMITTED")
 	game.bot_client = false
 	var patient_id := 0
 	var helper_id := 0

@@ -9,10 +9,19 @@ class RescueServer:
 	var completed_at := 0.0
 	func reset_round() -> void:
 		super.reset_round()
-		phase_time = 8
+		phase_time = 14 if OS.get_environment("TEST_INVITED_PARTIES") == "1" else 8
 	func begin_round() -> void:
 		assert(sessions.size() == 4, "Four authenticated humans required")
 		super.begin_round()
+		if OS.get_environment("TEST_INVITED_PARTIES") == "1":
+			var ordered: Array = sessions.keys()
+			assert(sessions[ordered[0]].party_id == sessions[ordered[2]].party_id)
+			assert(sessions[ordered[1]].party_id == sessions[ordered[3]].party_id)
+			assert(sessions[ordered[0]].party_id != sessions[ordered[1]].party_id)
+			assert(actors[ordered[0]].team_id == actors[ordered[2]].team_id)
+			assert(actors[ordered[1]].team_id == actors[ordered[3]].team_id)
+			assert(actors[ordered[0]].team_id != actors[ordered[1]].team_id)
+			print("INVITED_INTERLEAVED_TEAMS_PASS")
 		var first: Array = teams.members[1].duplicate()
 		var second: Array = teams.members[2].duplicate()
 		first.sort()

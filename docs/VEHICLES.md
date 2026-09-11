@@ -229,3 +229,16 @@ E 键上下车使用可靠通道 4 和人物动作序号；命令包含明确车
 `tests/vehicle_ballistics.gd` 在真实物理空间验证发动机盖、侧梁、轮胎、防滚架、开放座舱、整车变换、车轮层级、清理和车主节点销毁。轮毂实际凸出于轮胎中心，因此轮胎测试瞄准高于轮毂的胎面；判断使用真实模型名称和实际形状。证据 `artifacts/vehicle-ballistics-geometry.log`，无脚本错误或资源泄漏。
 
 该组件尚未由车辆默认创建，也尚未接入 `Game.trace_shot`；原有运动盒、手雷碰撞和正式射击保持当前行为。检查发现乘员仍使用站立胶囊，必须先加入与 Blender 坐姿匹配的身体命中形状及历史回溯，再一起启用精细车体查询，避免仅移除车壳遮挡却暴露错误的人体命中范围。当前不能将本项称为已完成的精细乘员伤害。
+
+
+## 从 Blender 坐姿蒙皮烘焙的人物命中盒
+
+`tools/build_seated_hitboxes.py` 读取 `art/operator.blend` 的原始刚性蒙皮与 SeatedDriver / SeatedPassenger / SeatedDowned 动画。每段动画取 0–60 帧、间隔 2 帧，按蒙皮骨骼生成有向包围盒，包含整个呼吸动画并扩展 1.25 cm。每姿态 14 盒，共 42 盒；Head 骨骼对应头部伤害。它们是身体部件的包围盒近似，并非逐三角形人物命中。
+
+产物 `client/assets/seated_hitboxes.json` 包含 Blender 和 GLB 的 SHA-256；运行 `tools/blender-4.3.2-linux-x64/blender --background --python tools/build_seated_hitboxes.py` 可重新生成，重复烘焙已验证逐字节一致。修改角色模型后必须同步重烘焙；验证测试会因 GLB 哈希不一致而失败。JSON 包含在当前导出规则中。
+
+`seated_hit_pose.gd` 对这些有向盒执行解析射线求交，返回最近身体部件、距离、位置和头部标记。`hit_history.gd` 已记录坐姿形状、车辆实例/座位/代次/姿态签名，只对同一签名的连续位置和朝向插值；上下车、换座或倒地切换之间不生成中间人物形状。原有步行站姿/蹲姿胶囊回溯保持原规则，死亡角色不接受历史伤害。
+
+`tests/seated_hit_pose.gd` 用 Godot 实际烘焙的蒙皮顶点核对三姿态、四个动画时间点，共 58,692 个顶点检查通过。还验证头部、坐姿脚下空隙、整个人物旋转/平移、射程、历史位置、座位代次边界、下车边界和死亡排除。日志 `artifacts/seated-hit-pose.log`；原有延迟补偿、倾身、车辆掩体、驾驶和存档回归见 `artifacts/*-seated-hit-regression.log`。
+
+当前已具备车体几何、坐姿形状与历史查询三个组件，但直接射击仍使用旧物理射线和整车运动盒。下一步必须统一直接射击与回溯的遮挡/乘员判定后，才能宣称精细载具战斗已接通。

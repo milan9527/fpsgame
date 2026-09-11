@@ -5,6 +5,7 @@ const MAX_REWIND := 0.2
 const PRESENTATION_DELAY := 0.05
 const MAX_SAMPLES := 32
 const RADIUS := 0.38
+const SeatedPose = preload("res://scripts/seated_hit_pose.gd")
 var samples: Array[Dictionary] = []
 
 static func rewind_age(rtt_ms: float) -> float:
@@ -20,7 +21,7 @@ func record(time: float, actors: Dictionary) -> void:
 	for id in actors:
 		var actor = actors[id]
 		if actor.alive:
-			poses[id] = {"p": actor.hit_base(), "basis": actor.lean_basis(), "height": actor.body_shape.shape.height, "head": actor.headshot_height()}
+			poses[id] = SeatedPose.capture(actor) if actor.is_seated() else {"p": actor.hit_base(), "basis": actor.lean_basis(), "height": actor.body_shape.shape.height, "head": actor.headshot_height()}
 	if not samples.is_empty() and time <= float(samples[-1].time):
 		return
 	samples.append({"time": time, "poses": poses})
@@ -49,7 +50,12 @@ func poses_at(time: float) -> Dictionary:
 		# Never sweep a teleport into a hittable corridor.
 		if a.p.distance_to(b.p) > 3:
 			continue
-		poses[id] = {"p": a.p.lerp(b.p, weight), "basis": a.basis.slerp(b.basis, weight), "height": a.height, "head": a.head}
+		if weight > 0 and a.get("seated", "") != b.get("seated", ""):
+			continue # Never interpolate standing, seat swaps or knockdown transitions.
+		var pose := a.duplicate()
+		pose.p = a.p.lerp(b.p, weight)
+		pose.basis = a.basis.slerp(b.basis, weight)
+		poses[id] = pose
 	return poses
 
 static func sphere_distance(origin: Vector3, direction: Vector3, center: Vector3) -> float:
@@ -90,6 +96,13 @@ func trace(time: float, origin: Vector3, direction: Vector3, limit: float, shoot
 		if id == shooter_id or not actors.has(id) or not actors[id].alive:
 			continue
 		var pose: Dictionary = poses[id]
+		if pose.has("boxes"):
+			var seated_hit := SeatedPose.trace(pose, origin, direction, limit)
+			if not seated_hit.is_empty():
+				limit = seated_hit.distance
+				hit = seated_hit
+				hit.collider = actors[id]
+			continue
 		var distance := capsule_distance(pose.basis.inverse() * (origin - pose.p), pose.basis.inverse() * direction, Vector3.ZERO, pose.height)
 		if distance < limit:
 			limit = distance

@@ -1,5 +1,5 @@
 extends RefCounted
-const DEFAULTS := {"forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "lean_left": KEY_Z, "lean_right": KEY_C, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "smoke_throw": KEY_V, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "inventory": KEY_B, "map": KEY_M, "scoreboard": KEY_TAB, "spectate_previous": KEY_Q, "spectate_next": KEY_E}
+const DEFAULTS := {"push_to_talk": KEY_T, "forward": KEY_W, "back": KEY_S, "left": KEY_A, "right": KEY_D, "sprint": KEY_SHIFT, "lean_left": KEY_Z, "lean_right": KEY_C, "crouch": KEY_CTRL, "jump": KEY_SPACE, "reload": KEY_R, "loot": KEY_E, "heal": KEY_H, "throw": KEY_G, "smoke_throw": KEY_V, "weapon1": KEY_1, "weapon2": KEY_2, "weapon3": KEY_3, "pause": KEY_ESCAPE, "inventory": KEY_B, "map": KEY_M, "scoreboard": KEY_TAB, "spectate_previous": KEY_Q, "spectate_next": KEY_E}
 var keys: Dictionary = DEFAULTS.duplicate()
 var path := "user://bindings.cfg"
 var message := ""
@@ -11,7 +11,7 @@ static func valid_key(code: int) -> bool:
 	return (code >= KEY_SPACE and code <= KEY_ASCIITILDE) or (code >= KEY_F1 and code <= KEY_F24) or code in [KEY_TAB, KEY_BACKSPACE, KEY_ENTER, KEY_INSERT, KEY_DELETE, KEY_HOME, KEY_END, KEY_LEFT, KEY_UP, KEY_RIGHT, KEY_DOWN, KEY_PAGEUP, KEY_PAGEDOWN, KEY_SHIFT, KEY_CTRL, KEY_ALT, KEY_META, KEY_CAPSLOCK]
 
 static func same_context(a: String, b: String) -> bool:
-	return a.begins_with("spectate_") == b.begins_with("spectate_")
+	return a == "push_to_talk" or b == "push_to_talk" or a.begins_with("spectate_") == b.begins_with("spectate_")
 
 func conflict(action: String, code: int, candidate: Dictionary) -> String:
 	for other in candidate:

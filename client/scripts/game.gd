@@ -121,6 +121,7 @@ var team_pings = preload("res://scripts/team_pings.gd").new()
 var team_ping_sequence := 0
 signal voice_packet_received(sender: int, sequence: int, packet: PackedByteArray)
 var voice_relay = preload("res://scripts/voice_relay.gd").new()
+var team_voice
 
 func _ready() -> void:
 	var manifest = JSON.parse_string(FileAccess.get_file_as_string("res://protocol.json"))
@@ -175,6 +176,9 @@ func _ready() -> void:
 		ui = Interface.new()
 		ui.bindings = bindings
 		add_child(ui)
+		team_voice = preload("res://scripts/team_voice.gd").new()
+		add_child(team_voice)
+		team_voice.bind(self)
 		sound.volume = 0.0 if smoke or bot_client else ui.volume
 		if audio_test:
 			sound.volume = 0.65
@@ -414,6 +418,8 @@ func start_solo(mode := "solo") -> void:
 
 func clear_actors() -> void:
 	voice_relay.reset()
+	if team_voice != null:
+		team_voice.reset_round()
 	team_pings.reset()
 	team_ping_sequence = 0
 	if ui != null:

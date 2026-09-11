@@ -212,3 +212,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 四真实客户端救援场景加入倒地动画与第三人称武器隐藏断言，并继续验证扶起、共享胜负及四条战绩落库，见 `artifacts/downed-animation-network.log`。本轮只更新开发资源，发布包仍为 0.34。
 
 开发专服镜像已重建并启动成功，部署记录 `artifacts/downed-animation-deployment.log`；发布包未覆盖。
+
+## 队内语音客户端接入
+
+已接入默认关闭的麦克风、可改键按住说话、抖动缓冲播放、收听开关与音量设置。四真实客户端使用合成音频通过专服转发到客户端混音器，并继续通过救援、共享胜负和 PostgreSQL 战绩核对。麦克风采集组件使用合成设备采样验证，未宣称真实设备验收。设置截图、详细行为与日志见 [语音开发](VOICE.md)。发布包仍为 0.34，未覆盖。

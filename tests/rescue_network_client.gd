@@ -54,7 +54,15 @@ func run() -> void:
 	var voice_payload := PackedByteArray()
 	var voice_sequence := 0
 	var voice_due := 0
+	var voice_capture: AudioEffectCapture
+	var voice_audible := false
 	if voice_case:
+		game.ui.voice_listen = true
+		game.ui.voice_volume = 0.8
+		game.ui.volume = 0.65
+		voice_capture = AudioEffectCapture.new()
+		voice_capture.buffer_length = 0.2
+		AudioServer.add_bus_effect(AudioServer.get_bus_index(game.team_voice.receiver.bus_name), voice_capture)
 		var samples := PackedVector2Array()
 		samples.resize(320)
 		samples.fill(Vector2.ONE * (0.1 + 0.01 * (game.local_id % 7)))
@@ -92,6 +100,9 @@ func run() -> void:
 		assert(Time.get_ticks_msec() < deadline, "Network rescue scenario timed out")
 		await process_frame
 		if voice_case and Time.get_ticks_msec() >= voice_due:
+			for frame in voice_capture.get_buffer(voice_capture.get_frames_available()):
+				if frame.length() > 0.01:
+					voice_audible = true
 			voice_due = Time.get_ticks_msec() + 40
 			game.submit_voice.rpc_id(1, game.network_round_id, voice_sequence + 1, voice_payload)
 			game.submit_voice.rpc_id(1, game.network_round_id, voice_sequence, voice_payload)
@@ -141,7 +152,8 @@ func run() -> void:
 	assert(observed_down_animation)
 	if voice_case:
 		assert(voice_senders.size() == 1 and voice_senders.values()[0] >= 10 and voice_parity.size() == 2)
-		print("VOICE_RELAY_CLIENT_PASS team_sender_only=ok synthetic_audio_decoded=ok")
+		assert(voice_audible, "Relayed teammate speech must reach the actual audio mixer")
+		print("VOICE_RELAY_CLIENT_PASS team_sender_only=ok synthetic_audio_decoded=ok mixer_output=ok")
 	if ping_case:
 		assert(observed_team_pings)
 		print("TEAM_PINGS_NETWORK_CLIENT_PASS map_click=ok own_and_ally=ok enemies_excluded=ok")

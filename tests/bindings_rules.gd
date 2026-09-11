@@ -11,6 +11,8 @@ func run() -> void:
 	assert(not profile.bind("reload", KEY_W) and profile.keys.reload == KEY_R)
 	assert(not profile.bind("reload", KEY_ESCAPE))
 	assert(not profile.bind("pause", KEY_F))
+	assert(not profile.bind("spectate_next", KEY_T), "Voice key also applies while spectating")
+	assert(not profile.bind("push_to_talk", KEY_E))
 	assert(profile.bind("reload", KEY_F))
 	var fresh = Bindings.new(path)
 	fresh.load_profile()
@@ -18,7 +20,7 @@ func run() -> void:
 	fresh.apply()
 	assert(InputMap.action_get_events("reload")[0].physical_keycode == KEY_F)
 	var failed = Bindings.new("user://nonexistent-bindings-folder/profile.cfg")
-	assert(not failed.bind("reload", KEY_T) and failed.keys.reload == KEY_R)
+	assert(not failed.bind("reload", KEY_Y) and failed.keys.reload == KEY_R)
 	assert(InputMap.action_get_events("reload")[0].physical_keycode == KEY_F, "Failed save does not alter live map")
 	var invalid := ConfigFile.new()
 	invalid.set_value("keyboard", "reload", KEY_W)
@@ -38,12 +40,12 @@ func run() -> void:
 	game.ui.controls.open()
 	game.ui.controls.rows.reload.pressed.emit()
 	var key := InputEventKey.new()
-	key.keycode = KEY_T
-	key.physical_keycode = KEY_T
+	key.keycode = KEY_Y
+	key.physical_keycode = KEY_Y
 	key.pressed = true
 	Input.parse_input_event(key.duplicate())
 	await process_frame
-	assert(game.bindings.keys.reload == KEY_T and game.ui.controls.pending == "")
+	assert(game.bindings.keys.reload == KEY_Y and game.ui.controls.pending == "")
 	assert(game.ui.controls.visible and paused)
 	var actor = game.actors[1]
 	assert(not game.local_command(actor).reload and not game.local_command(actor).fire)

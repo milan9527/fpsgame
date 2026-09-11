@@ -67,6 +67,10 @@ var controls
 var controls_hint: Label
 var sensitivity := 0.0022
 var volume := 0.65
+var voice_listen := false
+var voice_microphone := false
+var voice_volume := 0.8
+var voice_indicator: Label
 var settings := ConfigFile.new()
 var busy := false
 var grenade_warning_distance := INF
@@ -97,6 +101,8 @@ func _ready() -> void:
 	settings.load("user://settings.cfg")
 	sensitivity = settings.get_value("controls", "sensitivity", 0.0022)
 	volume = settings.get_value("audio", "volume", 0.65)
+	voice_listen = settings.get_value("voice", "listen", false) == true
+	voice_volume = clampf(float(settings.get_value("voice", "volume", 0.8)), 0, 1)
 	var theme := Theme.new()
 	theme.default_font_size = 18
 	theme.set_color("font_color", "Label", Color("e0e9e8"))
@@ -215,6 +221,7 @@ func _ready() -> void:
 	training_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	training_label.hide()
 	headline = placed_label(hud, Vector2(40, 28), 23, ACCENT)
+	voice_indicator = placed_label(hud, Vector2(540, 110), 16, Color("77c9b0"))
 	stats = placed_label(hud, Vector2(40, 66), 17)
 	weapon = placed_label(hud, Vector2(40, 750), 23)
 	loadout_label = placed_label(hud, Vector2(40, 779), 14)
@@ -275,6 +282,23 @@ func _ready() -> void:
 	pause_description = label(pause_box, "Operation paused.", 16)
 	pause_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	button(pause_box, "KEYBOARD CONTROLS", func(): controls.open())
+	var listen := CheckButton.new()
+	listen.text = "Listen to teammate"
+	listen.button_pressed = voice_listen
+	listen.toggled.connect(func(value): voice_listen = value; save_settings())
+	pause_box.add_child(listen)
+	var mic := CheckButton.new()
+	mic.text = "Enable microphone (hold Push to talk key)"
+	mic.toggled.connect(func(value): voice_microphone = value)
+	pause_box.add_child(mic)
+	label(pause_box, "Team voice volume • default talk key: T", 14)
+	var voice_slider := HSlider.new()
+	voice_slider.min_value = 0
+	voice_slider.max_value = 1
+	voice_slider.step = 0.01
+	voice_slider.value = voice_volume
+	voice_slider.value_changed.connect(func(value): voice_volume = value; save_settings())
+	pause_box.add_child(voice_slider)
 	button(pause_box, "RESUME", func(): set_pause(false))
 	checkpoint_save_button = Button.new()
 	checkpoint_save_button.text = "SAVE OPERATION & RETURN"
@@ -412,6 +436,8 @@ func online(register: bool) -> void:
 		online_requested.emit(username.text, password.text, register, endpoint.text.trim_suffix("/"))
 
 func save_settings() -> void:
+	settings.set_value("voice", "listen", voice_listen)
+	settings.set_value("voice", "volume", voice_volume)
 	settings.set_value("controls", "sensitivity", sensitivity)
 	settings.set_value("audio", "volume", volume)
 	if endpoint:

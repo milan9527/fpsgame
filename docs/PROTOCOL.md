@@ -58,3 +58,5 @@ docker compose up -d --build api game game2
 开发协议 16 的倒地快照还包括 `downed`、`down_health`、`bleed`、`revive_target`、`revive_left`。存活但倒地与正式淘汰明确区分；拾取交互无物资目标时可请求扶起附近队友，继续使用通道 4 的动作去重与预算，扶起时间和结果全部由专服决定。
 
 开发组队大厅接口：`POST /parties/ready` 只接受布尔 `ready`，两人准备后由队长调用 `POST /parties/reserve`。已预约队伍响应提供非秘密的 `reservation_id`；`POST /parties/reset` 需要构建信息和对应 `group_id`，用于在成员租约释放后保留队伍、撤销旧预约并清除双方准备状态。旧编号不能重置后来签发的新预约。票据仍仅按当前账号返回。
+
+开发版队伍标点：`request_team_ping(round_id, sequence, point: Vector2, clear: bool)` 使用可靠通道 4；服务器只接受当前回合的已认证存活双人成员。`team_ping_snapshot(round_id, states)` 使用通道 3 的有序不可靠更新，按接收者队伍筛选，最多两个标点；每项含发送者 id、point、name、remaining。标点不加入全员角色快照。新增 RPC 要求开发客户端与专服同步更新脚本，现有发布协议 15 / 0.34 未更新。

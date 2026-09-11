@@ -1,6 +1,7 @@
 extends Control
 
 signal close_requested
+signal waypoint_requested(point: Vector2, clear: bool)
 const Bindings = preload("res://scripts/control_bindings.gd")
 const BOUNDS := Rect2(-120, -120, 240, 240)
 const MAP_RECT := Rect2(260, 120, 640, 640)
@@ -13,6 +14,7 @@ var zone_info: Dictionary = {}
 var time_left := 300.0
 var waypoint = null
 var teammates: Array = []
+var shared_pings: Array = []
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -49,9 +51,12 @@ func refresh(at: Vector3, yaw: float, zone: float, remaining: float, circle: Dic
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and MAP_RECT.has_point(event.position):
 		if event.button_index == MOUSE_BUTTON_LEFT:
-			mark(map_to_world(event.position))
+			var point := map_to_world(event.position)
+			if mark(point):
+				waypoint_requested.emit(point, false)
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			waypoint = null
+			waypoint_requested.emit(Vector2.ZERO, true)
 			queue_redraw()
 		accept_event()
 
@@ -94,6 +99,11 @@ func _draw() -> void:
 		caption.x = clampf(caption.x, MAP_RECT.position.x + 4, MAP_RECT.end.x - width - 4)
 		caption.y = clampf(caption.y, MAP_RECT.position.y + 18, MAP_RECT.end.y - 4)
 		draw_string(font, caption, member.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, color)
+	for ping in shared_pings:
+		var target := world_to_map(ping.point)
+		draw_circle(target, 10, Color("83dcff"), false, 2, true)
+		var caption := Vector2(clampf(target.x + 12, MAP_RECT.position.x + 4, MAP_RECT.end.x - 190), clampf(target.y - 12, MAP_RECT.position.y + 18, MAP_RECT.end.y - 4))
+		draw_string(font, caption, str(ping.name) + " / PING", HORIZONTAL_ALIGNMENT_LEFT, 185, 15, Color("83dcff"))
 	if waypoint is Vector2:
 		var target := world_to_map(waypoint)
 		draw_dashed_line(p, target, MARKER, 1.5, 7)

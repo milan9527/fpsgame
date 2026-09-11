@@ -88,11 +88,11 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 战斗 HUD 显示队友姓名、生命/倒地剩余秒数/救援进度/淘汰状态和距离。队友缺失时显示不可用，不保留过期位置。小地图和战术地图仅绘制本队其他成员：绿色存活标记、橙色倒地标记、淘汰叉号；战术地图标注姓名，姓名保持在地图边界内。进入单人、新回合或离开时清除标记。队伍文字带深色描边以适应亮天空。
 
-原生验证：`tests/team_hud.gd`，日志 `artifacts/team-hud.log`。原单人地图回归：`artifacts/team-map-solo-regression.log`。真实四客户端救援场景确认队友倒地提示及本队标记筛选，并继续通过胜负/战绩落库验收：`artifacts/team-hud-network.log`。实际渲染截图为 `artifacts/team-hud.png` 和 `artifacts/team-map.png`。尚未实现队友共享主动标点和语音通信。
+原生验证：`tests/team_hud.gd`，日志 `artifacts/team-hud.log`。原单人地图回归：`artifacts/team-map-solo-regression.log`。真实四客户端救援场景确认队友倒地提示及本队标记筛选，并继续通过胜负/战绩落库验收：`artifacts/team-hud-network.log`。实际渲染截图为 `artifacts/team-hud.png` 和 `artifacts/team-map.png`。队友共享主动标点现已接入（见后文）；语音通信仍未实现。
 
 ## 组队数据恢复验收
 
-备份工具提供独立开发环境入口，恢复器支持 0004 的队伍排名与账户总计检查。实际双人数据库备份已在无网络临时 PostgreSQL 容器恢复并验证，旧发布库 0003 也通过恢复回归；详见 [运维说明](OPERATIONS.md) 及 `artifacts/duo-restore-drill.json`。共享标点/语音与其余发行验收仍需继续完成。
+备份工具提供独立开发环境入口，恢复器支持 0004 的队伍排名与账户总计检查。实际双人数据库备份已在无网络临时 PostgreSQL 容器恢复并验证，旧发布库 0003 也通过恢复回归；详见 [运维说明](OPERATIONS.md) 及 `artifacts/duo-restore-drill.json`。语音与其余发行验收仍需继续完成。
 
 ## 组队检查点与离线入口
 
@@ -188,3 +188,15 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 主证据 `artifacts/revoked-party-network.log`、`artifacts/departed-party-network.log`；各自 `*-server.log` 和 `*-client-{0,1,2,3}.log` 保留专服与客户端记录。该扩展复用已有服务器断线和队伍排名实现，本轮未修改游戏运行代码。
 
 `tests/duo_disconnect_rules.gd` 进一步调用实际断线清理：正在扶起倒地成员的唯一站立队友断线后，救援中断，倒地成员因失去站立队友而淘汰；两个参与者共享第 8 名，原击倒者只记一次击杀，离线成员仍进入结果队列。日志 `artifacts/duo-disconnect-rules.log`。该原生测试覆盖最后站立队友离场，与网络测试中的存活队友获胜为不同边界。
+
+## 队伍共享地图标点
+
+双人模式打开 M 战术地图，左键设置个人导航点并发送团队信号，右键清除自己的导航点与团队信号。青色团队信号显示在战术地图、小地图和战斗 HUD，带发送者姓名及距离；橙色个人导航点继续使用既有导航规则。每名存活成员最多一个团队信号，倒地成员可以发送，淘汰成员不能发送。信号有效期为 20 秒对局模拟时间，单机暂停时不推进；新回合清空。
+
+专服按已鉴权连接识别发送者，检查 live 阶段、duo 模式、当前回合编号、存活状态、地图坐标 ±115 米、有限数值、单调序号和每秒一个新标点。清除不受设置冷却影响，但不会重置设置冷却。标点通过独立的小型快照 RPC 只发送给本队连接，不附带在所有玩家共享的角色快照中。客户端按剩余寿命本地到期清理，避免丢包时无限保留旧信号；旧回合快照被拒绝。
+
+`tests/team_pings.gd` 验证坐标、频率、序号重放、清除、到期、敌队筛选、淘汰发送者、地图输入、单人兼容及回合重置。原生日志 `artifacts/team-pings-rules.log`，渲染与客户端到期验证 `artifacts/team-pings-render.log`；截图 `artifacts/team-pings-hud.png`、`artifacts/team-pings-map.png`。原地图/队友 HUD 回归分别为 `artifacts/team-pings-map-regression.log`、`artifacts/team-pings-hud-regression.log`。
+
+`.venv/bin/python tools/test_rescue_network.py --parties --team-pings` 已通过四真实客户端验证：各自通过地图鼠标事件发送，每个客户端仅收到自己及邀请同伴的两个标点，敌队标点不进入其列表；原救援、团队胜负和四条战绩落库继续通过。主日志 `artifacts/team-pings-network.log`，专服和客户端日志以 `team-pings-network-` 开头。新增 RPC 后已重新构建独立开发专服镜像，发布包仍为 0.34。
+
+独立开发 UDP 27031 已更新；`artifacts/team-pings-deployed-admission.log` 记录两个真实客户端对部署后服务完成登录、邀请和同队入场，确认新增 RPC 的脚本一致性。

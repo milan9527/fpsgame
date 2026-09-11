@@ -117,6 +117,8 @@ var admission_ticket := ""
 var admission_origin := ""
 var admission_token := ""
 var returning_to_party := false
+var team_pings = preload("res://scripts/team_pings.gd").new()
+var team_ping_sequence := 0
 
 func _ready() -> void:
 	var manifest = JSON.parse_string(FileAccess.get_file_as_string("res://protocol.json"))
@@ -180,6 +182,7 @@ func _ready() -> void:
 		ui.inventory_changed.connect(func(_enabled): action_latch.clear(); inventory_pointer_guard = true)
 		ui.map_changed.connect(func(_enabled): action_latch.clear(); inventory_pointer_guard = true)
 		ui.tactical_map.features = world.map_features.duplicate(true)
+		ui.tactical_map.waypoint_requested.connect(submit_team_ping)
 		ui.inventory.pickup_requested.connect(inventory_pickup)
 		ui.inventory.equipment_requested.connect(inventory_equipment)
 		ui.inventory.drop_requested.connect(inventory_drop)
@@ -408,6 +411,10 @@ func start_solo(mode := "solo") -> void:
 	ui.show_game()
 
 func clear_actors() -> void:
+	team_pings.reset()
+	team_ping_sequence = 0
+	if ui != null:
+		ui.tactical_map.shared_pings.clear()
 	hit_history.clear()
 	rewind_peers.clear()
 	if sound != null:
@@ -1437,6 +1444,11 @@ func add_event(message: String) -> void:
 func _process(dt: float) -> void:
 	if dedicated or not running or get_tree().paused:
 		return
+	if not online:
+		ui.tactical_map.shared_pings = team_pings.visible_for(local_id, elapsed, actors, teams)
+	else:
+		var now := Time.get_ticks_msec()
+		ui.tactical_map.shared_pings = ui.tactical_map.shared_pings.filter(func(ping): return ping.get("expires_at", 0) > now)
 	update_network_status()
 	for id in actors:
 		actors[id].render_frame(dt, online, id == local_id, Input.is_action_pressed("aim"))
@@ -1629,6 +1641,8 @@ func broadcast_snapshot() -> void:
 	for id in sessions:
 		if not peer_ready(id):
 			continue
+		if match_mode == "duo":
+			team_ping_snapshot.rpc_id(id, match_id, team_pings.visible_for(id, elapsed, actors, teams))
 		var clouds: Array = []
 		for cloud_id in smoke_clouds:
 			clouds.append({"id": cloud_id, "p": smoke_clouds[cloud_id].p, "age": smoke_clouds[cloud_id].age})
@@ -1646,6 +1660,31 @@ func broadcast_snapshot() -> void:
 			if packet.size() > 1150:
 				push_warning("Snapshot exceeds target packet size: " + str(packet.size()))
 			snapshot.rpc_id(id, packet)
+
+func submit_team_ping(point: Vector2, clear: bool) -> void:
+	if not running or phase != "live" or match_mode != "duo" or not actors.has(local_id) or not actors[local_id].alive:
+		return
+	team_ping_sequence += 1
+	if online:
+		request_team_ping.rpc_id(1, network_round_id, team_ping_sequence, point, clear)
+	else:
+		team_pings.submit(local_id, team_ping_sequence, point, clear, elapsed, actors, teams)
+		ui.tactical_map.shared_pings = team_pings.visible_for(local_id, elapsed, actors, teams)
+
+@rpc("any_peer", "call_remote", "reliable", 4)
+func request_team_ping(round_id: String, sequence: int, point: Vector2, clear: bool) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	if not dedicated or phase != "live" or match_mode != "duo" or round_id != match_id or not sessions.has(sender) or sessions[sender].get("revoking", false):
+		return
+	team_pings.submit(sender, sequence, point, clear, elapsed, actors, teams)
+
+@rpc("authority", "call_remote", "unreliable_ordered", 3)
+func team_ping_snapshot(round_id: String, states: Array) -> void:
+	if not dedicated and online and round_id == network_round_id and match_mode == "duo":
+		for state in states:
+			state.expires_at = Time.get_ticks_msec() + int(state.remaining * 1000)
+		ui.tactical_map.shared_pings = states
+		ui.tactical_map.queue_redraw()
 
 @rpc("authority", "call_remote", "reliable")
 func world_sync(id: String, supplies: Dictionary) -> void:

@@ -48,6 +48,14 @@ func run() -> void:
 			helper_id = pair[1]
 	var patient = game.actors[patient_id]
 	var helper = game.actors[helper_id]
+	var ping_case := OS.get_environment("TEST_TEAM_PINGS") == "1"
+	var observed_team_pings := false
+	if ping_case:
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = true
+		click.position = game.ui.tactical_map.world_to_map(Vector2(10 + 10 * int(OS.get_environment("TEST_PING_SLOT")), 20))
+		game.ui.tactical_map._gui_input(click)
 	var observed_knock := false
 	var observed_progress := false
 	var observed_revive := false
@@ -62,6 +70,11 @@ func run() -> void:
 	while game.phase != "finished":
 		assert(Time.get_ticks_msec() < deadline, "Network rescue scenario timed out")
 		await process_frame
+		if ping_case and game.ui.tactical_map.shared_pings.size() == 2:
+			for marker in game.ui.tactical_map.shared_pings:
+				assert(game.actors.has(marker.id) and game.actors[marker.id].team_id == game.actors[game.local_id].team_id)
+				assert(marker.remaining > 0 and marker.remaining <= 20)
+			observed_team_pings = true
 		if revoke_case and not game.running:
 			assert(observed_knock and observed_progress and observed_revive and interrupts == 2)
 			assert(game.token.is_empty() and not game.online)
@@ -94,6 +107,9 @@ func run() -> void:
 			requests += 1
 			await interact()
 	assert(observed_knock and observed_progress and observed_revive and interrupts == 2)
+	if ping_case:
+		assert(observed_team_pings)
+		print("TEAM_PINGS_NETWORK_CLIENT_PASS map_click=ok own_and_ally=ok enemies_excluded=ok")
 	assert((revoke_case or patient.rank == 1) and helper.rank == 1 and helper.kills == 2)
 	await process_frame
 	await process_frame

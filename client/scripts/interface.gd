@@ -56,6 +56,7 @@ var armor_bar: ProgressBar
 var radar: Control
 var local_position := Vector3.ZERO
 var team_label: Label
+var team_ping_label: Label
 var team_markers: Array = []
 var local_yaw := 0.0
 var radius := 110.0
@@ -225,6 +226,9 @@ func _ready() -> void:
 	team_label = placed_label(hud, Vector2(40, 275), 17, Color.WHITE)
 	team_label.add_theme_constant_override("outline_size", 4)
 	team_label.add_theme_color_override("font_outline_color", Color("10202b"))
+	team_ping_label = placed_label(hud, Vector2(40, 370), 16, Color("83dcff"))
+	team_ping_label.add_theme_constant_override("outline_size", 4)
+	team_ping_label.add_theme_color_override("font_outline_color", Color("10202b"))
 	network_label = placed_label(hud, Vector2(1130, 230), 15)
 	network_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	network_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -541,6 +545,9 @@ func draw_hud() -> void:
 		else:
 			hud.draw_line(at - Vector2(4, 4), at + Vector2(4, 4), color, 2)
 			hud.draw_line(at + Vector2(-4, 4), at + Vector2(4, -4), color, 2)
+	for ping in tactical_map.shared_pings:
+		var at: Vector2 = radar_center + (ping.point * 0.72).limit_length(80)
+		hud.draw_circle(at, 7, Color("83dcff"), false, 2)
 	if tactical_map.waypoint is Vector2 and not spectating:
 		var target: Vector2 = radar_center + (tactical_map.waypoint * 0.72).limit_length(80)
 		hud.draw_circle(target, 5, tactical_map.MARKER, false, 2)
@@ -548,9 +555,12 @@ func draw_hud() -> void:
 func update_team(actors: Dictionary, local_id: int) -> void:
 	team_markers.clear()
 	team_label.text = ""
+	team_ping_label.text = ""
 	team_label.self_modulate = Color("77c9b0")
 	var local = actors.get(local_id)
 	if local != null and local.team_id > 0:
+		for ping in tactical_map.shared_pings:
+			team_ping_label.text += "%s / PING %dm\n" % [ping.name, roundi(Vector2(local.position.x, local.position.z).distance_to(ping.point))]
 		team_label.text = "TEAM %d" % local.team_id
 		for member in actors.values():
 			if member.actor_id == local_id or member.team_id != local.team_id:

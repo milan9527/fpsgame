@@ -3,6 +3,7 @@ extends RefCounted
 var cover = preload("res://scripts/bot_cover.gd").new()
 var utilities = preload("res://scripts/bot_utilities.gd").new()
 var hazards = preload("res://scripts/bot_hazards.gd").new()
+var vehicle_avoidance = preload("res://scripts/bot_vehicle_avoidance.gd").new()
 
 var path := PackedVector3Array()
 var index := 0
@@ -40,6 +41,24 @@ func steer(actor, world, destination: Vector3, dt: float, goal_tolerance := 1.5)
 	finished = index >= path.size()
 	if finished:
 		return Vector3.ZERO
+	var detour_index := index
+	while detour_index + 1 < path.size() and vehicle_avoidance.point_blocked(actor, path[detour_index]) and vehicle_avoidance.static_shortcut_clear(actor, path[detour_index + 1]):
+		detour_index += 1
+	var was_avoiding: bool = vehicle_avoidance.active
+	var avoidance: Dictionary = vehicle_avoidance.steer(actor, world, path[detour_index], dt)
+	if avoidance.blocked:
+		if not vehicle_avoidance.route.is_empty():
+			index = detour_index
+		actor.jump_requested = false
+		return avoidance.direction
+	if was_avoiding:
+		stuck_time = 0.0
+		if not vehicle_avoidance.static_shortcut_clear(actor, path[index]):
+			# Rejoin the static navigation mesh from the detour position; removing
+			# a vehicle must not turn a building corner into a direct shortcut.
+			path.clear()
+			repath_left = 0.0
+			return Vector3.ZERO
 	# Recover from low floor lips and dynamic body obstruction without repeatedly
 	# jumping into arbitrary walls. Route planning itself never ignores walls.
 	if stuck_time > 0.4 and jump_left <= 0 and actor.grounded and actor.is_on_wall():

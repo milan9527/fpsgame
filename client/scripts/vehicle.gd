@@ -36,6 +36,7 @@ var wheel_rigs: Array[Dictionary] = []
 var seats
 
 func _ready() -> void:
+	add_to_group("vehicles")
 	seats = preload("res://scripts/vehicle_seats.gd").new(self)
 	collision_layer = 4
 	collision_mask = 1 | 2 | 4

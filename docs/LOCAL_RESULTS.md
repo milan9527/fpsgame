@@ -24,4 +24,4 @@ local_results/
 
 历史页面显示每条记录的模式，并分别汇总单人与双人的完成数、胜利数；总体统计仍包含两者。一个操作 ID 的模式与队伍不可通过重试修改。在线对局不进入本地战绩。
 
-`tests/local_duo_profile.gd` 验证 v1/v2 混合读取、阵亡成员随队获胜、尚有队友时退出、整队淘汰后退出、模式校验、不可覆盖与失败重试。`tools/test_local_profile.py` 在另一个 Godot 进程重新读取混合记录，确认落盘后的模式统计。证据为 `artifacts/local-duo-full-regression.log`，截图为 `artifacts/local-duo-history.png`。双人进行中检查点仍未实现，不能将战绩保存视为对局存档。
+`tests/local_duo_profile.gd` 验证 v1/v2 混合读取、阵亡成员随队获胜、尚有队友时退出、整队淘汰后退出、模式校验、不可覆盖与失败重试。`tools/test_local_profile.py` 在另一个 Godot 进程重新读取混合记录，确认落盘后的模式统计。证据为 `artifacts/local-duo-full-regression.log`，截图为 `artifacts/local-duo-history.png`。双人进行中检查点使用独立格式 2；战绩与世界存档仍分别保存。

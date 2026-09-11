@@ -15,13 +15,15 @@ if "--packed" in sys.argv:
 else:
     command = [str(ROOT / "tools/godot"), "--headless", "--path", str(ROOT / "client")]
 command += ["--script", str(ROOT / "tests/checkpoint_process.gd")]
-ids = []
-for index, mode in enumerate(["--write-checkpoint", "--read-checkpoint", "--read-checkpoint"]):
-    result = subprocess.run(command + ["--", mode], env=env, cwd=ROOT, capture_output=True, text=True, timeout=20)
-    text = result.stdout + result.stderr
-    (location / f"process-{index}.log").write_text(text)
-    assert result.returncode == 0 and "_PASS id=" in text, text
-    assert not any(error in text for error in ("SCRIPT ERROR", "Assertion failed", "ObjectDB instances leaked")), text
-    ids.append(re.search(r"_PASS id=([0-9a-f-]+)", text).group(1))
-assert len(set(ids)) == 1
-print("CHECKPOINT_PROCESS_PASS independent_processes=3 same_round=ok stock_timers=ok no_abandoned_results=ok")
+for match_mode in ["solo", "duo"]:
+    ids = []
+    env = dict(os.environ, CHECKPOINT_TEST_DIR=str(location / match_mode), CHECKPOINT_MODE=match_mode)
+    for index, mode in enumerate(["--write-checkpoint", "--read-checkpoint", "--read-checkpoint"]):
+        result = subprocess.run(command + ["--", mode], env=env, cwd=ROOT, capture_output=True, text=True, timeout=20)
+        text = result.stdout + result.stderr
+        (location / f"{match_mode}-process-{index}.log").write_text(text)
+        assert result.returncode == 0 and "_PASS id=" in text, text
+        assert not any(error in text for error in ("SCRIPT ERROR", "Assertion failed", "ObjectDB instances leaked")), text
+        ids.append(re.search(r"_PASS id=([0-9a-f-]+)", text).group(1))
+    assert len(set(ids)) == 1
+print("CHECKPOINT_PROCESS_PASS independent_processes=6 solo_duo=ok same_round=ok stock_timers=ok rescue_state=ok no_abandoned_results=ok")

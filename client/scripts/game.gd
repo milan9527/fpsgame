@@ -180,6 +180,7 @@ func _ready() -> void:
 		ui.inventory.equipment_requested.connect(inventory_equipment)
 		ui.inventory.drop_requested.connect(inventory_drop)
 		ui.solo_requested.connect(start_solo)
+		ui.duo_requested.connect(func(): start_solo("duo"))
 		ui.training_requested.connect(start_training)
 		ui.checkpoint_save_requested.connect(suspend_solo)
 		ui.checkpoint_resume_requested.connect(resume_solo)
@@ -581,7 +582,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func change_pause(enabled: bool) -> void:
 	get_tree().paused = enabled and running and not online and not dedicated
 	ui.pause_feedback(get_tree().paused)
-	ui.checkpoint_save_button.visible = enabled and match_mode == "solo" and training == null and not online and phase == "live" and actors.has(local_id) and actors[local_id].alive
+	ui.checkpoint_save_button.visible = enabled and can_suspend_operation()
 	ui.checkpoint_save_button.text = "REPLACE SAVED OPERATION & RETURN" if FileAccess.file_exists(checkpoint.path) or FileAccess.file_exists(checkpoint.path + ".bak") else "SAVE OPERATION & RETURN"
 	ui.pause_description.text = "Operation paused. Resume when ready." if not online else "Online operation continues. You remain vulnerable."
 	action_latch.clear()
@@ -2184,7 +2185,9 @@ func refresh_checkpoint_menu() -> void:
 func snapshot_solo() -> Dictionary:
 	var states: Array = []
 	for actor in actors.values():
-		var state: Dictionary = actor.pack()
+		var state: Dictionary = actor.pack(match_mode == "duo")
+		if match_mode == "duo":
+			state.knock_attacker = actor.knock_attacker
 		state.extra = {}
 		for field in checkpoint.EXTRA:
 			state.extra[field] = actor.get(field)
@@ -2195,12 +2198,16 @@ func snapshot_solo() -> Dictionary:
 		state.linear = grenade.linear_velocity
 		state.angular = grenade.angular_velocity
 		projectiles.append(state)
-	return {"version": 1, "content": build_info.content_revision, "id": match_id, "elapsed": elapsed, "zone_tick": zone_tick, "centers": zone_plan.centers.duplicate(), "rng_seed": rng.seed, "rng_state": rng.state, "actors": states, "loot": loot.duplicate(true), "grenades": projectiles, "clouds": smoke_clouds.duplicate(true), "events": events.duplicate(), "next_loot": next_loot_id, "next_grenade": next_grenade_id, "waypoint": ui.tactical_map.waypoint}
+	return {"version": 2 if match_mode == "duo" else 1, "mode": match_mode, "content": build_info.content_revision, "id": match_id, "elapsed": elapsed, "zone_tick": zone_tick, "centers": zone_plan.centers.duplicate(), "rng_seed": rng.seed, "rng_state": rng.state, "actors": states, "loot": loot.duplicate(true), "grenades": projectiles, "clouds": smoke_clouds.duplicate(true), "events": events.duplicate(), "next_loot": next_loot_id, "next_grenade": next_grenade_id, "waypoint": ui.tactical_map.waypoint}
+
+func can_suspend_operation() -> bool:
+	if training != null or dedicated or online or not running or phase != "live" or not actors.has(local_id):
+		return false
+	var actor = actors[local_id]
+	return actor.alive if match_mode == "solo" else (actor.rank == 0 and actor.team_id in teams.living(actors))
 
 func suspend_solo() -> bool:
-	if training != null or match_mode != "solo":
-		return false
-	if dedicated or online or not running or phase != "live" or not actors.has(local_id) or not actors[local_id].alive:
+	if not can_suspend_operation():
 		return false
 	ui.set_pause(true)
 	if not checkpoint.save_state(snapshot_solo(), build_info.content_revision):
@@ -2227,7 +2234,7 @@ func resume_solo() -> bool:
 	get_tree().paused = false
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	online = false
-	match_mode = "solo"
+	match_mode = "duo" if state.version == 2 else "solo"
 	clear_actors()
 	world.prepare_navigation()
 	local_id = 1
@@ -2247,10 +2254,15 @@ func resume_solo() -> bool:
 	for data in state.actors:
 		var actor = spawn_actor(data.id, data.n, data.b, data.p)
 		actor.unpack(data, false)
+		actor.knock_attacker = data.get("knock_attacker", 0)
 		for field in checkpoint.EXTRA:
 			actor.set(field, data.extra[field])
 		actor.update_weapon_visuals(true)
-	participants = {1: {"user_id": "", "kills": actors[1].kills, "rank": 0}}
+	if match_mode == "duo":
+		teams.restore(actors)
+	else:
+		teams.configure(actors, "solo")
+	participants = {1: {"user_id": "", "kills": actors[1].kills, "rank": actors[1].rank, "team_id": actors[1].team_id}}
 	loot = state.loot
 	next_loot_id = state.next_loot
 	next_grenade_id = state.next_grenade

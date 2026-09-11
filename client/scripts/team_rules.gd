@@ -24,6 +24,19 @@ func configure(actors: Dictionary, selected_mode: String) -> void:
 func friendly(first: int, second: int) -> bool:
 	return mode == "duo" and first != second and assignments.get(first, 0) > 0 and assignments.get(first, 0) == assignments.get(second, 0)
 
+func restore(actors: Dictionary) -> void:
+	mode = "duo"
+	assignments.clear()
+	members.clear()
+	ranks.clear()
+	for actor in actors.values():
+		assignments[actor.actor_id] = actor.team_id
+		if not members.has(actor.team_id):
+			members[actor.team_id] = []
+		members[actor.team_id].append(actor.actor_id)
+		if actor.rank > 0:
+			ranks[actor.team_id] = actor.rank
+
 func living(actors: Dictionary) -> Array:
 	var teams: Array = []
 	for actor in actors.values():

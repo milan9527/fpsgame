@@ -6,6 +6,7 @@ var training_label: Label
 signal logout_requested
 var logout_button: Button
 signal solo_requested
+signal duo_requested
 signal online_requested(username: String, password: String, register: bool, endpoint: String)
 signal leave_requested
 signal quit_requested
@@ -148,6 +149,7 @@ func _ready() -> void:
 	row.add_child(right)
 	label(right, "DEPLOYMENT", 26, ACCENT)
 	button(right, "SOLO  /  OFFLINE OPERATION", func(): solo_requested.emit())
+	button(right, "DUO  /  OFFLINE TEAM OPERATION", func(): duo_requested.emit())
 	var account_row := HBoxContainer.new()
 	right.add_child(account_row)
 	var account_label := label(account_row, "ONLINE ACCOUNT", 16, Color("9aafb4"))

@@ -43,7 +43,7 @@ func run() -> void:
 	replica.unpack(ally.pack(), false)
 	assert(replica.team_id == 0 and not ally.pack().has("team"), "Solo checkpoint representation stays compatible")
 	replica.queue_free()
-	assert(not game.suspend_solo(), "Incomplete duo persistence cannot overwrite the solo save")
+	assert(game.checkpoint.validate(game.snapshot_solo(), game.build_info.content_revision), "Duo snapshot passes schema validation without writing a player save")
 	eliminate(game, player, 10000, -2, true)
 	assert(not player.alive and player.rank == 0 and game.teams.living(game.actors).size() == 8)
 	game.ui.set_spectator(true, ally.display_name, player.rank)

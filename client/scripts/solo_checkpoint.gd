@@ -18,7 +18,10 @@ func validate(data, content: String) -> bool:
 	for key in ["version", "content", "id", "elapsed", "zone_tick", "centers", "rng_seed", "rng_state", "actors", "loot", "grenades", "clouds", "events", "next_loot", "next_grenade", "waypoint"]:
 		if not data.has(key):
 			return false
-	if data.version != 1 or data.content != content or not data.id is String:
+	var duo: bool = data.get("version") == 2 and data.get("mode") == "duo"
+	if (data.version != 1 and not duo) or data.content != content or not data.id is String:
+		return false
+	if data.version == 1 and data.get("mode", "solo") != "solo":
 		return false
 	var pattern := RegEx.new()
 	pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -41,7 +44,7 @@ func validate(data, content: String) -> bool:
 	if not data.actors is Array or data.actors.size() != 16:
 		return false
 	var prototype = Actor.new()
-	var template: Dictionary = prototype.pack()
+	var template: Dictionary = prototype.pack(duo)
 	var extras := {}
 	for field in EXTRA:
 		extras[field] = prototype.get(field)
@@ -68,13 +71,13 @@ func validate(data, content: String) -> bool:
 		ids.append(actor.id)
 		if not actor.b:
 			humans += 1
-			if actor.id != 1 or not actor.live or actor.r != 0:
+			if actor.id != 1 or (not duo and not actor.live) or actor.r != 0:
 				return false
 		if actor.k < 0 or actor.k > 15 or actor.r < 0 or actor.r > 16:
 			return false
 		if not point(actor.p) or not point(actor.vel) or actor.n.length() > 64:
 			return false
-		if not finite_number(actor.h, 0, 100) or not finite_number(actor.a, 0, 100) or actor.live != (actor.h > 0):
+		if not finite_number(actor.h, 0, 100) or not finite_number(actor.a, 0, 100) or actor.live != (actor.h > 0 or (duo and actor.downed)):
 			return false
 		if actor.w < 0 or actor.w > 2 or actor.mags.size() != 3 or actor.m != actor.mags[actor.w]:
 			return false
@@ -92,6 +95,8 @@ func validate(data, content: String) -> bool:
 			return false
 		if not finite_number(actor.reload, -1, 3.1) or not finite_number(actor.heal, -1, 3.5) or not finite_number(actor.throw, 0, 0.7):
 			return false
+	if duo and not validate_teams(data.actors):
+		return false
 	if humans != 1 or not data.loot is Dictionary or data.loot.size() > 1024 or not data.grenades is Array or data.grenades.size() > 32 or not data.clouds is Dictionary or data.clouds.size() > 32:
 		return false
 	for id in data.loot:
@@ -125,6 +130,53 @@ func validate(data, content: String) -> bool:
 		if not event is String or event.length() > 1024:
 			return false
 	return data.waypoint == null or (data.waypoint is Vector2 and data.waypoint.is_finite() and absf(data.waypoint.x) <= 115 and absf(data.waypoint.y) <= 115)
+
+func validate_teams(states: Array) -> bool:
+	var teams := {}
+	var by_id := {}
+	var placements := []
+	for actor in states:
+		if actor.team < 1 or actor.team > 8 or actor.r > 8 or not actor.get("knock_attacker") is int:
+			return false
+		if not finite_number(actor.down_health, 0, 100) or not finite_number(actor.bleed, 0, 30) or not finite_number(actor.revive_left, 0, 5):
+			return false
+		if actor.downed and (not actor.live or actor.h != 0 or actor.down_health <= 0 or actor.bleed <= 0 or actor.heal > 0 or actor.reload > 0 or actor.throw > 0):
+			return false
+		if not actor.downed and (actor.bleed != 0 or actor.down_health != 0):
+			return false
+		if (actor.revive_target == 0) != (actor.revive_left == 0):
+			return false
+		if not teams.has(actor.team):
+			teams[actor.team] = []
+		teams[actor.team].append(actor)
+		by_id[actor.id] = actor
+	if teams.size() != 8:
+		return false
+	for pair in teams.values():
+		if pair.size() != 2 or pair[0].r != pair[1].r:
+			return false
+		var living: bool = pair[0].live or pair[1].live
+		if living:
+			if pair[0].r != 0:
+				return false
+		else:
+			if pair[0].r < 2 or pair[0].r in placements:
+				return false
+			placements.append(pair[0].r)
+	placements.sort()
+	for index in range(placements.size()):
+		if placements[index] != 9 - placements.size() + index:
+			return false
+	for actor in states:
+		if actor.knock_attacker != 0 and not by_id.has(actor.knock_attacker):
+			return false
+		if actor.downed and not teams[actor.team].any(func(other): return other.live and not other.downed):
+			return false
+		if actor.revive_target != 0:
+			var target = by_id.get(actor.revive_target)
+			if not actor.live or actor.downed or target == null or not target.downed or actor.team != target.team or target.id == actor.id:
+				return false
+	return true
 
 func digest(bytes: PackedByteArray) -> String:
 	var hash := HashingContext.new()

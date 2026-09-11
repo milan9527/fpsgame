@@ -5,6 +5,51 @@ var vehicles: Dictionary = {}
 var next_id := 1
 var simulation_time := 0.0
 var pair_cooldowns: Dictionary = {}
+var map_spawned := false
+const MAP_SPAWNS := [
+	{"p": Vector3(4.5, 0, 72), "yaw": 0.0},
+	{"p": Vector3(-4.5, 0, -72), "yaw": PI},
+	{"p": Vector3(72, 0, -4.5), "yaw": PI / 2},
+	{"p": Vector3(-72, 0, 4.5), "yaw": -PI / 2}]
+
+func spawn_map(game) -> int:
+	if map_spawned:
+		return 0
+	var space: PhysicsDirectSpaceState3D = game.get_world_3d().direct_space_state
+	var count := 0
+	var terrain_ready := false
+	for candidate in MAP_SPAWNS:
+		var ray := PhysicsRayQueryParameters3D.create(candidate.p + Vector3.UP * 3, candidate.p - Vector3.UP, 1)
+		var ground := space.intersect_ray(ray)
+		if ground.is_empty():
+			continue
+		terrain_ready = true
+		if ground.normal.dot(Vector3.UP) < cos(deg_to_rad(35)) or absf(ground.position.y) > 0.3:
+			continue
+		var point: Vector3 = ground.position + Vector3.UP * 0.04
+		var query := PhysicsShapeQueryParameters3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = Vehicle.BODY_SIZE
+		query.shape = shape
+		query.transform = Transform3D(Basis(Vector3.UP, candidate.yaw), point + Vector3.UP * 0.9)
+		query.collision_mask = 7
+		query.margin = 0.01
+		if not space.intersect_shape(query, 1).is_empty():
+			continue
+		# Character spawns may not yet have reached the physics server.
+		var occupied := false
+		for actor in game.actors.values():
+			var local_point: Vector3 = query.transform.affine_inverse() * (actor.global_position + Vector3.UP * 0.9)
+			if absf(local_point.x) < 1.51 and absf(local_point.y) < 1.8 and absf(local_point.z) < 2.18:
+				occupied = true
+				break
+		if occupied:
+			continue
+		var car = spawn(game, point, candidate.yaw)
+		car.fuel = 60.0 + count * 8.0
+		count += 1
+	map_spawned = terrain_ready
+	return count
 
 func spawn(parent: Node3D, at: Vector3, heading := 0.0):
 	if not at.is_finite() or not is_finite(heading):
@@ -33,6 +78,7 @@ func clear() -> void:
 	next_id = 1
 	pair_cooldowns.clear()
 	simulation_time = 0
+	map_spawned = false
 
 func on_impact(other: Node, closing: float, driver: int, game, vehicle) -> void:
 	if other is Vehicle:

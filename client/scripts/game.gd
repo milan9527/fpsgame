@@ -808,6 +808,8 @@ func _physics_process(dt: float) -> void:
 					request_quit(1)
 		return
 	if not online:
+		if phase == "live" and training == null and not vehicle_fleet.map_spawned:
+			vehicle_fleet.spawn_map(self)
 		vehicle_fleet.step(dt, phase == "live")
 	for id in pending.keys():
 		if Time.get_ticks_msec() - pending[id].at > 8000:
@@ -2453,6 +2455,7 @@ func resume_solo() -> bool:
 		teams.configure(actors, "solo")
 	if state.version == 3:
 		checkpoint.Vehicles.restore(self, state.vehicles)
+	vehicle_fleet.map_spawned = true # A checkpoint restores its world, including an older vehicle-free world.
 	participants = {1: {"user_id": "", "kills": actors[1].kills, "rank": actors[1].rank, "team_id": actors[1].team_id}}
 	loot = state.loot
 	next_loot_id = state.next_loot

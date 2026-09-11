@@ -19,6 +19,7 @@ var vehicle_id := 0
 var collision_time := 0.0
 var collision_cooldowns: Dictionary = {}
 const BODY_SIZE := Vector3(2.25, 1.8, 3.6) # Includes tire sweep at full steering lock.
+const ARENA_LIMIT := 115.0
 var driver_id := 0
 var speed := 0.0
 var steering := 0.0
@@ -124,6 +125,9 @@ func collision_key(other: Node) -> String:
 	return "node:%d" % other.get_instance_id()
 
 func can_rotate(target_yaw: float) -> bool:
+	var extent := horizontal_extent(target_yaw)
+	if absf(global_position.x) + extent.x > ARENA_LIMIT or absf(global_position.z) + extent.y > ARENA_LIMIT:
+		return false
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = collision_shape.shape
 	query.transform = Transform3D(Basis(Vector3.UP, target_yaw), global_position + Vector3.UP * (BODY_SIZE.y / 2 + 0.04))
@@ -136,6 +140,10 @@ func can_rotate(target_yaw: float) -> bool:
 	query.exclude = excluded
 	query.margin = 0.001
 	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+func horizontal_extent(heading: float) -> Vector2:
+	return Vector2(absf(cos(heading)) * BODY_SIZE.x / 2 + absf(sin(heading)) * BODY_SIZE.z / 2,
+		absf(sin(heading)) * BODY_SIZE.x / 2 + absf(cos(heading)) * BODY_SIZE.z / 2)
 
 func simulate(dt: float, engine_enabled := true) -> void:
 	if not is_finite(dt) or dt <= 0 or dt > 0.05:
@@ -170,6 +178,11 @@ func simulate(dt: float, engine_enabled := true) -> void:
 	var forward := -global_basis.z
 	velocity.x = forward.x * speed
 	velocity.z = forward.z * speed
+	# Match the infantry arena limit, accounting for the entire rotated hull.
+	# Limit motion before the sweep instead of teleporting a collider afterwards.
+	var extent := horizontal_extent(rotation.y)
+	velocity.x = clampf(velocity.x, (-ARENA_LIMIT + extent.x - global_position.x) / dt, (ARENA_LIMIT - extent.x - global_position.x) / dt)
+	velocity.z = clampf(velocity.z, (-ARENA_LIMIT + extent.y - global_position.z) / dt, (ARENA_LIMIT - extent.y - global_position.z) / dt)
 	velocity.y -= 24.0 * dt
 	var before := global_position
 	var incoming := velocity

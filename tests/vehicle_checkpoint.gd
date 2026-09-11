@@ -47,6 +47,11 @@ func run() -> void:
 			game.damage(passenger, 10000, -2, true)
 			assert(passenger.downed and passenger.is_seated())
 		var state: Dictionary = game.snapshot_solo()
+		var previous := state.duplicate(true)
+		previous.content = "ash-valley-17"
+		assert(game.checkpoint.save_state(previous, "ash-valley-17"))
+		var migrated: Dictionary = game.checkpoint.load_state("ash-valley-18")
+		assert(migrated.content == "ash-valley-18" and migrated.vehicles == state.vehicles)
 		assert(state.version == 3 and state.mode == mode and game.checkpoint.validate(state, game.build_info.content_revision))
 		var malformed: Array = []
 		var bad := state.duplicate(true)

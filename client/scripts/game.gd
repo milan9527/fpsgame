@@ -26,6 +26,9 @@ var local_outbox: Array[Dictionary] = []
 var local_recorded_id := ""
 var actors: Dictionary = {}
 var vehicle_fleet = preload("res://scripts/vehicle_fleet.gd").new()
+var vehicle_frames = preload("res://scripts/vehicle_frame_pair.gd").new()
+var vehicle_replica = preload("res://scripts/vehicle_replica.gd").new()
+var world_frame_sequence := 0
 var sessions: Dictionary = {}
 var pending: Dictionary = {}
 var participants: Dictionary = {}
@@ -419,7 +422,9 @@ func start_solo(mode := "solo") -> void:
 	ui.show_game()
 
 func clear_actors() -> void:
-	vehicle_fleet.clear()
+	vehicle_frames.reset(network_round_id)
+	vehicle_replica.reset(self, network_round_id)
+	world_frame_sequence = 0
 	voice_relay.reset()
 	if team_voice != null:
 		team_voice.reset_round()
@@ -807,7 +812,7 @@ func _physics_process(dt: float) -> void:
 					push_error("Online smoke test failed to reach active match")
 					request_quit(1)
 		return
-	if not online:
+	if not online or dedicated:
 		if phase == "live" and training == null and not vehicle_fleet.map_spawned:
 			vehicle_fleet.spawn_map(self)
 		vehicle_fleet.step(dt, phase == "live")
@@ -1491,6 +1496,8 @@ func _process(dt: float) -> void:
 		var now := Time.get_ticks_msec()
 		ui.tactical_map.shared_pings = ui.tactical_map.shared_pings.filter(func(ping): return ping.get("expires_at", 0) > now)
 	update_network_status()
+	if online:
+		vehicle_replica.render(self, dt)
 	for id in actors:
 		actors[id].render_frame(dt, online, id == local_id, Input.is_action_pressed("aim"))
 	spectator.update_view(actors, local_id, phase)
@@ -1670,12 +1677,15 @@ func accepted(id: String, mode := "solo") -> void:
 	admission_token = ""
 	network_round_id = id
 	running = true
+	vehicle_frames.reset(id)
+	vehicle_replica.reset(self, id)
 	authenticated_at = Time.get_ticks_msec()
 	network_status.begin(authenticated_at)
 	network_sample_due = 0
 	ui.show_game()
 
 func broadcast_snapshot() -> void:
+	world_frame_sequence += 1
 	var states: Array = []
 	for actor in actors.values():
 		states.append(actor.pack(true))
@@ -1684,8 +1694,9 @@ func broadcast_snapshot() -> void:
 	var grenade_states: Array = []
 	for grenade in grenades.values():
 		grenade_states.append(grenade.pack())
+	var vehicle_packets: Array[PackedByteArray] = preload("res://scripts/vehicle_snapshot.gd").encode(match_id, world_frame_sequence, preload("res://scripts/vehicle_snapshot.gd").capture(vehicle_fleet))
 	for id in sessions:
-		if not peer_ready(id):
+		if not peer_ready(id) or sessions[id].get("revoking", false):
 			continue
 		if match_mode == "duo":
 			team_ping_snapshot.rpc_id(id, match_id, team_pings.visible_for(id, elapsed, actors, teams))
@@ -1700,12 +1711,14 @@ func broadcast_snapshot() -> void:
 		if supplies_changed:
 			world_sync.rpc_id(id, match_id, loot)
 		# Four actors per compressed packet stay below the ENet MTU.
-		for offset in range(0, states.size(), 4):
-			var payload := {"round_id": match_id, "actors": states.slice(offset, offset + 4), "roster": actors.keys(), "phase": phase, "time": phase_time, "zone": zone, "zone_state": zone_state, "events": events, "mode": match_mode}
+		for offset in range(0, maxi(1, states.size()), 4):
+			var payload := {"round_id": match_id, "frame_seq": world_frame_sequence, "actors": states.slice(offset, offset + 4), "roster": actors.keys(), "phase": phase, "time": phase_time, "zone": zone, "zone_state": zone_state, "events": events, "mode": match_mode}
 			var packet := var_to_bytes(payload).compress(FileAccess.COMPRESSION_DEFLATE)
 			if packet.size() > 1150:
 				push_warning("Snapshot exceeds target packet size: " + str(packet.size()))
 			snapshot.rpc_id(id, packet)
+		for packet in vehicle_packets:
+			vehicle_snapshot.rpc_id(id, packet)
 
 func submit_team_ping(point: Vector2, clear: bool) -> void:
 	if not running or phase != "live" or match_mode != "duo" or not actors.has(local_id) or not actors[local_id].alive:
@@ -1759,12 +1772,26 @@ func receive_voice(round_id: String, sender: int, sequence: int, packet: PackedB
 
 @rpc("authority", "call_remote", "unreliable_ordered", 3)
 func snapshot(packet: PackedByteArray) -> void:
-	if dedicated:
+	if dedicated or not online or packet.size() > 1150:
 		return
 	var payload: Dictionary = bytes_to_var(packet.decompress_dynamic(65536, FileAccess.COMPRESSION_DEFLATE))
-	if network_round_id != "" and payload.round_id != network_round_id:
+	if not vehicle_frames.offer_actors(payload, Time.get_ticks_msec()):
 		return
 	network_status.received(Time.get_ticks_msec())
+	apply_network_pair()
+
+@rpc("authority", "call_remote", "unreliable", 6)
+func vehicle_snapshot(packet: PackedByteArray) -> void:
+	if dedicated or not online:
+		return
+	vehicle_frames.offer_vehicles(packet, Time.get_ticks_msec())
+	apply_network_pair()
+
+func apply_network_pair() -> void:
+	var pair: Dictionary = vehicle_frames.take_pair()
+	if pair.is_empty():
+		return
+	var payload: Dictionary = pair.payload
 	for data in payload.actors:
 		if not actors.has(data.id):
 			spawn_actor(data.id, data.n, data.b, data.p)
@@ -1780,6 +1807,7 @@ func snapshot(packet: PackedByteArray) -> void:
 	zone_state = payload.zone_state
 	zone_center = zone_state.get("center", Vector2.ZERO)
 	events = payload.events
+	vehicle_replica.apply_frame(self, pair.vehicles, pair.poses)
 
 func sign_in(username: String, password: String, register: bool, endpoint: String, mode := "solo") -> void:
 	if bot_client and OS.has_environment("TEST_GAME_MODE"):

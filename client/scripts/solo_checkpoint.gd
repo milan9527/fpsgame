@@ -203,12 +203,14 @@ func read_copy(file_path: String, content: String) -> Dictionary:
 	var data = bytes_to_var(envelope.payload)
 	# The previous content version has the same terrain and simulation schema,
 	# except for the new attachment inventory. Preserve its world and round ID.
-	if data is Dictionary and data.get("version") == 1 and data.get("content") == "ash-valley-16" and content == "ash-valley-17" and data.get("actors") is Array:
+	if data is Dictionary and data.get("version") == 1 and data.get("content") == "ash-valley-16" and content in ["ash-valley-17", "ash-valley-18"] and data.get("actors") is Array:
 		for actor in data.actors:
 			if not actor is Dictionary or actor.has("grips") or actor.has("grip_slots"):
 				return {}
 			actor.grips = 0
 			actor.grip_slots = PackedInt32Array([0, 0, 0])
+		data.content = "ash-valley-17"
+	if data is Dictionary and data.get("version") in [1, 2, 3] and data.get("content") == "ash-valley-17" and content == "ash-valley-18":
 		data.content = content
 	return data if validate(data, content) else {}
 

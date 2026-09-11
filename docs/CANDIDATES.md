@@ -25,7 +25,7 @@
 
 此候选包含载具、空间音频、坐姿命中与回溯、观战跟车、机器人直线进圈驾驶及存档恢复处理。游戏包内包含更新后的 0.36 玩家指南。真人仍可在离线 SOLO/DUO 入口运行；在线需要兼容的 0.36 服务。当前发布服务和默认包仍保持 0.35，已核对默认压缩包校验和未变化。
 
-候选 PCK 已通过以下受控联网联调，实际自然完整对局与后续发布切换尚未完成。整体商业级游戏目标也仍未完成。
+候选 PCK 已通过以下受控联网联调及下述自然完整对局检查，后续发布切换尚未完成。整体商业级游戏目标也仍未完成。
 
 - 双客户端驾驶/乘坐与发动机音频同步。
 - 30 FPS、单向 30 ms 延迟下三客户端移动射击：13.2 m/s 时首发命中驾驶员，乘客和车体未受伤。
@@ -34,6 +34,22 @@
 - 四客户端两支邀请队伍、救援中断与恢复、标点隔离、合成语音转发、结算后返回队伍，以及 PostgreSQL 四条战绩与分模式统计。
 
 `tools/test_vehicle_login.py --candidate-dir <候选目录>` 在启动前及结束后核对压缩包和运行文件；专服与全部客户端使用候选 PCK。每项 `*-packed-8245350d-verification.json` 记录场景、候选校验和、测试夹具哈希和日志。汇总为候选目录的 `network-verification.json`；队伍联调为 `artifacts/candidate-036-party-combat.log`，原始日志前缀 `artifacts/candidate-8245350d-voice-relay-network-`。这些结果不代表公网长期稳定性或物理麦克风验收。
+
+### 正常时间完整对局
+
+`tools/test_candidate_full_round.py --candidate-dir <候选目录> --mode solo`（或 `duo`）以一名自动操作的真人客户端和 15 名正常机器人运行。服务端测试脚本只观察帧、对局与车辆数量，不改写缩圈、胜负、人物位置或 AI；时间倍率固定为 1。
+
+solo 在游戏时间约 82.3 秒自然结算，真人排名 13；duo 约 99.5 秒结算，真人队伍排名 4。两场均确认 16 名参战者、四辆车、客户端结算、PostgreSQL 一条对应真人战绩，以及该模式场次/击杀/胜场统计变化。检查清理后的日志未发现脚本错误或对象泄漏。报告分别为候选目录的 `natural-round-solo/verification.json`、`natural-round-duo/verification.json`，汇总日志为 `artifacts/candidate-036-natural-{solo,duo}.log`。
+
+这两场没有观察到机器人实际驾驶，因此不增加自然驾驶覆盖；机器人驾驶的证据仍为专项场景。两场短局也不代表五分钟时限结算、16 真人负载、反复重开或公网长期稳定性。
+
+### 精确候选资源的专服镜像
+
+`tools/build_candidate_image.py --candidate-dir <候选目录>` 使用 `infra/packaged-game.Dockerfile`，直接复制候选包的执行文件、PCK 和版本清单；构建后从镜像提取三份文件，与候选包逐字节校验，使用非 root 用户、无网络容器运行离线启动检查。不会启动或替换运行服务。
+
+本候选镜像标签 `iron-meridian-candidate:8245350d2e2c`，已验证具体 ID：
+`sha256:d7e86476802eb4299d989ae77854dd8fca85246d12b8f9a113abda8de8753e91`。
+报告 `server-image.json`，构建和隔离启动日志在候选目录 `logs/server-image-{build,smoke}.log`。发布时应使用具体镜像 ID 并另做服务与网络验收；目前尚未部署。
 
 ## 2026-09-11 的 0.35 候选
 

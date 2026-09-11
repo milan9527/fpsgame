@@ -47,6 +47,11 @@ def box(name, loc, scale, mat, bevel=0.012):
     return o
 
 
+# A focused rebuild avoids changing unrelated weapon and effect assets.
+if os.environ.get('ASSET_ONLY') == 'operator':
+    exec(compile((ROOT / 'tools' / 'build_operator.py').read_text(), 'build_operator.py', 'exec'))
+    raise SystemExit(0)
+
 # Blender Z up, +Y forward exports to Godot -Z forward.
 box('Upper receiver', (0, 0.015, 0), (0.10, 0.34, 0.11), steel)
 box('Lower receiver', (0, -0.015, -0.065), (0.08, 0.23, 0.07), polymer)

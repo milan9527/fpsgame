@@ -56,7 +56,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 `tests/rescue_rules.gd` 在实际 Godot 世界中验证倒地、动作限制、真实墙体遮挡、快照复制/恢复、受伤/移动/距离/再次交互中断、可靠动作重放、完成、机器人救援、流血归因、整队淘汰及单人立即死亡。证据 `artifacts/rescue-rules.log`。旧存档和单人完整对局分别见 `artifacts/rescue-solo-checkpoint.log` 与 `artifacts/rescue-solo-smoke.log`。
 
-四客户端倒地/扶起/两次受伤中断/队伍胜负同步已通过专门验收，战绩落库已接入本轮验收，退出/会话撤销组合验收现已通过（见后文）。原有入场脚本仍只证明入场与队伍快照。当前倒地使用蹲姿，没有专用倒地动画；队伍观战、地图及邀请大厅已实现。开发协议 16 扩展快照字段 `downed`、`down_health`、`bleed`、`revive_target`、`revive_left`；旧单人检查点不包含这些字段。
+四客户端倒地/扶起/两次受伤中断/队伍胜负同步已通过专门验收，战绩落库已接入本轮验收，退出/会话撤销组合验收现已通过（见后文）。原有入场脚本仍只证明入场与队伍快照。倒地待援、爬行及倒地死亡现使用专用 Blender 动画（见后文）；队伍观战、地图及邀请大厅已实现。开发协议 16 扩展快照字段 `downed`、`down_health`、`bleed`、`revive_target`、`revive_left`；旧单人检查点不包含这些字段。
 
 ## 四客户端救援网络验收
 
@@ -200,3 +200,15 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 `.venv/bin/python tools/test_rescue_network.py --parties --team-pings` 已通过四真实客户端验证：各自通过地图鼠标事件发送，每个客户端仅收到自己及邀请同伴的两个标点，敌队标点不进入其列表；原救援、团队胜负和四条战绩落库继续通过。主日志 `artifacts/team-pings-network.log`，专服和客户端日志以 `team-pings-network-` 开头。新增 RPC 后已重新构建独立开发专服镜像，发布包仍为 0.34。
 
 独立开发 UDP 27031 已更新；`artifacts/team-pings-deployed-admission.log` 记录两个真实客户端对部署后服务完成登录、邀请和同队入场，确认新增 RPC 的脚本一致性。
+
+## Blender 倒地动画
+
+角色资源新增 `DownedIdle`（待援）、`DownedCrawl`（缓慢移动）和 `DownedDeath`（从倒地侧倒）三条骨骼动画。保留原有 17 根骨骼、四个材质表面和九条动作，总计 12 条动作。Godot 在 downed 状态优先选择专用姿态，按爬行速度调整播放，跳过持枪上身瞄准叠加；扶起后恢复正常姿态。倒地时第一、第三人称武器隐藏，扶起后恢复；倒地死亡保持隐藏并使用不循环侧倒动作。原有蹲姿碰撞体和权威 1 m/s 移动规则未改动。
+
+可复现生成命令：`ASSET_ONLY=operator tools/blender-4.3.2-linux-x64/blender --background --python tools/build_assets.py`。仅重建 `art/operator.blend` 与 `client/assets/operator.glb`，避免重新生成无关武器资源；不设置 ASSET_ONLY 时仍运行原完整资源生成流程。
+
+`tests/downed_animation.gd` 在实际渲染器中检查三种姿态、爬行动作的手部骨骼变化、蒙皮边界、武器显示、扶起恢复、站立死亡及倒地死亡。倒地蒙皮顶点高度约 1.147 m，最低约 -0.012 m；侧倒尸体高度约 0.759 m，最低约 -0.069 m。日志 `artifacts/downed-animation-render.log`，姿态对比 `artifacts/downed-animation.png`。旧九条动画及蹲姿蒙皮/足部接触回归见 `artifacts/downed-animation-regression.log`。
+
+四真实客户端救援场景加入倒地动画与第三人称武器隐藏断言，并继续验证扶起、共享胜负及四条战绩落库，见 `artifacts/downed-animation-network.log`。本轮只更新开发资源，发布包仍为 0.34。
+
+开发专服镜像已重建并启动成功，部署记录 `artifacts/downed-animation-deployment.log`；发布包未覆盖。

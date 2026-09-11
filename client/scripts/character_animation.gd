@@ -18,7 +18,7 @@ func setup(model: Node3D) -> void:
 		var short_name: String = name.get_slice("/", name.get_slice_count("/") - 1)
 		clips[short_name] = name
 		var animation := player.get_animation(name)
-		animation.loop_mode = Animation.LOOP_NONE if short_name in ["Death", "Reload", "CrouchReload"] else Animation.LOOP_LINEAR
+		animation.loop_mode = Animation.LOOP_NONE if short_name in ["Death", "DownedDeath", "Reload", "CrouchReload"] else Animation.LOOP_LINEAR
 	available = clips.has("Idle") and clips.has("CrouchIdle") and clips.has("Walk") and clips.has("Death")
 
 func update(actor, dt: float) -> void:
@@ -27,7 +27,9 @@ func update(actor, dt: float) -> void:
 	var speed := Vector2(actor.velocity.x, actor.velocity.z).length()
 	var desired := "Idle"
 	if not actor.alive:
-		desired = "Death"
+		desired = "DownedDeath" if active_clip.begins_with("Downed") and clips.has("DownedDeath") else "Death"
+	elif actor.downed:
+		desired = "DownedCrawl" if speed > 0.1 else "DownedIdle"
 	elif actor.crouched:
 		desired = "CrouchReload" if actor.reload_left > 0 else ("CrouchWalk" if speed > 0.25 else "CrouchIdle")
 	elif not actor.grounded:
@@ -44,7 +46,7 @@ func update(actor, dt: float) -> void:
 	if active_clip != desired:
 		active_clip = desired
 		# Stance changes must immediately match the collision height; locomotion blends.
-		var blend := 0.0 if desired.begins_with("Crouch") or desired == "Death" else 0.12
+		var blend := 0.0 if desired.begins_with("Crouch") or desired.begins_with("Downed") or desired == "Death" else 0.12
 		player.play(clips[desired], blend)
 		if desired.ends_with("Reload"):
 			var length := player.get_animation(clips[desired]).length
@@ -56,10 +58,12 @@ func update(actor, dt: float) -> void:
 		player.speed_scale = clampf(speed / 8, 0.6, 1.4)
 	elif desired == "CrouchWalk":
 		player.speed_scale = clampf(speed / 2.8, 0.5, 1.5)
+	elif desired == "DownedCrawl":
+		player.speed_scale = clampf(speed, 0.25, 1.2)
 	elif desired.ends_with("Reload"):
 		player.speed_scale = player.get_animation(clips[desired]).length / actor.RELOAD[actor.weapon]
 	player.advance(dt)
-	if actor.alive:
+	if actor.alive and not actor.downed:
 		var spine := skeleton.find_bone("Spine")
 		if spine >= 0:
 			var pose := skeleton.get_bone_global_pose(spine)

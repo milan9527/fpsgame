@@ -57,6 +57,7 @@ func run() -> void:
 		click.position = game.ui.tactical_map.world_to_map(Vector2(10 + 10 * int(OS.get_environment("TEST_PING_SLOT")), 20))
 		game.ui.tactical_map._gui_input(click)
 	var observed_knock := false
+	var observed_down_animation := false
 	var observed_progress := false
 	var observed_revive := false
 	var interrupts := 0
@@ -92,6 +93,9 @@ func run() -> void:
 		if patient.downed:
 			observed_knock = true
 			assert(patient.alive and patient.health == 0 and patient.bleed_left > 0)
+			if patient.character_animation.active_clip in ["DownedIdle", "DownedCrawl"]:
+				assert(not patient.third_person_gun.visible)
+				observed_down_animation = true
 		if helper.revive_target == patient_id:
 			observed_progress = true
 			active = true
@@ -107,6 +111,7 @@ func run() -> void:
 			requests += 1
 			await interact()
 	assert(observed_knock and observed_progress and observed_revive and interrupts == 2)
+	assert(observed_down_animation)
 	if ping_case:
 		assert(observed_team_pings)
 		print("TEAM_PINGS_NETWORK_CLIENT_PASS map_click=ok own_and_ally=ok enemies_excluded=ok")

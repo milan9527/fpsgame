@@ -22,7 +22,7 @@ def joint_between(start, end, length, bend):
     return (start + end) * 0.5 + perpendicular * math.sqrt(max(0.001, length * length - distance * distance / 4))
 
 
-def joints(crouch=0.0, phase=0.0, stride=0.0, lift=0.0, reload=0.0, jump=0.0, breath=0.0, death=0.0):
+def joints(crouch=0.0, phase=0.0, stride=0.0, lift=0.0, reload=0.0, jump=0.0, breath=0.0, death=0.0, downed=0.0):
     body = vec(0, -0.12 * crouch, -0.65 * crouch + breath)
     p = {'Root': vec(0, 0, 0), 'Hips': vec(0, 0, 0.94) + body,
          'Spine': vec(0, 0, 1.36) + body, 'Neck': vec(0, 0, 1.48) + body,
@@ -40,11 +40,33 @@ def joints(crouch=0.0, phase=0.0, stride=0.0, lift=0.0, reload=0.0, jump=0.0, br
                   f'Elbow.{side}': elbow, f'Hand.{side}': hand, f'Finger.{side}': hand + vec(0, 0.09, 0)})
     p['Weapon'] = vec(0.1, 0.235, 1.35) + body
     p['Barrel'] = p['Weapon'] + vec(0, 0.3, 0)
+    if downed:
+        # Four-point support: knees and palms, with a low forward-leaning torso.
+        p.update({'Hips': vec(0, -0.08, 0.43 + breath),
+                  'Spine': vec(0, 0.18, 0.72 + breath),
+                  'Neck': vec(0, 0.25, 0.82 + breath),
+                  'Head': vec(0, 0.34, 1.05 + breath)})
+        for side, sign in [('L', -1), ('R', 1)]:
+            step = math.sin(phase + (math.pi if sign == 1 else 0)) * stride
+            hip = p['Hips'] + vec(sign * 0.14, 0, 0)
+            knee = vec(sign * 0.18, 0.14 + step, 0.14)
+            ankle = vec(sign * 0.18, -0.24 + step, 0.10)
+            shoulder = p['Spine'] + vec(sign * 0.28, 0, 0)
+            hand = vec(sign * 0.27, 0.43 - step, 0.15)
+            elbow = joint_between(shoulder, hand, 0.31, vec(sign, -0.2, 0))
+            p.update({f'Hip.{side}': hip, f'Knee.{side}': knee, f'Ankle.{side}': ankle,
+                      f'Toe.{side}': ankle + vec(0, -0.23, -0.025),
+                      f'Shoulder.{side}': shoulder, f'Elbow.{side}': elbow,
+                      f'Hand.{side}': hand, f'Finger.{side}': hand + vec(0, 0.09, 0)})
+        p['Weapon'] = p['Spine']
+        p['Barrel'] = p['Weapon'] + vec(0, 0.3, 0)
     if death:
         pivot = vec(0, 0, 0.2)
-        rotation = Matrix.Rotation(math.pi * 0.5 * death, 3, 'X')
+        rotation = Matrix.Rotation(math.pi * 0.5 * death, 3, 'Y' if downed else 'X')
         for key in p:
             p[key] = pivot + rotation @ (p[key] - pivot)
+            if downed:
+                p[key].z += 0.15 * death
     return p
 
 
@@ -135,6 +157,9 @@ clips = [('Idle', 60, {}), ('Walk', 30, {'stride': 0.22, 'lift': 0.10}),
          ('Run', 20, {'stride': 0.31, 'lift': 0.15}), ('CrouchIdle', 60, {'crouch': 1}),
          ('CrouchWalk', 36, {'crouch': 1, 'stride': 0.10, 'lift': 0.045}),
          ('CrouchReload', 60, {'crouch': 1, 'reload': 1}),
+         ('DownedIdle', 60, {'downed': 1}),
+         ('DownedCrawl', 48, {'downed': 1, 'stride': 0.07}),
+         ('DownedDeath', 24, {'downed': 1, 'death': 1}),
          ('Jump', 24, {'jump': 1}), ('Reload', 60, {'reload': 1}), ('Death', 32, {'death': 1})]
 bpy.context.scene.render.fps = 30
 for clip, end_frame, options in clips:

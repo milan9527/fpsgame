@@ -7,10 +7,12 @@ import subprocess
 import socket
 import re
 import time
+import hashlib
 
 import httpx
 from test_accounts import account
 from udp_impairment import ImpairedUDP
+from candidate_runtime import candidate_command
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = "http://127.0.0.1:8001"
@@ -28,6 +30,7 @@ def main():
     parser.add_argument("--bot-driver", action="store_true", help="Authenticated passenger rides with its server-assigned bot teammate")
     parser.add_argument("--client-fps", type=int, choices=[30, 60, 120], default=0)
     parser.add_argument("--latency-ms", type=int, default=0, help="Constant one-way UDP delay without packet loss")
+    parser.add_argument("--candidate-dir", type=Path, help="Run server and all clients from a verified candidate PCK")
     options = parser.parse_args()
     mode = options.mode
     if options.bot_driver and (mode != "duo" or options.spectator or options.combat or options.departure or options.impaired):
@@ -64,12 +67,18 @@ def main():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
         probe.bind(("127.0.0.1", 0))
         port = str(probe.getsockname()[1])
-    manifest = json.loads((ROOT / "client/protocol.json").read_text())
+    candidate = None
+    runtime = [str(ROOT / "tools/godot"), "--headless", "--path", str(ROOT / "client")]
+    if options.candidate_dir:
+        runtime, candidate = candidate_command(options.candidate_dir)
+        manifest = candidate["manifest"]
+        suffix += "-packed-" + candidate["commit"][:8]
+    else:
+        manifest = json.loads((ROOT / "client/protocol.json").read_text())
     response = httpx.get(BASE + "/protocol")
     response.raise_for_status()
-    assert response.json() == manifest, "Development API must match source build"
+    assert response.json() == manifest, "Development API must match the selected runtime manifest"
     credentials = [account(f"vehicle-login-{mode}{account_suffix}-{i}", base=BASE) for i in range(count)]
-    runtime = [str(ROOT / "tools/godot"), "--headless", "--path", str(ROOT / "client")]
     env = dict(os.environ, GAME_PORT=port, GAME_MODE=mode, API_URL=BASE,
                VEHICLE_DEPARTURE=options.departure,
                VEHICLE_IMPAIRED="1" if options.impaired else "",
@@ -206,6 +215,24 @@ def main():
                       "client_fps_cap": options.client_fps, "relays": [r.stats for r in relays]}
             (ROOT / f"artifacts/vehicle-login-{mode}{suffix}-network.json").write_text(json.dumps(report, indent=2) + "\n")
             relays.clear()
+        if candidate:
+            _, verified = candidate_command(options.candidate_dir)
+            assert verified["sha256"] == candidate["sha256"]
+        evidence = {
+            "status": "passed", "manifest": manifest, "mode": mode, "clients": count,
+            "candidate": {"commit": candidate["commit"], "archive_sha256": candidate["sha256"],
+                          "pck_sha256": candidate["pck_sha256"]} if candidate else None,
+            "scenario": {key: getattr(options, key) for key in
+                         ("departure", "impaired", "audio", "combat", "spectator",
+                          "bot_driver", "client_fps", "latency_ms")},
+            "logs": [str(entry[2].relative_to(ROOT)) for entry in entries],
+            "fixture_sha256": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+                               for name in ("tools/test_vehicle_login.py", "tests/vehicle_login_server.gd",
+                                            "tests/vehicle_login_client.gd")},
+            "scope": "Backend admission and bounded vehicle scenario; not a full match or public-network soak test",
+        }
+        (ROOT / f"artifacts/vehicle-login-{mode}{suffix}-verification.json").write_text(
+            json.dumps(evidence, indent=2) + "\n")
         print(f"VEHICLE_LOGIN_PASS mode={mode} departure={options.departure or 'none'} impaired={options.impaired} backend_auth=ok tickets=ok clients={count} driving=ok passenger=ok brake=ok exits=ok")
     finally:
         for process, stream, _, _ in entries:

@@ -98,7 +98,7 @@ for enabled, prefix in [(options.parties, "invited-party-network"),
     if enabled:
         log_prefix = prefix
 if candidate:
-    log_prefix = "candidate-" + log_prefix
+    log_prefix = "candidate-" + candidate["commit"][:8] + "-" + log_prefix
 server_path = ROOT / "artifacts" / f"{log_prefix}-server.log"
 processes = []
 with server_path.open("w") as log:

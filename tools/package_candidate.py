@@ -20,7 +20,7 @@ CASES = [
     "foregrip_rules", "input_timeout_rules", "damage_indicators_rules",
     "zone_rules", "inventory_rules", "death_loot_rules", "drop_rules",
     "voice_resampler", "voice_relay", "voice_playback", "voice_capture",
-    "vehicle_slopes", "vehicle_spectator",
+    "vehicle_slopes", "vehicle_spectator", "bot_driver",
 ]
 
 

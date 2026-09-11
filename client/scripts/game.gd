@@ -1147,6 +1147,9 @@ func apply_actions(actor, cmd: Dictionary, loot_target := -1, explicit_pickup :=
 func bot_input(actor, dt: float) -> void:
 	if not actor.alive:
 		return
+	if actor.is_seated():
+		actor.navigator.driver.drive(actor, dt)
+		return
 	if match_mode == "duo" and rescue.bot_rescue(self, actor, dt):
 		return
 	actor.bot_think -= dt
@@ -1241,6 +1244,9 @@ func bot_input(actor, dt: float) -> void:
 	if actor.sprint:
 		actor.navigator.cover.clear()
 		actor.crouch = false
+	destination = actor.navigator.driver.approach(self, actor, destination, dt, actor.sprint and not actor.shooting and actor.bot_memory_left <= 0 and not escape.is_finite())
+	if actor.is_seated():
+		return
 	var direction: Vector3 = actor.navigator.steer(actor, world, destination, dt, 0.1 if escape.is_finite() or (cover_point.is_finite() and not actor.sprint) else 1.5)
 	# Short-range separation supplements global paths around static geometry.
 	if direction.length_squared() > 0:

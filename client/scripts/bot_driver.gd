@@ -1,0 +1,91 @@
+extends RefCounted
+
+var destination := Vector3.INF
+var cooldown := 0.0
+var trip_time := 0.0
+var stopping := false
+var approach_point := Vector3.INF
+
+func corridor(car, end: Vector3, actor) -> bool:
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = car.collision_shape.shape
+	query.transform = car.global_transform
+	query.transform.origin += Vector3.UP * (car.BODY_SIZE.y / 2 + 0.08)
+	query.motion = end - car.global_position
+	query.motion.y = 0
+	query.collision_mask = 7
+	var excluded: Array[RID] = [car.get_rid(), actor.get_rid()]
+	for index in range(2):
+		var occupant = car.seats.occupant(index)
+		if occupant != null and occupant != actor:
+			excluded.append(occupant.get_rid())
+	query.exclude = excluded
+	var space = car.get_world_3d().direct_space_state
+	return space.intersect_shape(query, 1).is_empty() and space.cast_motion(query)[0] >= 0.999
+
+func flat_route(car, end: Vector3, actor) -> bool:
+	if not corridor(car, end, actor):
+		return false
+	var steps := ceili(car.position.distance_to(end) / 3.0)
+	for index in range(steps + 1):
+		var point: Vector3 = car.position.lerp(end, float(index) / maxi(1, steps))
+		var ray := PhysicsRayQueryParameters3D.create(point + Vector3.UP * 1, point - Vector3.UP, 1)
+		var floor_hit: Dictionary = car.get_world_3d().direct_space_state.intersect_ray(ray)
+		if floor_hit.is_empty() or floor_hit.normal.y < 0.98 or absf(floor_hit.position.y - car.position.y) > 0.25:
+			return false
+	return true
+
+func approach(game, actor, goal: Vector3, dt: float, eligible: bool) -> Vector3:
+	cooldown = maxf(0, cooldown - dt)
+	if not eligible or actor.health < 50 or actor.heal_left > 0:
+		approach_point = Vector3.INF
+		return goal
+	if cooldown > 0:
+		return approach_point if approach_point.is_finite() else goal
+	approach_point = Vector3.INF
+	if actor.position.distance_to(goal) < 25:
+		return goal
+	# Expensive corridor/ground checks are budgeted per bot, not per physics frame.
+	cooldown = 0.5
+	for car in game.vehicle_fleet.vehicles.values():
+		if car.destroyed or not car.grounded or car.fuel < 5 or car.seats.occupant(0) != null or absf(car.speed) > 0.1:
+			continue
+		var door: Vector3 = car.to_global(car.seats.DOORS[0]) - Vector3.UP * 0.9
+		if actor.position.distance_to(door) > 12:
+			continue
+		var delta: Vector3 = goal - car.position
+		if absf(wrapf(atan2(-delta.x, -delta.z) - car.rotation.y, -PI, PI)) > 0.5:
+			continue
+		if not flat_route(car, goal, actor):
+			continue
+		if car.seats.enter(actor, 0):
+			approach_point = Vector3.INF
+			destination = goal
+			trip_time = 0
+			stopping = false
+			return actor.position
+		approach_point = door
+		return door
+	return goal
+
+func drive(actor, dt: float) -> void:
+	actor.move_input = Vector2.ZERO
+	actor.shooting = false
+	actor.sprint = false
+	var car = actor.vehicle_ref.get_ref()
+	if actor.vehicle_seat != 0 or not actor.alive or actor.downed:
+		return
+	trip_time += dt
+	var delta: Vector3 = destination - car.position if destination.is_finite() else Vector3.ZERO
+	delta.y = 0
+	var distance := delta.length()
+	var stopping_distance: float = car.speed * car.speed / (2 * car.BRAKING) + 4
+	var probe_end: Vector3 = car.position - car.global_basis.z * maxf(4, stopping_distance)
+	stopping = stopping or distance <= stopping_distance or trip_time > 20 or car.fuel <= 0 or car.destroyed or not corridor(car, probe_end, actor)
+	var error := wrapf(atan2(-delta.x, -delta.z) - car.rotation.y, -PI, PI)
+	stopping = stopping or absf(error) > 1.1
+	car.command(actor.actor_id, car.input_sequence + 1, 1.0 if not stopping and car.speed < 12 else 0.0,
+		clampf(-error * 1.8, -1, 1), stopping, car.seats.epoch)
+	if stopping and absf(car.speed) < 0.1 and car.seats.exit(actor):
+		cooldown = 8
+		destination = Vector3.INF

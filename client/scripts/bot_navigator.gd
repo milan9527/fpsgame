@@ -4,6 +4,7 @@ var cover = preload("res://scripts/bot_cover.gd").new()
 var utilities = preload("res://scripts/bot_utilities.gd").new()
 var hazards = preload("res://scripts/bot_hazards.gd").new()
 var vehicle_avoidance = preload("res://scripts/bot_vehicle_avoidance.gd").new()
+var driver = preload("res://scripts/bot_driver.gd").new()
 
 var path := PackedVector3Array()
 var index := 0

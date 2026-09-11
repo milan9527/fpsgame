@@ -48,6 +48,26 @@ func run() -> void:
 			helper_id = pair[1]
 	var patient = game.actors[patient_id]
 	var helper = game.actors[helper_id]
+	var voice_case := OS.get_environment("TEST_VOICE_RELAY") == "1"
+	var voice_senders := {}
+	var voice_parity := {}
+	var voice_payload := PackedByteArray()
+	var voice_sequence := 0
+	var voice_due := 0
+	if voice_case:
+		var samples := PackedVector2Array()
+		samples.resize(320)
+		samples.fill(Vector2.ONE * (0.1 + 0.01 * (game.local_id % 7)))
+		voice_payload = load("res://scripts/voice_codec.gd").encode(samples)
+		game.voice_packet_received.connect(func(sender: int, sequence: int, packet: PackedByteArray):
+			assert(sender != game.local_id and game.actors.has(sender))
+			assert(game.actors[sender].team_id == game.actors[game.local_id].team_id)
+			var decoded: PackedVector2Array = load("res://scripts/voice_codec.gd").decode(packet)
+			assert(decoded.size() == 320 and absf(decoded[0].x - (0.1 + 0.01 * (sender % 7))) < 0.0001)
+			assert(sequence >= 0 and sequence < 100000)
+			voice_senders[sender] = int(voice_senders.get(sender, 0)) + 1
+			voice_parity[sequence % 2] = true
+		)
 	var ping_case := OS.get_environment("TEST_TEAM_PINGS") == "1"
 	var observed_team_pings := false
 	if ping_case:
@@ -71,6 +91,13 @@ func run() -> void:
 	while game.phase != "finished":
 		assert(Time.get_ticks_msec() < deadline, "Network rescue scenario timed out")
 		await process_frame
+		if voice_case and Time.get_ticks_msec() >= voice_due:
+			voice_due = Time.get_ticks_msec() + 40
+			game.submit_voice.rpc_id(1, game.network_round_id, voice_sequence + 1, voice_payload)
+			game.submit_voice.rpc_id(1, game.network_round_id, voice_sequence, voice_payload)
+			# A forged round must never produce a receiver notification.
+			game.submit_voice.rpc_id(1, "old-round", voice_sequence + 100000, voice_payload)
+			voice_sequence += 2
 		if ping_case and game.ui.tactical_map.shared_pings.size() == 2:
 			for marker in game.ui.tactical_map.shared_pings:
 				assert(game.actors.has(marker.id) and game.actors[marker.id].team_id == game.actors[game.local_id].team_id)
@@ -112,6 +139,9 @@ func run() -> void:
 			await interact()
 	assert(observed_knock and observed_progress and observed_revive and interrupts == 2)
 	assert(observed_down_animation)
+	if voice_case:
+		assert(voice_senders.size() == 1 and voice_senders.values()[0] >= 10 and voice_parity.size() == 2)
+		print("VOICE_RELAY_CLIENT_PASS team_sender_only=ok synthetic_audio_decoded=ok")
 	if ping_case:
 		assert(observed_team_pings)
 		print("TEAM_PINGS_NETWORK_CLIENT_PASS map_click=ok own_and_ally=ok enemies_excluded=ok")

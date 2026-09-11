@@ -17,8 +17,11 @@ parser.add_argument("--return-to-party", action="store_true", help="Use the resu
 parser.add_argument("--revoke-member", action="store_true", help="Revoke a revived teammate and verify their eventual team result")
 parser.add_argument("--drop-member", action="store_true", help="Kill a revived client process without graceful leave")
 parser.add_argument("--team-pings", action="store_true", help="Publish tactical-map markers and verify per-team delivery")
+parser.add_argument("--voice-relay", action="store_true", help="Transmit synthetic encoded audio and verify teammate-only reception")
 options = parser.parse_args()
 departure_case = options.revoke_member or options.drop_member
+if options.voice_relay and departure_case:
+    parser.error("--voice-relay is tested separately from departure scenarios")
 if options.return_to_party and not options.parties:
     parser.error("--return-to-party requires --parties")
 if departure_case and (not options.parties or options.return_to_party or (options.revoke_member and options.drop_member)):
@@ -79,7 +82,8 @@ for enabled, prefix in [(options.parties, "invited-party-network"),
                         (options.return_to_party, "post-match-party"),
                         (options.revoke_member, "revoked-party"),
                         (options.drop_member, "departed-party"),
-                        (options.team_pings, "team-pings-network")]:
+                        (options.team_pings, "team-pings-network"),
+                        (options.voice_relay, "voice-relay-network")]:
     if enabled:
         log_prefix = prefix
 server_path = ROOT / "artifacts" / f"{log_prefix}-server.log"
@@ -104,6 +108,8 @@ with server_path.open("w") as log:
                              TEST_GAME_PORT="27032", TEST_GAME_MODE="duo", API_URL="http://127.0.0.1:8001")
             if options.team_pings:
                 variables.update(TEST_TEAM_PINGS="1", TEST_PING_SLOT=str(i))
+            if options.voice_relay:
+                variables["TEST_VOICE_RELAY"] = "1"
             if departure_case:
                 variables["TEST_REVOKE_MEMBER"] = "1"
             if options.parties:
@@ -161,6 +167,8 @@ with server_path.open("w") as log:
                 assert "POST_MATCH_PARTY_RETURN_PASS" in text, str(path)
             if options.team_pings:
                 assert "TEAM_PINGS_NETWORK_CLIENT_PASS" in text, str(path)
+            if options.voice_relay:
+                assert "VOICE_RELAY_CLIENT_PASS" in text, str(path)
         assert "RESCUE_NETWORK_SERVER_PASS" in server_path.read_text(), str(server_path)
         match_id = str(uuid.UUID(re.search(r"RESCUE_NETWORK_SERVER_PASS match_id=([0-9a-f-]+)",
                                           server_path.read_text()).group(1)))
@@ -212,6 +220,8 @@ with server_path.open("w") as log:
             print("DROPPED_PARTY_NETWORK_PASS abrupt_process_kill=ok peer_timeout=ok party_retained=ok departed_member_rank=1 results=4 stats=ok")
         if options.team_pings:
             print("TEAM_PINGS_NETWORK_PASS clients=4 actual_map_clicks=ok per_team_delivery=ok enemy_isolation=ok")
+        if options.voice_relay:
+            print("VOICE_RELAY_NETWORK_PASS clients=4 synthetic_packets=ok decoded_samples=ok team_only=ok gameplay_results=ok")
         if options.revoke_member:
             print("REVOKED_PARTY_NETWORK_PASS logout_all=ok party_disband=ok peer_removed=ok surviving_ally_wins=ok departed_member_rank=1 results=4 stats=ok")
     finally:

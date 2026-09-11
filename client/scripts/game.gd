@@ -119,6 +119,8 @@ var admission_token := ""
 var returning_to_party := false
 var team_pings = preload("res://scripts/team_pings.gd").new()
 var team_ping_sequence := 0
+signal voice_packet_received(sender: int, sequence: int, packet: PackedByteArray)
+var voice_relay = preload("res://scripts/voice_relay.gd").new()
 
 func _ready() -> void:
 	var manifest = JSON.parse_string(FileAccess.get_file_as_string("res://protocol.json"))
@@ -411,6 +413,7 @@ func start_solo(mode := "solo") -> void:
 	ui.show_game()
 
 func clear_actors() -> void:
+	voice_relay.reset()
 	team_pings.reset()
 	team_ping_sequence = 0
 	if ui != null:
@@ -1544,6 +1547,7 @@ func leave_operation() -> void:
 			multiplayer.multiplayer_peer.disconnect_peer(id)
 
 func peer_disconnected(id: int) -> void:
+	voice_relay.senders.erase(id)
 	if dedicated:
 		print("PEER_DISCONNECTED peer=" + str(id))
 	pending.erase(id)
@@ -1690,6 +1694,26 @@ func team_ping_snapshot(round_id: String, states: Array) -> void:
 func world_sync(id: String, supplies: Dictionary) -> void:
 	if not dedicated and (network_round_id == "" or network_round_id == id):
 		loot = supplies
+
+@rpc("any_peer", "call_remote", "unreliable", 5)
+func submit_voice(round_id: String, sequence: int, packet: PackedByteArray) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	if not dedicated or match_mode != "duo" or round_id != match_id or not sessions.has(sender) or sessions[sender].get("revoking", false):
+		return
+	var targets: Array = voice_relay.recipients(sender, phase, sessions, teams)
+	if targets.is_empty() or not voice_relay.accept(sender, sequence, packet, Time.get_ticks_msec()):
+		return
+	for id in targets:
+		if peer_ready(id):
+			receive_voice.rpc_id(id, match_id, sender, sequence, packet)
+
+@rpc("authority", "call_remote", "unreliable", 5)
+func receive_voice(round_id: String, sender: int, sequence: int, packet: PackedByteArray) -> void:
+	if dedicated or not online or round_id != network_round_id or match_mode != "duo":
+		return
+	if not preload("res://scripts/voice_codec.gd").valid(packet):
+		return
+	voice_packet_received.emit(sender, sequence, packet)
 
 @rpc("authority", "call_remote", "unreliable_ordered", 3)
 func snapshot(packet: PackedByteArray) -> void:

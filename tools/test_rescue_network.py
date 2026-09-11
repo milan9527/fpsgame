@@ -13,7 +13,10 @@ from test_accounts import account
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument("--parties", action="store_true", help="Reserve two invitation parties and admit A,B,A,B")
+parser.add_argument("--return-to-party", action="store_true", help="Use the result button to return to each invitation lobby")
 options = parser.parse_args()
+if options.return_to_party and not options.parties:
+    parser.error("--return-to-party requires --parties")
 credentials = [account(f"duo-network-{i}", base="http://127.0.0.1:8001") for i in range(4)]
 base = "http://127.0.0.1:8001"
 auth = [{"Authorization": "Bearer " + identity["token"]} for identity in credentials]
@@ -63,7 +66,7 @@ if options.parties:
 env["SERVER_SECRET"] = next(line.split("=", 1)[1] for line in
     (ROOT / "artifacts/duo-dev.env").read_text().splitlines()
     if line.startswith("DUO_SERVER_SECRET="))
-log_prefix = "invited-party-network" if options.parties else "rescue-network"
+log_prefix = "post-match-party" if options.return_to_party else ("invited-party-network" if options.parties else "rescue-network")
 server_path = ROOT / "artifacts" / f"{log_prefix}-server.log"
 processes = []
 with server_path.open("w") as log:
@@ -86,6 +89,8 @@ with server_path.open("w") as log:
                              TEST_GAME_PORT="27032", TEST_GAME_MODE="duo", API_URL="http://127.0.0.1:8001")
             if options.parties:
                 variables.update(TEST_PARTY_TOKEN=identity["token"],
+                                 TEST_PARTY_UID=identity["user_id"],
+                                 TEST_RETURN_TO_PARTY="1" if options.return_to_party else "0",
                                  TEST_PARTY_ADMISSION=json.dumps(admissions[i]))
             path = ROOT / "artifacts" / f"{log_prefix}-client-{i}.log"
             output = path.open("w")
@@ -107,6 +112,8 @@ with server_path.open("w") as log:
             output.close()
             text = path.read_text()
             assert code == 0 and "RESCUE_NETWORK_CLIENT_PASS" in text, str(path)
+            if options.return_to_party:
+                assert "POST_MATCH_PARTY_RETURN_PASS" in text, str(path)
         assert "RESCUE_NETWORK_SERVER_PASS" in server_path.read_text(), str(server_path)
         match_id = str(uuid.UUID(re.search(r"RESCUE_NETWORK_SERVER_PASS match_id=([0-9a-f-]+)",
                                           server_path.read_text()).group(1)))
@@ -148,6 +155,8 @@ with server_path.open("w") as log:
         print("FOUR_CLIENT_RESCUE_NETWORK_PASS actual_input=ok knock=ok interrupts=2 revive=ok team_victory=ok database=4_results outbox_reload=ok mode_stats=ok")
         if options.parties:
             print("INVITED_PARTY_NETWORK_PASS parties=2 interleaved=A_B_A_B tickets=4 authoritative_teams=ok persisted_pairs=ok")
+        if options.return_to_party:
+            print("POST_MATCH_PARTY_RETURN_NETWORK_PASS clients=4 winners_and_losers=ok auth_retained=ok result_rows=4")
     finally:
         for process, output, _ in processes:
             if process.poll() is None:

@@ -6,6 +6,7 @@ class InvitedClient:
 		api_url = endpoint
 		token = OS.get_environment("TEST_PARTY_TOKEN")
 		token_origin = endpoint
+		ui.party_lobby.identity = OS.get_environment("TEST_PARTY_UID")
 		ui.busy = true
 		var admission: Dictionary = JSON.parse_string(OS.get_environment("TEST_PARTY_ADMISSION"))
 		connect_admission(admission, endpoint, token, "duo", connection_attempt)
@@ -100,4 +101,16 @@ func run() -> void:
 		assert(requests == 3 and observed_downed_hud)
 	print("RESCUE_NETWORK_CLIENT_PASS peer=%d knock=replicated progress=replicated interrupts=2 revived=replicated team_results=replicated team_spectator=ok" % game.local_id)
 	await create_timer(1).timeout
+	if OS.get_environment("TEST_RETURN_TO_PARTY") == "1":
+		assert(game.ui.return_to_party_button.visible)
+		game.ui.return_to_party_button.pressed.emit()
+		while not game.ui.party_lobby.visible or game.ui.party_lobby.busy or not game.ui.party_lobby.known:
+			assert(Time.get_ticks_msec() < deadline)
+			await process_frame
+		assert(not game.online and not game.running)
+		assert(game.token == OS.get_environment("TEST_PARTY_TOKEN"))
+		var admission: Dictionary = JSON.parse_string(OS.get_environment("TEST_PARTY_ADMISSION"))
+		assert(game.ui.party_lobby.party.id == admission.party_id)
+		assert(game.ui.party_lobby.party.members.size() == 2)
+		print("POST_MATCH_PARTY_RETURN_PASS connection_closed=ok same_party=ok token_retained=ok")
 	game.request_quit()

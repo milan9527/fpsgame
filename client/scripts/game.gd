@@ -116,6 +116,7 @@ var connection_attempt := 0
 var admission_ticket := ""
 var admission_origin := ""
 var admission_token := ""
+var returning_to_party := false
 
 func _ready() -> void:
 	var manifest = JSON.parse_string(FileAccess.get_file_as_string("res://protocol.json"))
@@ -149,7 +150,10 @@ func _ready() -> void:
 	multiplayer.peer_disconnected.connect(peer_disconnected)
 	multiplayer.connected_to_server.connect(connected)
 	multiplayer.connection_failed.connect(func(): leave("Unable to reach game server"))
-	multiplayer.server_disconnected.connect(func(): leave("Connection to server lost"))
+	multiplayer.server_disconnected.connect(func():
+		if not returning_to_party:
+			leave("Connection to server lost")
+	)
 	if dedicated:
 		# All gameplay is server-authoritative. Do not relay peer join/leave or
 		# client-to-client packets through SceneMultiplayer's internal channel.
@@ -188,6 +192,7 @@ func _ready() -> void:
 		ui.leaderboard_requested.connect(show_leaderboard)
 		ui.online_requested.connect(sign_in)
 		ui.party_online_requested.connect(func(username, password, register, endpoint): sign_in(username, password, register, endpoint, "party"))
+		ui.return_to_party_requested.connect(return_to_party)
 		ui.logout_requested.connect(sign_out_all)
 		ui.leave_requested.connect(func(): leave())
 		ui.quit_requested.connect(request_quit)
@@ -1475,6 +1480,10 @@ func _process(dt: float) -> void:
 			message += "\nNext operation in %ds" % maxi(0, int(phase_time)) if online else "\nESC  /  RETURN TO DEPLOYMENT"
 			if not online and local_profile != null:
 				message += "\nLOCAL RESULT SAVED" if local_outbox.is_empty() else "\nLOCAL SAVE PENDING / RETRY IN MENU"
+		var can_return: bool = phase == "finished" and online and match_mode == "duo" and not token.is_empty() and not ui.party_lobby.identity.is_empty()
+		ui.return_to_party_button.visible = can_return and not ui.pause_panel.visible
+		if can_return:
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		if phase == "lobby":
 			message = "DEPLOYING IN %02d\nWaiting for operators…" % maxi(0, int(phase_time))
 		var viewed_actor = actors.get(spectator.target_id, actor) if spectator.active else actor
@@ -1811,6 +1820,29 @@ func http_call(path: String, body: Dictionary, internal := false, method := HTTP
 
 func error_message(response: Dictionary) -> String:
 	return str(response.body.get("detail", "Connection failed"))
+
+func return_to_party() -> void:
+	if returning_to_party or dedicated or not online or not running or phase != "finished" or match_mode != "duo" or token.is_empty() or ui.party_lobby.identity.is_empty():
+		return
+	returning_to_party = true
+	ui.return_to_party_button.disabled = true
+	var attempt := connection_attempt
+	var bearer := token
+	var origin := token_origin
+	var uid: String = ui.party_lobby.identity
+	var peer := multiplayer.multiplayer_peer
+	if peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+		leave_operation.rpc_id(1)
+		var deadline := Time.get_ticks_msec() + 2000
+		while peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED and Time.get_ticks_msec() < deadline:
+			await get_tree().process_frame
+	returning_to_party = false
+	if shutdown_requested or attempt != connection_attempt:
+		return
+	leave()
+	if bearer == token and origin == token_origin:
+		api_url = origin
+		ui.party_lobby.open(self, uid)
 
 func leave(message := "") -> void:
 	if dedicated or shutdown_requested:

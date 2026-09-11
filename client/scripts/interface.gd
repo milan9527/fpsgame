@@ -9,6 +9,8 @@ signal solo_requested
 signal duo_requested
 signal online_requested(username: String, password: String, register: bool, endpoint: String)
 signal party_online_requested(username: String, password: String, register: bool, endpoint: String)
+signal return_to_party_requested
+var return_to_party_button: Button
 var online_mode: OptionButton
 var party_lobby
 signal leave_requested
@@ -230,6 +232,13 @@ func _ready() -> void:
 	network_label.hide()
 	hit_text = placed_label(hud, Vector2(610, 505), 16, ACCENT)
 	result_label = placed_label(hud, Vector2(430, 290), 38, ACCENT)
+	return_to_party_button = Button.new()
+	return_to_party_button.text = "RETURN TO TEAM"
+	return_to_party_button.position = Vector2(460, 470)
+	return_to_party_button.size = Vector2(350, 48)
+	return_to_party_button.pressed.connect(func(): return_to_party_requested.emit())
+	hud.add_child(return_to_party_button)
+	return_to_party_button.hide()
 	spectator_label = placed_label(hud, Vector2(430, 140), 22, ACCENT)
 	recap_panel = PanelContainer.new()
 	recap_panel.position = Vector2(40, 560)
@@ -426,6 +435,8 @@ func show_menu(message := "") -> void:
 
 func show_game() -> void:
 	party_lobby.dismiss()
+	return_to_party_button.hide()
+	return_to_party_button.disabled = false
 	death_recap.clear()
 	recap_panel.hide()
 	controls.close()

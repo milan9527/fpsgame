@@ -1,4 +1,4 @@
-"""Backend login + two or three real clients exercise authoritative vehicle gameplay."""
+"""Backend-authenticated clients exercise authoritative human and bot vehicle gameplay."""
 import json
 import argparse
 import os
@@ -25,10 +25,13 @@ def main():
     parser.add_argument("--audio", action="store_true", help="Verify vehicle emitters on both network clients")
     parser.add_argument("--combat", action="store_true", help="Third authenticated client shoots the moving driver")
     parser.add_argument("--spectator", action="store_true", help="Eliminated duo teammate follows the network driver")
+    parser.add_argument("--bot-driver", action="store_true", help="Authenticated passenger rides with its server-assigned bot teammate")
     parser.add_argument("--client-fps", type=int, choices=[30, 60, 120], default=0)
     parser.add_argument("--latency-ms", type=int, default=0, help="Constant one-way UDP delay without packet loss")
     options = parser.parse_args()
     mode = options.mode
+    if options.bot_driver and (mode != "duo" or options.spectator or options.combat or options.departure or options.impaired):
+        parser.error("Bot driver requires a separate duo passenger scenario")
     if options.spectator and (mode != "duo" or options.combat or options.departure):
         parser.error("Spectator requires duo and is separate from combat/departure")
     if not 0 <= options.latency_ms <= 200 or (options.latency_ms and options.impaired):
@@ -36,6 +39,8 @@ def main():
     if options.combat and (options.departure or options.impaired):
         parser.error("Moving combat is tested separately from outage/departure")
     count = 3 if options.combat or options.spectator else 2
+    if options.bot_driver:
+        count = 1
     if options.impaired and options.departure:
         parser.error("Network recovery and driver departure are separate scenarios")
     suffix = "-" + options.departure if options.departure else ""
@@ -46,6 +51,9 @@ def main():
     if options.combat:
         suffix += "-combat"
     account_suffix = suffix
+    if options.bot_driver:
+        suffix += "-bot-driver"
+        account_suffix = ""
     if options.spectator:
         suffix += "-spectator"
         account_suffix = "-combat"  # Reuse three existing accounts; session tickets remain fresh.
@@ -67,6 +75,7 @@ def main():
                VEHICLE_IMPAIRED="1" if options.impaired else "",
                VEHICLE_COMBAT="1" if options.combat else "",
                VEHICLE_SPECTATOR="1" if options.spectator else "",
+               VEHICLE_BOT_DRIVER="1" if options.bot_driver else "",
                XDG_DATA_HOME=str(ROOT / f"artifacts/vehicle-login-{mode}-server-data"))
     env["SERVER_SECRET"] = next(line.split("=", 1)[1] for line in
                                (ROOT / "artifacts/duo-dev.env").read_text().splitlines()
@@ -107,6 +116,7 @@ def main():
                              VEHICLE_AUDIO_TEST="1" if options.audio else "",
                              VEHICLE_COMBAT="1" if options.combat else "",
                              VEHICLE_SPECTATOR="1" if options.spectator else "",
+                             VEHICLE_BOT_DRIVER="1" if options.bot_driver else "",
                              VEHICLE_CLIENT_FPS=str(options.client_fps),
                              XDG_DATA_HOME=str(ROOT / f"artifacts/vehicle-login-client-{i}-data"))
             launch(f"client-{i}", "vehicle_login_client.gd", variables, ["--bot-client"])
@@ -169,6 +179,10 @@ def main():
             assert entries[0][2].read_text().count("AUTHENTICATED peer=") == 3
             assert "VEHICLE_SPECTATOR_SERVER_READY" in entries[0][2].read_text()
             assert sum("VEHICLE_NETWORK_SPECTATOR_PASS" in entry[2].read_text() for entry in entries) == 1
+        if options.bot_driver:
+            assert entries[0][2].read_text().count("AUTHENTICATED peer=") == 1
+            assert "VEHICLE_BOT_DRIVER_SERVER_PASS" in entries[0][2].read_text()
+            assert "VEHICLE_BOT_PASSENGER_PASS" in entries[1][2].read_text()
         if relays:
             if options.impaired:
                 assert outage_started and "VEHICLE_NETWORK_RECOVERED" in entries[0][2].read_text()

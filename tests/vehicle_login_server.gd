@@ -17,6 +17,7 @@ class DrivingServer:
 	var combat := OS.get_environment("VEHICLE_COMBAT") == "1"
 	var shooter
 	var spectating := OS.get_environment("VEHICLE_SPECTATOR") == "1"
+	var bot_driving := OS.get_environment("VEHICLE_BOT_DRIVER") == "1"
 	func shot_rewind_age(actor) -> float:
 		var age: float = super.shot_rewind_age(actor)
 		if combat and actor == shooter and driver.is_seated():
@@ -47,7 +48,7 @@ class DrivingServer:
 		super.reset_round()
 		phase_time = 8
 	func begin_round() -> void:
-		assert(sessions.size() == (3 if combat or spectating else 2), "Required backend-authenticated clients must be admitted")
+		assert(sessions.size() == (1 if bot_driving else (3 if combat or spectating else 2)), "Required backend-authenticated clients must be admitted")
 		super.begin_round()
 		var ids: Array = sessions.keys()
 		ids.sort()
@@ -59,12 +60,21 @@ class DrivingServer:
 					break
 		driver = actors[ids[0]]
 		driver_peer = ids[0]
-		passenger = actors[ids[2] if spectating else ids[1]]
+		passenger = actors[ids[0] if bot_driving else (ids[2] if spectating else ids[1])]
+		if bot_driving:
+			for actor in actors.values():
+				if actor.is_bot and teams.friendly(passenger.actor_id, actor.actor_id):
+					driver = actor
+					driver_peer = actor.actor_id
+					break
+			assert(driver.is_bot and teams.friendly(passenger.actor_id, driver.actor_id))
 		if combat:
 			shooter = actors[ids[2]]
 		for actor in actors.values():
 			actor.position = Vector3(95, 0.1, 90 + abs(actor.actor_id) % 12)
 		driver.position = Vector3(-1.65, 0.04, 0.1)
+		if bot_driving:
+			driver.position.x = -6
 		passenger.position = Vector3(1.65, 0.04, 0.1)
 		if combat:
 			shooter.position = Vector3(-8, 0.04, -6)
@@ -81,6 +91,20 @@ class DrivingServer:
 			assert(not observer.alive and driver.alive)
 			print("VEHICLE_SPECTATOR_SERVER_READY eliminated=ok teammate=ok")
 	func bot_input(actor, _dt: float) -> void:
+		if bot_driving and actor == driver and passenger.is_seated() and (stage < 2 or driver.is_seated()):
+			# Supply a nearby evacuation objective without altering team allocation,
+			# navigation, driver controls, seats, or physical vehicle motion.
+			var previous_zone := zone
+			var previous_center := zone_center
+			var previous_state := zone_state
+			zone = 5
+			zone_center = Vector2(0, -35)
+			zone_state = {}
+			super.bot_input(actor, _dt)
+			zone = previous_zone
+			zone_center = previous_center
+			zone_state = previous_state
+			return
 		actor.move_input = Vector2.ZERO
 		actor.shooting = false
 	func revoke_account_peer(id: int) -> void:
@@ -174,6 +198,9 @@ class DrivingServer:
 				assert(driver.health > 0 and driver.health < 100 if combat else driver.health == 100)
 			stage = 4
 			events = ["VEHICLE_DONE"]
+			if bot_driving:
+				assert(driver.is_bot and test_car.position.z < -28 and driver.navigator.driver.cooldown > 0)
+				print("VEHICLE_BOT_DRIVER_SERVER_PASS assigned_teammate=ok normal_ai=ok destination=ok parked=ok exit=ok")
 			print("VEHICLE_LOGIN_SERVER_PASS admitted=%d seats=ok acceleration=ok fuel=ok brake=ok exits=ok" % participants.size())
 
 func _initialize() -> void:

@@ -53,6 +53,7 @@ func run() -> void:
 	var followed_frames := 0
 	var followed_moving := false
 	var followed_exit := false
+	var saw_bot_driver := false
 	while true:
 		await physics_frame
 		assert(Time.get_ticks_msec() < deadline, "Authenticated client driving timeout")
@@ -144,6 +145,10 @@ func run() -> void:
 		if actor.is_seated():
 			saw_seated = true
 			var car = actor.vehicle_ref.get_ref()
+			if OS.get_environment("VEHICLE_BOT_DRIVER") == "1" and car.driver_id < 0:
+				var driver = car.seats.occupant(0)
+				assert(driver != null and driver.team_id == actor.team_id and actor.vehicle_seat == 1)
+				saw_bot_driver = true
 			assert(not car.authoritative)
 			if audio_test and game.sound.vehicle_audio.emitters.has(car.vehicle_id):
 				var engine = game.sound.vehicle_audio.emitters[car.vehicle_id].players.engine
@@ -172,6 +177,9 @@ func run() -> void:
 				else:
 					Input.action_release("jump")
 		if stage == "VEHICLE_DONE":
+			if OS.get_environment("VEHICLE_BOT_DRIVER") == "1":
+				assert(saw_bot_driver)
+				print("VEHICLE_BOT_PASSENGER_PASS teammate=ok bot_seat=ok proxy=ok motion=ok fuel=ok stopped=ok exit=ok")
 			if combat:
 				assert(saw_combat_damage)
 				print("VEHICLE_COMBAT_OCCUPANT_PASS replicated_damage=ok seat_preserved=ok")

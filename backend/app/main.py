@@ -24,7 +24,7 @@ from .models import User, Match, Result
 from .database import engine
 from .protocol import BUILD, BuildInfo, require_compatible
 from .rooms import CancelRoomTicket, RoomDirectory, RoomHeartbeat, RoomJoin, RoomTicket
-from .parties import AcceptInvitation, PartyDirectory, ReserveParty, PartyReady
+from .parties import AcceptInvitation, PartyDirectory, ReserveParty, PartyReady, ResetParty
 from .rooms import PartyMember
 
 JWT_SECRET = os.environ['JWT_SECRET']
@@ -233,6 +233,13 @@ def reserve_party(body: ReserveParty, uid: str = Depends(user_token), session: S
 def party_ready(body: PartyReady, uid: str = Depends(user_token)):
     limit('party:' + uid, 20, 60)
     return JSONResponse(parties.ready(uid, body.ready), headers={'Cache-Control': 'no-store'})
+
+
+@app.post('/parties/reset')
+def reset_party(body: ResetParty, uid: str = Depends(user_token)):
+    require_compatible(body)
+    limit('party:' + uid, 20, 60)
+    return JSONResponse(parties.reset(uid, body.group_id), headers={'Cache-Control': 'no-store'})
 
 
 @app.post('/internal/build/check', dependencies=[Depends(server_auth)])

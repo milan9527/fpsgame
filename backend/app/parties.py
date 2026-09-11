@@ -17,6 +17,9 @@ class ReserveParty(BuildInfo):
 class PartyReady(BaseModel):
     ready: StrictBool
 
+class ResetParty(BuildInfo):
+    group_id: uuid.UUID
+
 
 SCRIPT = """
 local prefix, op, uid = ARGV[1], ARGV[2], ARGV[3]
@@ -28,7 +31,7 @@ local function read(id)
   if raw then return cjson.decode(raw) end
   return nil
 end
-local function disband(p)
+local function cancel_reservation(p)
   if p.reservation then
     local reservation=p.reservation
     local rp=reservation.room_prefix
@@ -49,6 +52,9 @@ local function disband(p)
     end
     redis.call('DEL',rp..'group:'..reservation.group_id)
   end
+end
+local function disband(p)
+  cancel_reservation(p)
   for _, m in ipairs(p.members) do
     local key = prefix .. 'user:' .. m.uid
     if redis.call('GET', key) == p.id then redis.call('DEL', key) end
@@ -77,6 +83,29 @@ if op == 'ready' then
     if m.uid == uid then m.ready = ARGV[4] == 'true' end
   end
   redis.call('SET', prefix .. 'party:' .. p.id, cjson.encode(p), 'KEEPTTL')
+  return cjson.encode(p)
+end
+if op == 'reset' then
+  if not p then return 'no_party' end
+  if p.leader~=uid then return 'leader_only' end
+  if not p.reservation then return cjson.encode(p) end
+  local r=p.reservation
+  if r.group_id~=ARGV[4] then return 'reservation_changed' end
+  for _,m in ipairs(r.members) do
+    local owner=redis.call('GET',r.room_prefix..'user:'..m.uid)
+    if owner then
+      local raw=redis.call('GET',r.room_prefix..'ticket:'..m.digest)
+      if not raw then return 'members_busy' end
+      local ticket=cjson.decode(raw)
+      local expected=ticket.room_id..'/'..ticket.instance_id..'/'..ticket.generation
+      local version=tonumber(redis.call('GET',r.room_prefix..'user_version:'..m.uid) or '-1')
+      if owner~=expected or ticket.group_id~=r.group_id or version~=tonumber(m.session_version) then return 'members_busy' end
+    end
+  end
+  cancel_reservation(p)
+  p.reservation=nil
+  for _,m in ipairs(p.members) do m.ready=false end
+  redis.call('SET',prefix..'party:'..p.id,cjson.encode(p),'KEEPTTL')
   return cjson.encode(p)
 end
 if p then return 'already_in_party' end
@@ -122,6 +151,12 @@ class PartyDirectory:
             raise HTTPException(404, 'No current party')
         if raw == 'already_reserved':
             raise HTTPException(409, 'Party already reserved; leave to cancel')
+        if raw == 'leader_only':
+            raise HTTPException(403, 'Only the party leader can reset matchmaking')
+        if raw == 'reservation_changed':
+            raise HTTPException(409, 'Reservation changed; refresh your party')
+        if raw == 'members_busy':
+            raise HTTPException(409, 'Both members must leave their operation before resetting')
         if not raw.startswith('{'):
             raise RuntimeError('Invalid party operation response')
         party = json.loads(raw)
@@ -129,6 +164,7 @@ class PartyDirectory:
             reservation = party.pop('reservation', None)
             party['status'] = 'reserved' if reservation else 'forming'
             if reservation:
+                party['reservation_id'] = reservation['group_id']
                 admission = reservation['admissions'].get(uid)
                 digest = hashlib.sha256(admission['ticket'].encode()).hexdigest() if admission else ''
                 remaining = self.cache.ttl(reservation['room_prefix'] + 'ticket:' + digest)
@@ -170,6 +206,9 @@ class PartyDirectory:
 
     def ready(self, uid, ready):
         return self.execute('ready', uid, 'true' if ready else 'false')
+
+    def reset(self, uid, group_id):
+        return self.execute('reset', uid, str(group_id))
 
     def snapshot(self, uid):
         identity = self.cache.get(self.prefix + 'user:' + uid)

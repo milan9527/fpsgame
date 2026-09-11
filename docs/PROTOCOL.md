@@ -56,3 +56,5 @@ docker compose up -d --build api game game2
 角色网络快照增加 `team`，对局快照增加 `mode`，`accepted` 与 `new_round` 可靠通知携带模式。房间匹配、心跳和票据消费均绑定 `solo | duo`。队伍由权威服务器分配，客户端输入不能提交队伍。组队其他功能仍在开发，当前不发行此协议。
 
 开发协议 16 的倒地快照还包括 `downed`、`down_health`、`bleed`、`revive_target`、`revive_left`。存活但倒地与正式淘汰明确区分；拾取交互无物资目标时可请求扶起附近队友，继续使用通道 4 的动作去重与预算，扶起时间和结果全部由专服决定。
+
+开发组队大厅接口：`POST /parties/ready` 只接受布尔 `ready`，两人准备后由队长调用 `POST /parties/reserve`。已预约队伍响应提供非秘密的 `reservation_id`；`POST /parties/reset` 需要构建信息和对应 `group_id`，用于在成员租约释放后保留队伍、撤销旧预约并清除双方准备状态。旧编号不能重置后来签发的新预约。票据仍仅按当前账号返回。

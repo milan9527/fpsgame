@@ -144,7 +144,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 启动 `tools/godot --path client`，在线账号区域选择 `DUO`，API 地址填写 `http://127.0.0.1:8001`，登录或创建账号后进入队伍大厅。队长点击 `CREATE TEAM` 并复制邀请码，另一名玩家粘贴后点击 `ACCEPT INVITATION`；两名成员分别点击 `READY`，队长看到双方准备后点击 `START DUO OPERATION`。大厅每两秒查询成员及自己的票据，两人通过同一房间的独立票据入场。登录成功后清除密码输入。
 
-`LEAVE TEAM & RETURN` 调用后端解散并释放待使用预约，成功后返回菜单；`RETURN / KEEP TEAM` 仅关闭大厅，允许保留队伍。重新选择 DUO 登录会加载已有队伍。面板打开时隐藏主菜单以隔离键盘焦点；请求期间避免重复操作，失败后恢复按钮并显示服务错误，轮询失败退避至五秒。401 清理登录并返回菜单。队伍寿命不续期；已消费或过期预约目前需要解散后重新组队，准备开关现已实现；自动再排队或完整赛后保队流程仍未完成。
+`LEAVE TEAM & RETURN` 调用后端解散并释放待使用预约，成功后返回菜单；`RETURN / KEEP TEAM` 仅关闭大厅，允许保留队伍。重新选择 DUO 登录会加载已有队伍。面板打开时隐藏主菜单以隔离键盘焦点；请求期间避免重复操作，失败后恢复按钮并显示服务错误，轮询失败退避至五秒。401 清理登录并返回菜单。队伍寿命不续期；已消费或过期预约可在成员均离开后手动重置并保留队伍；自动返回大厅及完整赛后保队流程仍未完成。
 
 `tests/party_lobby_rules.gd` 验证角色权限、邀请码、预约失败重试、按人入场、解散/保留返回、迟到响应与登录失效。实际渲染截图为 `artifacts/party-lobby-menu.png` 和 `artifacts/party-lobby.png`，使用合成姓名与邀请码。`artifacts/party-lobby-render.log` 为渲染和规则记录，连接取消回归见 `artifacts/party-lobby-cancel-regression.log`。
 
@@ -159,3 +159,13 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 `artifacts/party-ready-backend.log` 记录 64 项后端回归；随后包含新增“取消准备与开始同时提交”用例的 13 项预约测试通过，见 `artifacts/party-ready-race.log`。竞争只允许开始成功/取消失败，或取消成功/开始失败，不会在未准备状态分配名额。还验证布尔值校验、准备重置、保留 TTL、旧快照失效及预约后修改被拒绝。
 
 开发 API 8001 已更新。实际双客户端通过面板分别准备再入场，证据 `artifacts/party-ready-network.log` 及 `artifacts/party-lobby-network-0.log` / `-1.log`。原生规则验证准备/取消按钮和开始权限，渲染记录 `artifacts/party-ready-render.log`，更新截图 `artifacts/party-lobby.png`。现有发布包不变，赛后保队再排队仍待开发。
+
+## 保留队伍并重置预约
+
+`POST /parties/reset` 接收构建信息及旧 `group_id`。只有队长可操作，当前队伍响应的 `reservation_id` 用于绑定旧预约，防止迟到请求取消新一轮预约。Redis 在一次操作中核验全部成员租约；若存在已消费票据对应的连接租约、其他房间租约或更新会话版本，则返回 409，不改动队伍和票据。允许清理尚未消费的同批预约；连接成员须先离开并由专服心跳释放租约。
+
+重置成功清除旧票据/占位、保留队伍 ID/成员/原过期时间，并将双方设为未准备。重复重置未预约队伍不会清除新准备状态。下一次双方准备后签发新的预约编号与票据。大厅在预约已消费或过期时向队长显示 `RESET MATCHMAKING`；成员只可查看，重置后双方正常重新准备。当前仍需退出对局后重新进入 DUO 大厅，没有胜负页自动带回队伍大厅。
+
+`artifacts/party-reset-backend.log`：69 项后端回归通过，包括旧票据失效、同队重新预约、新会话租约保护、连接中拒绝重置、心跳释放后允许重置、保留 TTL、重复重置和迟到旧预约重置隔离。`artifacts/party-reset-ui.log` 验证队长按钮、成员权限以及重置后恢复准备界面。开发 API 8001 已更新。
+
+`.venv/bin/python tools/test_party_lobby_network.py --requeue` 已通过：两个真实客户端第一轮进入 live 后主动退出，再启动客户端登录已有队伍；队长通过正式 RESET MATCHMAKING 按钮重置，两人重新准备并进入不同回合，同伴姓名/队伍配对保持正确。两轮队伍 ID 相同、回合 ID 不同，准备状态在第二轮需重新提交。证据 `artifacts/party-reset-network.log` 与 `artifacts/party-requeue-{0,1}-{0,1}.log`。该测试覆盖主动退出后的再次排队，不覆盖胜负页自动返回大厅。

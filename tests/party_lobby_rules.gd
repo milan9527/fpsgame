@@ -81,6 +81,19 @@ func run() -> void:
 	game.reply.body.erase("admission")
 	lobby.open(game, "b")
 	assert(lobby.start_button.disabled and lobby.copy_button.disabled)
+	game.reply.body.status = "reserved"
+	game.reply.body.reservation_id = "old-group"
+	lobby.request("/parties/current", {}, HTTPClient.METHOD_GET)
+	assert(lobby.reset_button.visible and lobby.reset_button.disabled)
+	lobby.open(game, "a")
+	assert(not lobby.reset_button.disabled)
+	game.reply.body.status = "forming"
+	game.reply.body.erase("reservation_id")
+	for member in game.reply.body.members:
+		member.ready = false
+	lobby.reset_button.pressed.emit()
+	assert(game.calls[-1][0] == "/parties/reset" and game.calls[-1][1].group_id == "old-group")
+	assert(not lobby.reset_button.visible and lobby.start_button.disabled and lobby.party.id == "p")
 	var previous_calls := game.calls.size()
 	lobby.return_button.pressed.emit()
 	assert(not lobby.visible and game.ui.menu.visible and game.calls.size() == previous_calls)

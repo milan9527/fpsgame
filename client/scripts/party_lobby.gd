@@ -20,6 +20,7 @@ var back_button: Button
 var copy_button: Button
 var return_button: Button
 var ready_button: Button
+var reset_button: Button
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -57,6 +58,11 @@ func _ready() -> void:
 	accept_button = add_button(box, "ACCEPT INVITATION", func(): accept_invitation())
 	ready_button = add_button(box, "READY", func(): request("/parties/ready", {"ready": not own_ready()}))
 	start_button = add_button(box, "START DUO OPERATION", func(): request("/parties/reserve", game.build_info.duplicate()))
+	reset_button = add_button(box, "RESET MATCHMAKING", func():
+		var body: Dictionary = game.build_info.duplicate()
+		body.group_id = party.get("reservation_id", "")
+		request("/parties/reset", body)
+	)
 	status = add_label(box, "", 16)
 	status.custom_minimum_size = Vector2(550, 54)
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -165,7 +171,7 @@ func request(path: String, body := {}, method := HTTPClient.METHOD_POST) -> void
 	if party.is_empty():
 		status.text = "Create a team or accept an invitation."
 	elif party.get("status", "") == "reserved":
-		status.text = "Reservation used or expired. Leave this team and form a new one."
+		status.text = "Once both members leave the operation, the leader can reset matchmaking and keep this team."
 	elif party.members.size() == 1:
 		status.text = "Waiting for your teammate. Invitations expire after 15 minutes."
 	else:
@@ -199,6 +205,8 @@ func render() -> void:
 	accept_button.visible = not has_party
 	code.visible = not has_party
 	start_button.visible = has_party
+	reset_button.visible = party.get("status", "") == "reserved"
+	reset_button.disabled = busy or party.get("leader", "") != identity
 	back_button.visible = has_party
 	invitation.text = party.get("invitation", "")
 	copy_button.disabled = invitation.text.is_empty()

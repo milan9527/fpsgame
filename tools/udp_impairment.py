@@ -8,7 +8,11 @@ import time
 
 
 class ImpairedUDP:
-    def __init__(self, destination_port, seed):
+    def __init__(self, destination_port, seed, delay_range=(0.050, 0.100), loss_probability=0.03):
+        assert 0 <= delay_range[0] <= delay_range[1] <= 1
+        assert 0 <= loss_probability <= 1
+        self.delay_range = delay_range
+        self.loss_probability = loss_probability
         self.destination = ("127.0.0.1", int(destination_port))
         self.rng = random.Random(seed)
         self.selector = selectors.DefaultSelector()
@@ -51,10 +55,10 @@ class ImpairedUDP:
                     if side == "up" and now < self.blackout_until:
                         self.stats[side]["outage_drops"] += 1
                         continue
-                    if self.rng.random() < 0.03:
+                    if self.rng.random() < self.loss_probability:
                         self.stats[side]["random_drops"] += 1
                         continue
-                    due = now + self.rng.uniform(0.050, 0.100)
+                    due = now + self.rng.uniform(*self.delay_range)
                     if due < previous_due[side]:
                         self.stats[side]["reordered_schedule"] += 1
                     previous_due[side] = due

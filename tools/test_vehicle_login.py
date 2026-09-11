@@ -1,4 +1,4 @@
-"""Backend login + two real clients exercise authoritative vehicle gameplay."""
+"""Backend login + two or three real clients exercise authoritative vehicle gameplay."""
 import json
 import argparse
 import os
@@ -24,8 +24,12 @@ def main():
                         help="50–100 ms one-way latency, 3%% loss and three-second uplink outage")
     parser.add_argument("--audio", action="store_true", help="Verify vehicle emitters on both network clients")
     parser.add_argument("--combat", action="store_true", help="Third authenticated client shoots the moving driver")
+    parser.add_argument("--client-fps", type=int, choices=[30, 60, 120], default=0)
+    parser.add_argument("--latency-ms", type=int, default=0, help="Constant one-way UDP delay without packet loss")
     options = parser.parse_args()
     mode = options.mode
+    if not 0 <= options.latency_ms <= 200 or (options.latency_ms and options.impaired):
+        parser.error("Latency must be 0–200 ms and cannot be combined with --impaired")
     if options.combat and (options.departure or options.impaired):
         parser.error("Moving combat is tested separately from outage/departure")
     count = 3 if options.combat else 2
@@ -38,6 +42,11 @@ def main():
         suffix += "-audio"
     if options.combat:
         suffix += "-combat"
+    account_suffix = suffix
+    if options.client_fps:
+        suffix += f"-fps{options.client_fps}"
+    if options.latency_ms:
+        suffix += f"-delay{options.latency_ms}"
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
         probe.bind(("127.0.0.1", 0))
         port = str(probe.getsockname()[1])
@@ -45,7 +54,7 @@ def main():
     response = httpx.get(BASE + "/protocol")
     response.raise_for_status()
     assert response.json() == manifest, "Development API must match source build"
-    credentials = [account(f"vehicle-login-{mode}{suffix}-{i}", base=BASE) for i in range(count)]
+    credentials = [account(f"vehicle-login-{mode}{account_suffix}-{i}", base=BASE) for i in range(count)]
     runtime = [str(ROOT / "tools/godot"), "--headless", "--path", str(ROOT / "client")]
     env = dict(os.environ, GAME_PORT=port, GAME_MODE=mode, API_URL=BASE,
                VEHICLE_DEPARTURE=options.departure,
@@ -76,8 +85,10 @@ def main():
             time.sleep(0.1)
         for i, identity in enumerate(credentials):
             client_port = port
-            if options.impaired:
-                relay = ImpairedUDP(port, seed=4100 + i)
+            if options.impaired or options.latency_ms:
+                settings = {} if options.impaired else {
+                    "delay_range": (options.latency_ms / 1000,) * 2, "loss_probability": 0}
+                relay = ImpairedUDP(port, seed=4100 + i, **settings)
                 relays.append(relay)
                 client_port = str(relay.port)
             variables = dict(os.environ, TEST_USERNAME=identity["username"],
@@ -88,6 +99,7 @@ def main():
                              VEHICLE_IMPAIRED="1" if options.impaired else "",
                              VEHICLE_AUDIO_TEST="1" if options.audio else "",
                              VEHICLE_COMBAT="1" if options.combat else "",
+                             VEHICLE_CLIENT_FPS=str(options.client_fps),
                              XDG_DATA_HOME=str(ROOT / f"artifacts/vehicle-login-client-{i}-data"))
             launch(f"client-{i}", "vehicle_login_client.gd", variables, ["--bot-client"])
         deadline = time.monotonic() + 70
@@ -129,6 +141,11 @@ def main():
             assert process.returncode == 0 and marker in text, f"Failed: {path}\n{text[-4000:]}"
             if options.audio and marker == "VEHICLE_LOGIN_CLIENT_PASS":
                 assert "VEHICLE_NETWORK_AUDIO_PASS" in text, path
+            if options.client_fps and role != "server":
+                samples = re.findall(r"VEHICLE_FRAME_RATE requested=\d+ measured=([\d.]+)", text)
+                assert samples, f"No measured frame rate: {path}"
+                assert all(options.client_fps * 0.8 <= float(fps) <= options.client_fps * 1.1
+                           for fps in samples), (path, samples)
         if options.departure:
             assert departed_index >= 0 and "VEHICLE_DEPARTURE_RELEASED" in entries[0][2].read_text()
             if options.departure == "revoke":
@@ -138,18 +155,27 @@ def main():
             assert entries[0][2].read_text().count("AUTHENTICATED peer=") == count
             assert sum("VEHICLE_COMBAT_SHOOTER_PASS" in entry[2].read_text() for entry in entries) == 1
             assert sum("VEHICLE_COMBAT_OCCUPANT_PASS" in entry[2].read_text() for entry in entries) == 2
-        if options.impaired:
-            assert outage_started and "VEHICLE_NETWORK_RECOVERED" in entries[0][2].read_text()
+        if relays:
+            if options.impaired:
+                assert outage_started and "VEHICLE_NETWORK_RECOVERED" in entries[0][2].read_text()
             for relay in relays:
                 relay.close()
                 assert not relay.errors, relay.errors
                 for side in ("up", "down"):
                     assert relay.stats[side]["forwarded"] > 100
-                    assert relay.stats[side]["random_drops"] > 0
-                    assert relay.stats[side]["reordered_schedule"] > 0
-                assert relay.stats["up"]["outage_drops"] > 0
-            report = {"one_way_delay_ms": [50, 100], "loss_probability": 0.03,
-                      "uplink_outage_seconds": 3, "relays": [r.stats for r in relays]}
+                    if options.impaired:
+                        assert relay.stats[side]["random_drops"] > 0
+                        assert relay.stats[side]["reordered_schedule"] > 0
+                    else:
+                        assert relay.stats[side]["random_drops"] == 0
+                if options.impaired:
+                    assert relay.stats["up"]["outage_drops"] > 0
+                else:
+                    assert relay.stats["up"]["outage_drops"] == 0
+            report = {"one_way_delay_ms": [50, 100] if options.impaired else [options.latency_ms] * 2,
+                      "loss_probability": 0.03 if options.impaired else 0,
+                      "uplink_outage_seconds": 3 if options.impaired else 0,
+                      "client_fps_cap": options.client_fps, "relays": [r.stats for r in relays]}
             (ROOT / f"artifacts/vehicle-login-{mode}{suffix}-network.json").write_text(json.dumps(report, indent=2) + "\n")
             relays.clear()
         print(f"VEHICLE_LOGIN_PASS mode={mode} departure={options.departure or 'none'} impaired={options.impaired} backend_auth=ok tickets=ok clients={count} driving=ok passenger=ok brake=ok exits=ok")

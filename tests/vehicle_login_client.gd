@@ -1,7 +1,18 @@
 extends SceneTree
 var game
+var frame_sample_start := 0
+var frame_sample_count := 0
+
+func measure_frame() -> void:
+	frame_sample_count += 1
+	var now := Time.get_ticks_msec()
+	if now - frame_sample_start >= 3000:
+		print("VEHICLE_FRAME_RATE requested=%d measured=%.2f" % [Engine.max_fps, frame_sample_count * 1000.0 / (now - frame_sample_start)])
+		frame_sample_start = now
+		frame_sample_count = 0
 
 func _initialize() -> void:
+	Engine.max_fps = int(OS.get_environment("VEHICLE_CLIENT_FPS"))
 	call_deferred("run")
 
 func run() -> void:
@@ -16,6 +27,9 @@ func run() -> void:
 		assert(Time.get_ticks_msec() < deadline)
 		await process_frame
 	game.bot_client = false
+	if Engine.max_fps > 0:
+		frame_sample_start = Time.get_ticks_msec()
+		process_frame.connect(measure_frame)
 	var next_interact := 0
 	var release_interact := false
 	var saw_seated := false

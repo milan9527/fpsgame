@@ -40,6 +40,7 @@ func enter(actor, index: int) -> bool:
 	actor.vehicle_ref = weakref(vehicle)
 	actor.vehicle_seat = index
 	actor.collision_mask = 0
+	vehicle.add_collision_exception_with(actor)
 	actor.move_input = Vector2.ZERO
 	actor.velocity = Vector3.ZERO
 	actor.jump_requested = false
@@ -113,6 +114,7 @@ func release(actor, point: Vector3) -> void:
 	slots[index] = null
 	actor.vehicle_ref = null
 	actor.vehicle_seat = -1
+	vehicle.remove_collision_exception_with(actor)
 	actor.collision_mask = saved.mask if actor.alive else 0
 	actor.collision_layer = saved.layer if actor.alive else 0
 	if actor.is_inside_tree():

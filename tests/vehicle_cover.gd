@@ -74,6 +74,10 @@ func run() -> void:
 	grenade.freeze = true
 	grenade.position = Vector3(0, 1.1, 0)
 	await sync_physics()
+	assert(not car.can_rotate(0), "Adjacent infantry overlaps must block vehicle rotation")
+	shooter.position = Vector3(0, 0.02, 5)
+	target.position = Vector3(0, 0.02, -5)
+	await sync_physics()
 	assert(car.can_rotate(0), "Grenades must not count as vehicle rotation obstacles")
 	car.queue_free()
 	target.downed = false

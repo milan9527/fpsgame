@@ -2225,6 +2225,30 @@ func vehicle_wrecked(attacker_id: int, vehicle) -> void:
 			damage(occupant, 40.0, attacker_id, false, false, "VEHICLE WRECK", vehicle.global_position, true)
 	add_event("BUGGY DISABLED")
 
+func vehicle_impact(other: Node, closing: float, driver: int, vehicle) -> void:
+	if phase != "live" or not is_finite(closing) or closing <= 4:
+		return
+	if other is Actor:
+		damage(other, minf(200, (closing - 3) * 14), driver, false, false, "VEHICLE IMPACT", vehicle.global_position, true)
+		vehicle.take_damage(maxf(0, closing - 6) * 2, driver)
+		return
+	if closing <= 8:
+		return
+	var amount := minf(400, pow(closing - 6, 2) * 1.5)
+	var other_driver: int = other.driver_id if other is Vehicle else driver
+	# Cabin shock precedes hull destruction, which has its own one-time injury.
+	for index in range(2):
+		var occupant = vehicle.seats.occupant(index)
+		if occupant != null:
+			damage(occupant, minf(65, (closing - 8) * 3), other_driver, false, false, "VEHICLE IMPACT", vehicle.global_position, true)
+	vehicle.take_damage(amount, other_driver)
+	if other is Vehicle:
+		for index in range(2):
+			var occupant = other.seats.occupant(index)
+			if occupant != null:
+				damage(occupant, minf(65, (closing - 8) * 3), driver, false, false, "VEHICLE IMPACT", vehicle.global_position, true)
+		other.take_damage(amount, driver)
+
 @rpc("authority", "call_remote", "unreliable_ordered", 4)
 func grenade_snapshot(packet: PackedByteArray) -> void:
 	if dedicated:

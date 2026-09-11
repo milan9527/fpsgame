@@ -3,6 +3,8 @@ extends RefCounted
 const Vehicle = preload("res://scripts/vehicle.gd")
 var vehicles: Dictionary = {}
 var next_id := 1
+var simulation_time := 0.0
+var pair_cooldowns: Dictionary = {}
 
 func spawn(parent: Node3D, at: Vector3, heading := 0.0):
 	if not at.is_finite() or not is_finite(heading):
@@ -14,6 +16,8 @@ func spawn(parent: Node3D, at: Vector3, heading := 0.0):
 	parent.add_child(vehicle)
 	if parent.has_method("vehicle_wrecked"):
 		vehicle.wrecked.connect(parent.vehicle_wrecked.bind(vehicle))
+	if parent.has_method("vehicle_impact"):
+		vehicle.impact.connect(on_impact.bind(parent, vehicle))
 	vehicles[next_id] = vehicle
 	next_id += 1
 	return vehicle
@@ -26,6 +30,18 @@ func clear() -> void:
 			vehicle.queue_free()
 	vehicles.clear()
 	next_id = 1
+	pair_cooldowns.clear()
+	simulation_time = 0
+
+func on_impact(other: Node, closing: float, driver: int, game, vehicle) -> void:
+	if other is Vehicle:
+		var a: int = vehicle.get_instance_id()
+		var b: int = other.get_instance_id()
+		var pair := "%d:%d" % [mini(a, b), maxi(a, b)]
+		if pair_cooldowns.get(pair, -1.0) > simulation_time:
+			return
+		pair_cooldowns[pair] = simulation_time + 1.0
+	game.vehicle_impact(other, closing, driver, vehicle)
 
 func candidates(actor) -> Array:
 	var choices: Array = []
@@ -67,6 +83,10 @@ func controls(actor, cmd: Dictionary, live: bool) -> void:
 		vehicle.seats.exit(actor)
 
 func step(dt: float, live: bool) -> void:
+	simulation_time += dt
+	for pair in pair_cooldowns.keys():
+		if pair_cooldowns[pair] <= simulation_time:
+			pair_cooldowns.erase(pair)
 	for id in vehicles.keys():
 		var vehicle = vehicles[id]
 		if not is_instance_valid(vehicle):

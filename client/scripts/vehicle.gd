@@ -1,5 +1,6 @@
 extends CharacterBody3D
 signal wrecked(attacker_id: int)
+signal impact(other: Node, closing_speed: float, driver: int)
 
 # Authority owns simulation. Input contains controls, never position or velocity.
 const FORWARD_SPEED := 22.0
@@ -14,6 +15,8 @@ const MAX_FUEL := 100.0
 var health := MAX_HEALTH
 var fuel := MAX_FUEL
 var destroyed := false
+var collision_time := 0.0
+var collision_cooldowns: Dictionary = {}
 const BODY_SIZE := Vector3(2.25, 1.8, 3.6) # Includes tire sweep at full steering lock.
 var driver_id := 0
 var speed := 0.0
@@ -33,7 +36,7 @@ var seats
 func _ready() -> void:
 	seats = preload("res://scripts/vehicle_seats.gd").new(self)
 	collision_layer = 4
-	collision_mask = 1 | 4
+	collision_mask = 1 | 2 | 4
 	floor_snap_length = 0.45
 	floor_max_angle = deg_to_rad(35)
 	floor_constant_speed = true
@@ -111,7 +114,12 @@ func can_rotate(target_yaw: float) -> bool:
 	query.shape = collision_shape.shape
 	query.transform = Transform3D(Basis(Vector3.UP, target_yaw), global_position + Vector3.UP * (BODY_SIZE.y / 2 + 0.04))
 	query.collision_mask = collision_mask
-	query.exclude = [get_rid()]
+	var excluded: Array[RID] = [get_rid()]
+	for index in range(2):
+		var occupant = seats.occupant(index)
+		if occupant != null:
+			excluded.append(occupant.get_rid())
+	query.exclude = excluded
 	query.margin = 0.001
 	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
 
@@ -119,6 +127,10 @@ func simulate(dt: float, engine_enabled := true) -> void:
 	if not is_finite(dt) or dt <= 0 or dt > 0.05:
 		return
 	seats.refresh()
+	collision_time += dt
+	for id in collision_cooldowns.keys():
+		if collision_cooldowns[id] <= collision_time:
+			collision_cooldowns.erase(id)
 	input_age += dt
 	var stale := not engine_enabled or destroyed or driver_id == 0 or input_age > INPUT_TIMEOUT
 	var pedal := 0.0 if stale else throttle
@@ -146,10 +158,26 @@ func simulate(dt: float, engine_enabled := true) -> void:
 	velocity.z = forward.z * speed
 	velocity.y -= 24.0 * dt
 	var before := global_position
+	var incoming := velocity
+	var impact_driver := driver_id
 	move_and_slide()
 	grounded = is_on_floor()
 	# A wall hit must reduce engine speed as well as the resulting displacement.
 	speed = Vector3(velocity.x, 0, velocity.z).dot(forward)
+	for index in range(get_slide_collision_count()):
+		var collision := get_slide_collision(index)
+		var other := collision.get_collider() as Node
+		if other == null or absf(collision.get_normal().y) > 0.7:
+			continue
+		var closing := maxf(0, -(incoming - collision.get_collider_velocity()).dot(collision.get_normal()))
+		if other is CharacterBody3D and (other.collision_layer & 2) != 0:
+			# Running into a parked car is not a vehicle run-over.
+			closing = maxf(0, -incoming.dot(collision.get_normal()))
+		var id := other.get_instance_id()
+		if closing <= 4 or collision_cooldowns.has(id):
+			continue
+		collision_cooldowns[id] = collision_time + 1.0
+		impact.emit(other, closing, impact_driver)
 	distance_travelled += Vector2(global_position.x - before.x, global_position.z - before.z).length()
 	var wheel_angle := -(global_position - before).dot(forward) / 0.43
 	for wheel in wheel_rigs:

@@ -1010,7 +1010,7 @@ func apply_command(actor, cmd: Dictionary) -> void:
 	apply_actions(actor, cmd)
 
 func apply_actions(actor, cmd: Dictionary, loot_target := -1, explicit_pickup := false) -> void:
-	if phase != "live" or not actor.alive or actor.downed:
+	if phase != "live" or not actor.alive or actor.downed or actor.is_seated():
 		return
 	if cmd.jump or cmd.reload or cmd.heal or cmd.weapon >= 0 or cmd.throw or cmd.smoke_throw:
 		rescue.cancel(actor)
@@ -1186,7 +1186,7 @@ func trace_shot(actor, origin: Vector3, direction: Vector3, rewind: float) -> Di
 	return wall if hit.is_empty() else hit
 
 func shoot(actor) -> void:
-	if not actor.alive or actor.downed or actor.revive_target != 0 or actor.fire_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or actor.ammo <= 0 or actor.throw_left > 0 or phase != "live":
+	if not actor.alive or actor.downed or actor.is_seated() or actor.revive_target != 0 or actor.fire_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or actor.ammo <= 0 or actor.throw_left > 0 or phase != "live":
 		return
 	actor.weapon_blocked = actor.weapon_obstructed(actor.aiming)
 	if actor.weapon_blocked:
@@ -2099,7 +2099,7 @@ func throw_grenade(actor, kind := 0) -> bool:
 	var stock := "smokes" if kind == 1 else "grenades"
 	if kind == 1 and smoke_clouds.size() + grenades.size() >= 32:
 		return false
-	if phase != "live" or not actor.alive or actor.downed or actor.revive_target != 0 or actor.get(stock) <= 0 or actor.throw_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or grenades.size() >= 32:
+	if phase != "live" or not actor.alive or actor.downed or actor.is_seated() or actor.revive_target != 0 or actor.get(stock) <= 0 or actor.throw_left > 0 or actor.reload_left > 0 or actor.heal_left > 0 or grenades.size() >= 32:
 		return false
 	var direction := Basis(Vector3.UP, actor.yaw) * Basis(Vector3.RIGHT, actor.pitch) * Vector3.FORWARD
 	var origin: Vector3 = actor.eye_position()

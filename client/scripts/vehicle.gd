@@ -22,8 +22,10 @@ var grounded := false
 var collision_shape: CollisionShape3D
 var visual: Node3D
 var wheel_rigs: Array[Dictionary] = []
+var seats
 
 func _ready() -> void:
+	seats = preload("res://scripts/vehicle_seats.gd").new(self)
 	collision_layer = 4
 	collision_mask = 1 | 4
 	floor_snap_length = 0.45
@@ -63,7 +65,11 @@ func set_driver(peer: int) -> void:
 	input_sequence = -1
 	reset_controls()
 
-func command(peer: int, sequence: int, forward: float, turn: float, brake: bool) -> bool:
+func command(peer: int, sequence: int, forward: float, turn: float, brake: bool, seat_epoch := -1) -> bool:
+	if seats != null and seats.slots[0] != null:
+		var driver = seats.occupant(0)
+		if driver == null or not driver.alive or driver.downed or seat_epoch != seats.epoch:
+			return false
 	if driver_id == 0 or peer != driver_id or sequence < 0 or sequence <= input_sequence or sequence > input_sequence + 64:
 		return false
 	if not is_finite(forward) or not is_finite(turn) or absf(forward) > 1.0 or absf(turn) > 1.0:
@@ -87,6 +93,7 @@ func can_rotate(target_yaw: float) -> bool:
 func simulate(dt: float) -> void:
 	if not is_finite(dt) or dt <= 0 or dt > 0.05:
 		return
+	seats.refresh()
 	input_age += dt
 	var stale := driver_id == 0 or input_age > INPUT_TIMEOUT
 	var pedal := 0.0 if stale else throttle
@@ -119,3 +126,8 @@ func simulate(dt: float) -> void:
 	for wheel in wheel_rigs:
 		wheel.turn.rotation.y = -steering if wheel.front else 0.0
 		wheel.roll.rotation.x = wrapf(wheel.roll.rotation.x + wheel_angle, -PI, PI)
+	seats.refresh()
+
+func _exit_tree() -> void:
+	if seats != null:
+		seats.clear()

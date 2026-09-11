@@ -33,6 +33,9 @@ var user_id := ""
 var is_bot := false
 var health := 100.0
 var team_id := 0
+var vehicle_ref: WeakRef
+var vehicle_seat := -1
+
 var armor := 50.0
 var kills := 0
 var rank := 0
@@ -102,6 +105,9 @@ const DAMAGE := [23.0, 12.0, 78.0]
 const INTERVAL := [0.12, 0.85, 1.25]
 const RELOAD := [2.0, 2.8, 3.0]
 const NAMES := ["AR-30 / CARBINE", "SG-8 / BREACHER", "SR-5 / MARKSMAN"]
+
+func is_seated() -> bool:
+	return vehicle_ref != null and vehicle_ref.get_ref() != null
 
 func _ready() -> void:
 	weapon_probe.radius = 0.055
@@ -264,7 +270,7 @@ func simulate(dt: float) -> void:
 # Shared by authority and prediction. Never changes inventory, damage or timers.
 func move_step(dt: float) -> void:
 	landing_speed = 0.0
-	if not alive:
+	if not alive or is_seated():
 		return
 	if downed:
 		shooting = false
@@ -369,11 +375,11 @@ func reconcile_movement() -> void:
 	prediction_corrections += 1
 
 func reload_weapon() -> void:
-	if alive and not downed and revive_target == 0 and throw_left <= 0 and reload_left <= 0 and heal_left <= 0 and ammo < CAPACITY[weapon] and reserve > 0:
+	if alive and not downed and not is_seated() and revive_target == 0 and throw_left <= 0 and reload_left <= 0 and heal_left <= 0 and ammo < CAPACITY[weapon] and reserve > 0:
 		reload_left = RELOAD[weapon]
 
 func heal() -> void:
-	if alive and not downed and revive_target == 0 and throw_left <= 0 and medkits > 0 and health < 100 and heal_left <= 0 and reload_left <= 0:
+	if alive and not downed and not is_seated() and revive_target == 0 and throw_left <= 0 and medkits > 0 and health < 100 and heal_left <= 0 and reload_left <= 0:
 		heal_left = 3.5
 
 func cancel_heal() -> void:
@@ -381,7 +387,7 @@ func cancel_heal() -> void:
 	heal_left = 0
 
 func switch_weapon(index: int) -> void:
-	if not alive or downed or revive_target != 0 or throw_left > 0 or index < 0 or index > 2 or index == weapon or reload_left > 0:
+	if not alive or downed or is_seated() or revive_target != 0 or throw_left > 0 or index < 0 or index > 2 or index == weapon or reload_left > 0:
 		return
 	# Loaded rounds stay in their own weapon. Only a completed reload transfers
 	# reserve ammunition into a magazine.

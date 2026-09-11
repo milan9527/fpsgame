@@ -83,6 +83,8 @@ def main():
             "This candidate is not the published 0.34 release or a finished commercial game.\n"
         )
         with tempfile.TemporaryDirectory(prefix="iron-candidate-profile-") as profile:
+            for directory in ("duo-profile", "duo-checkpoint"):
+                Path(profile, directory).mkdir()
             env = os.environ.copy()
             env.update({"XDG_DATA_HOME": profile, "LOCAL_TEST_ROOT": profile + "/duo-profile",
                         "CHECKPOINT_TEST_ROOT": profile + "/duo-checkpoint",

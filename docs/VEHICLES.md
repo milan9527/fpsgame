@@ -187,3 +187,12 @@ E 键上下车使用可靠通道 4 和人物动作序号；命令包含明确车
 运行 `.venv/bin/python tools/test_vehicle_login.py --mode solo` 或 `--mode duo`。夹具启动专服和两个独立客户端，通过真实账号登录、房间分配、一次性票据和 ENet 入场。专服安排初始人物/车辆位置，客户端通过正常 E/W/空格输入上车、行驶超过 8 m、制动和下车。车辆物理、燃料、座位状态与安全出口均由生产代码处理；服务器没有直接设置驾驶速度或座位占用。测试同时检查乘员收到移动/燃料变化、下车碰撞恢复、无意外损伤，以及三进程正常退出。
 
 两种模式均通过。日志为 `artifacts/vehicle-login-{solo,duo}-{server,client-0,client-1}.log`。每次测试动态选择空闲 UDP 端口和房间，避免前一房间短期租约干扰下一轮启动。该测试使用本机网络和指定起点，不代替整图驾驶、真实网络延迟、控制手感、邀请组队驾驶或新发布包验收。
+
+
+## 驾驶员断线与账号撤销
+
+驾驶员账号会话被后端撤销时，专服在标记 `revoking` 的同一次调用中清空车辆油门/转向并使驾驶输入过期，不等待通知客户端后的 150 ms 断线宽限。后续驾驶 RPC 由会话校验拒绝。驾驶员移除后，座位管理器释放驾驶位与驾驶权限，乘客保持自己的座位；车辆停稳后仍使用正常 E 键安全出口规则。
+
+真实登录测试增加 `--departure revoke` 和 `--departure drop`。前者在行驶中调用后端 `/auth/logout-all`，验证旧令牌收到 401、服务端立即清空输入、驾驶客户端清除登录与整个游戏世界、驾驶位释放、乘客安全下车。后者实际 SIGKILL 驾驶客户端，验证丢失输入后自动制动（两秒内停稳，早于 ENet 断线检测），随后驾驶位清理和乘客下车。被杀客户端的 -9 退出码是该场景的预期结果，其日志仍检查脚本错误。
+
+`.venv/bin/python tools/test_vehicle_login.py --mode duo --departure revoke` 与 `--departure drop` 均通过；日志为 `artifacts/vehicle-login-duo-{revoke,drop}-{server,client-0,client-1}.log`。权限、座位和代理规则回归记录在 `artifacts/vehicle_{authority,seats,replica}-lifecycle.log`。这些场景覆盖本机网络的账号撤销与进程故障，不代替公网延迟/抖动、重新入场或邀请队伍驾驶验收。

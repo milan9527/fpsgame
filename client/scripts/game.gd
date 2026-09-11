@@ -344,7 +344,10 @@ func report_room() -> bool:
 func revoke_account_peer(id: int) -> void:
 	sessions[id].revoking = true
 	if actors.has(id):
-		actors[id].last_command_msec = -1000
+		var actor = actors[id]
+		actor.last_command_msec = -1000
+		if actor.is_seated() and actor.vehicle_seat == 0:
+			actor.vehicle_ref.get_ref().reset_controls()
 	account_revoked.rpc_id(id)
 	await get_tree().create_timer(0.15).timeout
 	if peer_ready(id):

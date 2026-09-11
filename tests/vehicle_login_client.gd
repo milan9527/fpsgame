@@ -20,9 +20,15 @@ func run() -> void:
 	var saw_seated := false
 	var saw_motion := false
 	var saw_brake := false
+	var was_driver := false
 	while true:
 		await physics_frame
 		assert(Time.get_ticks_msec() < deadline, "Authenticated client driving timeout")
+		if OS.get_environment("VEHICLE_DEPARTURE") == "revoke" and was_driver and not game.running:
+			assert(game.token.is_empty() and game.actors.is_empty() and game.vehicle_fleet.vehicles.is_empty())
+			print("VEHICLE_REVOKED_CLIENT_PASS signed_out=ok world_cleared=ok")
+			game.request_quit()
+			return
 		if release_interact:
 			Input.action_release("loot")
 			release_interact = false
@@ -43,8 +49,12 @@ func run() -> void:
 				saw_motion = true
 			if stage == "VEHICLE_BRAKE" or stage == "VEHICLE_EXIT":
 				saw_brake = true
+			if stage == "VEHICLE_DEPARTURE" and actor.vehicle_seat == 1 and car.driver_id == 0:
+				assert(car.seats.occupant(0) == null)
+				saw_brake = true
 			if actor.vehicle_seat == 0:
-				if stage == "VEHICLE_DRIVE":
+				was_driver = true
+				if stage in ["VEHICLE_DRIVE", "VEHICLE_DEPARTURE"]:
 					Input.action_press("forward")
 				else:
 					Input.action_release("forward")

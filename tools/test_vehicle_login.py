@@ -22,6 +22,7 @@ def main():
     parser.add_argument("--departure", choices=["revoke", "drop"], default="")
     parser.add_argument("--impaired", action="store_true",
                         help="50–100 ms one-way latency, 3%% loss and three-second uplink outage")
+    parser.add_argument("--audio", action="store_true", help="Verify vehicle emitters on both network clients")
     options = parser.parse_args()
     mode = options.mode
     if options.impaired and options.departure:
@@ -29,6 +30,8 @@ def main():
     suffix = "-" + options.departure if options.departure else ""
     if options.impaired:
         suffix += "-impaired"
+    if options.audio:
+        suffix += "-audio"
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
         probe.bind(("127.0.0.1", 0))
         port = str(probe.getsockname()[1])
@@ -76,6 +79,7 @@ def main():
                              TEST_GAME_MODE=mode, API_URL=BASE,
                              VEHICLE_DEPARTURE=options.departure,
                              VEHICLE_IMPAIRED="1" if options.impaired else "",
+                             VEHICLE_AUDIO_TEST="1" if options.audio else "",
                              XDG_DATA_HOME=str(ROOT / f"artifacts/vehicle-login-client-{i}-data"))
             launch(f"client-{i}", "vehicle_login_client.gd", variables, ["--bot-client"])
         deadline = time.monotonic() + 70
@@ -110,6 +114,8 @@ def main():
                     continue
                 marker = "VEHICLE_REVOKED_CLIENT_PASS"
             assert process.returncode == 0 and marker in text, f"Failed: {path}\n{text[-4000:]}"
+            if options.audio and marker == "VEHICLE_LOGIN_CLIENT_PASS":
+                assert "VEHICLE_NETWORK_AUDIO_PASS" in text, path
         if options.departure:
             assert departed_index >= 0 and "VEHICLE_DEPARTURE_RELEASED" in entries[0][2].read_text()
             if options.departure == "revoke":

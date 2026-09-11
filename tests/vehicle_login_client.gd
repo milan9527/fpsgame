@@ -9,7 +9,8 @@ func run() -> void:
 	game.name = "Game"
 	root.add_child(game)
 	game.local_profile = null
-	game.sound.volume = 0
+	var audio_test := OS.get_environment("VEHICLE_AUDIO_TEST") == "1"
+	game.sound.volume = 0.65 if audio_test else 0.0
 	var deadline := Time.get_ticks_msec() + 65000
 	while not game.running:
 		assert(Time.get_ticks_msec() < deadline)
@@ -28,6 +29,7 @@ func run() -> void:
 	var first_frame_at := 0
 	var last_frame_at := 0
 	var largest_gap := 0
+	var saw_vehicle_audio := false
 	while true:
 		await physics_frame
 		assert(Time.get_ticks_msec() < deadline, "Authenticated client driving timeout")
@@ -61,6 +63,11 @@ func run() -> void:
 			saw_seated = true
 			var car = actor.vehicle_ref.get_ref()
 			assert(not car.authoritative)
+			if audio_test and game.sound.vehicle_audio.emitters.has(car.vehicle_id):
+				var engine = game.sound.vehicle_audio.emitters[car.vehicle_id].players.engine
+				if engine.playing and engine.get_meta("gain") > 0:
+					assert(engine.global_position.distance_to(car.global_position + Vector3.UP * 0.8) < 0.5)
+					saw_vehicle_audio = true
 			if stage == "VEHICLE_NETWORK_PAUSE" and absf(car.speed) < 0.01:
 				saw_network_stop = true
 			if saw_network_stop and car.speed > 4:
@@ -84,6 +91,9 @@ func run() -> void:
 					Input.action_release("jump")
 		if stage == "VEHICLE_DONE":
 			assert(saw_seated and saw_motion and saw_brake and not actor.is_seated())
+			if audio_test:
+				assert(saw_vehicle_audio)
+				print("VEHICLE_NETWORK_AUDIO_PASS proxy_engine=playing position=tracked")
 			if OS.get_environment("VEHICLE_IMPAIRED") == "1":
 				assert(saw_network_stop and saw_network_recovery)
 				var frequency := (applied_frames - 1) * 1000.0 / maxi(1, last_frame_at - first_frame_at)

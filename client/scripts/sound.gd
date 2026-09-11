@@ -8,9 +8,11 @@ var actor_states: Dictionary = {}
 var played_events: Dictionary = {}
 var listener: AudioListener3D
 var bus_name := ""
+var vehicle_audio = preload("res://scripts/vehicle_audio.gd").new()
 var volume := 0.65:
 	set(value):
 		volume = clampf(value, 0, 1)
+		vehicle_audio.set_volume(volume)
 		for voice in voices:
 			if is_instance_valid(voice):
 				voice.volume_db = linear_to_db(maxf(0.00001, volume * float(voice.get_meta("gain"))))
@@ -35,6 +37,7 @@ func _ready() -> void:
 		for variant in range(3 if name.begins_with("step_") else 1):
 			banks[name].append(synthesize(name, durations[name], index * 31 + variant))
 		index += 1
+	vehicle_audio.prepare()
 
 func synthesize(name: String, duration: float, seed_value: int) -> AudioStreamWAV:
 	var rng := RandomNumberGenerator.new()
@@ -82,6 +85,7 @@ func release_voice(voice: Node) -> void:
 		voice.queue_free()
 
 func _exit_tree() -> void:
+	vehicle_audio.clear()
 	for voice in voices:
 		if is_instance_valid(voice):
 			voice.stop()
@@ -178,6 +182,7 @@ func update_actors(actors: Dictionary, world, camera: Camera3D) -> void:
 		actor_states[id] = now
 
 func reset_round() -> void:
+	vehicle_audio.clear()
 	actor_states.clear()
 	for voice in voices.duplicate():
 		release_voice(voice)

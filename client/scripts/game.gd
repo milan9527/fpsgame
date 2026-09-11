@@ -1583,6 +1583,7 @@ func _process(dt: float) -> void:
 	spectator.update_view(actors, local_id, phase)
 	ui.update_team(actors, local_id)
 	sound.update_actors(actors, world, get_viewport().get_camera_3d())
+	sound.vehicle_audio.update(sound, vehicle_fleet, dt, phase == "live")
 	update_smoke_visuals()
 	world.show_loot(loot)
 	world.set_zone(zone, zone_center)

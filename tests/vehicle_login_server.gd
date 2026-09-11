@@ -16,6 +16,7 @@ class DrivingServer:
 	var diagnostic_second := -1
 	var combat := OS.get_environment("VEHICLE_COMBAT") == "1"
 	var shooter
+	var spectating := OS.get_environment("VEHICLE_SPECTATOR") == "1"
 	func shot_rewind_age(actor) -> float:
 		var age: float = super.shot_rewind_age(actor)
 		if combat and actor == shooter and driver.is_seated():
@@ -46,11 +47,11 @@ class DrivingServer:
 		super.reset_round()
 		phase_time = 8
 	func begin_round() -> void:
-		assert(sessions.size() == (3 if combat else 2), "Required backend-authenticated clients must be admitted")
+		assert(sessions.size() == (3 if combat or spectating else 2), "Required backend-authenticated clients must be admitted")
 		super.begin_round()
 		var ids: Array = sessions.keys()
 		ids.sort()
-		if combat and match_mode == "duo":
+		if (combat or spectating) and match_mode == "duo":
 			for id in ids:
 				var allies: Array = ids.filter(func(peer): return actors[peer].team_id == actors[id].team_id)
 				if allies.size() == 2:
@@ -58,7 +59,7 @@ class DrivingServer:
 					break
 		driver = actors[ids[0]]
 		driver_peer = ids[0]
-		passenger = actors[ids[1]]
+		passenger = actors[ids[2] if spectating else ids[1]]
 		if combat:
 			shooter = actors[ids[2]]
 		for actor in actors.values():
@@ -72,6 +73,13 @@ class DrivingServer:
 		test_car = vehicle_fleet.spawn(self, Vector3(0, 0.04, 0))
 		vehicle_fleet.map_spawned = true
 		events = ["VEHICLE_ENTER"]
+		if spectating:
+			var observer = actors[ids[1]]
+			assert(teams.friendly(driver.actor_id, observer.actor_id))
+			damage(observer, 10000, passenger.actor_id, true)
+			damage(observer, 10000, passenger.actor_id, true)
+			assert(not observer.alive and driver.alive)
+			print("VEHICLE_SPECTATOR_SERVER_READY eliminated=ok teammate=ok")
 	func bot_input(actor, _dt: float) -> void:
 		actor.move_input = Vector2.ZERO
 		actor.shooting = false

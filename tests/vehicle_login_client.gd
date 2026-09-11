@@ -49,6 +49,10 @@ func run() -> void:
 	var next_fire := 0
 	var saw_combat_damage := false
 	var shooter_moved_target := false
+	var spectating := OS.get_environment("VEHICLE_SPECTATOR") == "1"
+	var followed_frames := 0
+	var followed_moving := false
+	var followed_exit := false
 	while true:
 		await physics_frame
 		assert(Time.get_ticks_msec() < deadline, "Authenticated client driving timeout")
@@ -64,6 +68,28 @@ func run() -> void:
 			continue
 		var actor = game.actors[game.local_id]
 		var stage: String = game.events[0]
+		if spectating and not actor.alive:
+			var view = game.spectator
+			if not view.active or view.target_id == 0:
+				continue
+			var target = game.actors[view.target_id]
+			assert(view.camera.current and target.team_id == actor.team_id)
+			assert(view.candidates(game.actors) == [target.actor_id])
+			if target.is_seated():
+				var car = target.vehicle_ref.get_ref()
+				assert(not car.authoritative)
+				# Proxy motion and spectator pivot are updated together by Game._process.
+				assert(view.position.distance_to(car.position + Vector3.UP * 1.4) < 0.05)
+				followed_frames += 1
+				followed_moving = followed_moving or car.speed > 8
+			elif followed_moving:
+				followed_exit = view.position.distance_to(target.position + Vector3.UP * target.eye_height()) < 0.05
+			if stage == "VEHICLE_DONE" and followed_exit:
+				assert(followed_frames > 20 and followed_moving)
+				print("VEHICLE_NETWORK_SPECTATOR_PASS login=ok elimination=ok team_only=ok proxy=ok seated_samples=%d speed_over_8=ok exit=ok" % followed_frames)
+				game.request_quit()
+				return
+			continue
 		if combat:
 			var humans: Array = game.actors.keys().filter(func(id): return id > 0)
 			humans.sort()

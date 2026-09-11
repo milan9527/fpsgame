@@ -220,3 +220,12 @@ E 键上下车使用可靠通道 4 和人物动作序号；命令包含明确车
 `tests/vehicle_audio.gd` 通过实际立体声 PCM 录音验证左右声道、距离衰减、墙后音量、暂停与静音，并检查加速音高、制动、网络代理、燃料/残骸、回合停止、音源预算和清理。日志 `artifacts/vehicle-audio.log`，试听 WAV 在 `artifacts/vehicle-audio/`。退出使用游戏正式混音等待流程，最终验证无资源泄漏警告。原有枪声/脚步/事件、48 音效限流、空间监听与退出回归也通过，见 `artifacts/audio-{rules,shutdown}-vehicle-audio.log`。
 
 `.venv/bin/python tools/test_vehicle_login.py --mode duo --audio` 使用两个真实登录客户端验证网络代理发动机播放和位置跟随，两端均通过，日志 `artifacts/vehicle-login-duo-audio-{server,client-0,client-1}.log`。此网络检查验证播放器状态；实际 PCM 检查由独立录音测试承担。合成音色仍需人耳试听与最终混音，尚未进行物理扬声器/耳机和公网多人混音验收，正式发布包未升级。
+
+
+## 与 Blender 网格一致的车体弹道几何（待接入射击）
+
+新增 `vehicle_ballistics.gd`，从导入的 buggy 各 MeshInstance3D 创建双面三角形查询形状，使用独立碰撞层 16、碰撞掩码 0。形状放在对应网格下，直接继承模型坐标、整车移动/转向和车轮转向/滚动，不另写一套猜测尺寸的车壳。命中结果保留具体部件名，并将查询用 StaticBody 映射回其弱引用车辆。
+
+`tests/vehicle_ballistics.gd` 在真实物理空间验证发动机盖、侧梁、轮胎、防滚架、开放座舱、整车变换、车轮层级、清理和车主节点销毁。轮毂实际凸出于轮胎中心，因此轮胎测试瞄准高于轮毂的胎面；判断使用真实模型名称和实际形状。证据 `artifacts/vehicle-ballistics-geometry.log`，无脚本错误或资源泄漏。
+
+该组件尚未由车辆默认创建，也尚未接入 `Game.trace_shot`；原有运动盒、手雷碰撞和正式射击保持当前行为。检查发现乘员仍使用站立胶囊，必须先加入与 Blender 坐姿匹配的身体命中形状及历史回溯，再一起启用精细车体查询，避免仅移除车壳遮挡却暴露错误的人体命中范围。当前不能将本项称为已完成的精细乘员伤害。

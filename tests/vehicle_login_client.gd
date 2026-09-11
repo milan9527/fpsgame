@@ -30,6 +30,11 @@ func run() -> void:
 	var last_frame_at := 0
 	var largest_gap := 0
 	var saw_vehicle_audio := false
+	var combat := OS.get_environment("VEHICLE_COMBAT") == "1"
+	var fire_until := 0
+	var next_fire := 0
+	var saw_combat_damage := false
+	var shooter_moved_target := false
 	while true:
 		await physics_frame
 		assert(Time.get_ticks_msec() < deadline, "Authenticated client driving timeout")
@@ -45,6 +50,43 @@ func run() -> void:
 			continue
 		var actor = game.actors[game.local_id]
 		var stage: String = game.events[0]
+		if combat:
+			var humans: Array = game.actors.keys().filter(func(id): return id > 0)
+			humans.sort()
+			if humans.size() == 3:
+				if game.match_mode == "duo":
+					for id in humans:
+						var allies: Array = humans.filter(func(peer): return game.actors[peer].team_id == game.actors[id].team_id)
+						if allies.size() == 2:
+							humans = allies + humans.filter(func(peer): return not allies.has(peer))
+							break
+				var driver = game.actors[humans[0]]
+				if driver.health < 100 and driver.alive:
+					saw_combat_damage = true
+				if game.local_id == humans[2]:
+					var now := Time.get_ticks_msec()
+					if driver.is_seated():
+						var car = driver.vehicle_ref.get_ref()
+						shooter_moved_target = shooter_moved_target or car.speed > 4
+					var direction: Vector3 = (driver.aim_position() - actor.eye_position()).normalized()
+					actor.yaw = atan2(-direction.x, -direction.z)
+					actor.pitch = asin(direction.y) - actor.recoil
+					Input.action_press("aim")
+					if stage == "VEHICLE_COMBAT" and not saw_combat_damage and now >= next_fire:
+						fire_until = now + 65
+						next_fire = now + 600
+					if now < fire_until:
+						Input.action_press("fire")
+					else:
+						Input.action_release("fire")
+					if stage == "VEHICLE_DONE":
+						assert(saw_combat_damage and shooter_moved_target and actor.ammo < 30)
+						print("VEHICLE_COMBAT_SHOOTER_PASS login=ok normal_input=ok ammo=ok moving_target=ok replicated_damage=ok")
+						Input.action_release("fire")
+						Input.action_release("aim")
+						game.request_quit()
+						return
+					continue
 		if not game.vehicle_fleet.vehicles.is_empty() and game.vehicle_replica.last_sequence != last_frame:
 			var now := Time.get_ticks_msec()
 			if first_frame_at == 0:
@@ -81,7 +123,7 @@ func run() -> void:
 				saw_brake = true
 			if actor.vehicle_seat == 0:
 				was_driver = true
-				if stage in ["VEHICLE_DRIVE", "VEHICLE_DEPARTURE", "VEHICLE_NETWORK_PAUSE"]:
+				if stage in ["VEHICLE_DRIVE", "VEHICLE_DEPARTURE", "VEHICLE_NETWORK_PAUSE", "VEHICLE_COMBAT"]:
 					Input.action_press("forward")
 				else:
 					Input.action_release("forward")
@@ -90,6 +132,9 @@ func run() -> void:
 				else:
 					Input.action_release("jump")
 		if stage == "VEHICLE_DONE":
+			if combat:
+				assert(saw_combat_damage)
+				print("VEHICLE_COMBAT_OCCUPANT_PASS replicated_damage=ok seat_preserved=ok")
 			assert(saw_seated and saw_motion and saw_brake and not actor.is_seated())
 			if audio_test:
 				assert(saw_vehicle_audio)

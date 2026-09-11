@@ -23,8 +23,12 @@ def main():
     parser.add_argument("--impaired", action="store_true",
                         help="50–100 ms one-way latency, 3%% loss and three-second uplink outage")
     parser.add_argument("--audio", action="store_true", help="Verify vehicle emitters on both network clients")
+    parser.add_argument("--combat", action="store_true", help="Third authenticated client shoots the moving driver")
     options = parser.parse_args()
     mode = options.mode
+    if options.combat and (options.departure or options.impaired):
+        parser.error("Moving combat is tested separately from outage/departure")
+    count = 3 if options.combat else 2
     if options.impaired and options.departure:
         parser.error("Network recovery and driver departure are separate scenarios")
     suffix = "-" + options.departure if options.departure else ""
@@ -32,6 +36,8 @@ def main():
         suffix += "-impaired"
     if options.audio:
         suffix += "-audio"
+    if options.combat:
+        suffix += "-combat"
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
         probe.bind(("127.0.0.1", 0))
         port = str(probe.getsockname()[1])
@@ -39,11 +45,12 @@ def main():
     response = httpx.get(BASE + "/protocol")
     response.raise_for_status()
     assert response.json() == manifest, "Development API must match source build"
-    credentials = [account(f"vehicle-login-{mode}{suffix}-{i}", base=BASE) for i in range(2)]
+    credentials = [account(f"vehicle-login-{mode}{suffix}-{i}", base=BASE) for i in range(count)]
     runtime = [str(ROOT / "tools/godot"), "--headless", "--path", str(ROOT / "client")]
     env = dict(os.environ, GAME_PORT=port, GAME_MODE=mode, API_URL=BASE,
                VEHICLE_DEPARTURE=options.departure,
                VEHICLE_IMPAIRED="1" if options.impaired else "",
+               VEHICLE_COMBAT="1" if options.combat else "",
                XDG_DATA_HOME=str(ROOT / f"artifacts/vehicle-login-{mode}-server-data"))
     env["SERVER_SECRET"] = next(line.split("=", 1)[1] for line in
                                (ROOT / "artifacts/duo-dev.env").read_text().splitlines()
@@ -80,6 +87,7 @@ def main():
                              VEHICLE_DEPARTURE=options.departure,
                              VEHICLE_IMPAIRED="1" if options.impaired else "",
                              VEHICLE_AUDIO_TEST="1" if options.audio else "",
+                             VEHICLE_COMBAT="1" if options.combat else "",
                              XDG_DATA_HOME=str(ROOT / f"artifacts/vehicle-login-client-{i}-data"))
             launch(f"client-{i}", "vehicle_login_client.gd", variables, ["--bot-client"])
         deadline = time.monotonic() + 70
@@ -108,6 +116,8 @@ def main():
             assert not any(value in text for value in
                            ("ERROR:", "Assertion failed", "ObjectDB instances leaked")), text[-4000:]
             marker = "VEHICLE_LOGIN_SERVER_PASS" if role == "server" else "VEHICLE_LOGIN_CLIENT_PASS"
+            if options.combat and "VEHICLE_COMBAT_SHOOTER_PASS" in text:
+                marker = "VEHICLE_COMBAT_SHOOTER_PASS"
             if role == f"client-{departed_index}" and options.departure:
                 if options.departure == "drop":
                     assert process.returncode == -9
@@ -120,6 +130,11 @@ def main():
             assert departed_index >= 0 and "VEHICLE_DEPARTURE_RELEASED" in entries[0][2].read_text()
             if options.departure == "revoke":
                 assert "VEHICLE_REVOCATION_INPUT_CLEARED" in entries[0][2].read_text()
+        if options.combat:
+            assert "VEHICLE_COMBAT_SERVER_HIT" in entries[0][2].read_text()
+            assert entries[0][2].read_text().count("AUTHENTICATED peer=") == count
+            assert sum("VEHICLE_COMBAT_SHOOTER_PASS" in entry[2].read_text() for entry in entries) == 1
+            assert sum("VEHICLE_COMBAT_OCCUPANT_PASS" in entry[2].read_text() for entry in entries) == 2
         if options.impaired:
             assert outage_started and "VEHICLE_NETWORK_RECOVERED" in entries[0][2].read_text()
             for relay in relays:
@@ -134,7 +149,7 @@ def main():
                       "uplink_outage_seconds": 3, "relays": [r.stats for r in relays]}
             (ROOT / f"artifacts/vehicle-login-{mode}{suffix}-network.json").write_text(json.dumps(report, indent=2) + "\n")
             relays.clear()
-        print(f"VEHICLE_LOGIN_PASS mode={mode} departure={options.departure or 'none'} impaired={options.impaired} backend_auth=ok tickets=ok clients=2 driving=ok passenger=ok brake=ok exits=ok")
+        print(f"VEHICLE_LOGIN_PASS mode={mode} departure={options.departure or 'none'} impaired={options.impaired} backend_auth=ok tickets=ok clients={count} driving=ok passenger=ok brake=ok exits=ok")
     finally:
         for process, stream, _, _ in entries:
             if process.poll() is None:

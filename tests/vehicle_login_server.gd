@@ -14,21 +14,35 @@ class DrivingServer:
 	var impaired := OS.get_environment("VEHICLE_IMPAIRED") == "1"
 	var network_recovered := false
 	var diagnostic_second := -1
+	var combat := OS.get_environment("VEHICLE_COMBAT") == "1"
+	var shooter
 	func reset_round() -> void:
 		super.reset_round()
 		phase_time = 8
 	func begin_round() -> void:
-		assert(sessions.size() == 2, "Two backend-authenticated clients required")
+		assert(sessions.size() == (3 if combat else 2), "Required backend-authenticated clients must be admitted")
 		super.begin_round()
 		var ids: Array = sessions.keys()
 		ids.sort()
+		if combat and match_mode == "duo":
+			for id in ids:
+				var allies: Array = ids.filter(func(peer): return actors[peer].team_id == actors[id].team_id)
+				if allies.size() == 2:
+					ids = allies + ids.filter(func(peer): return not allies.has(peer))
+					break
 		driver = actors[ids[0]]
 		driver_peer = ids[0]
 		passenger = actors[ids[1]]
+		if combat:
+			shooter = actors[ids[2]]
 		for actor in actors.values():
 			actor.position = Vector3(95, 0.1, 90 + abs(actor.actor_id) % 12)
 		driver.position = Vector3(-1.65, 0.04, 0.1)
 		passenger.position = Vector3(1.65, 0.04, 0.1)
+		if combat:
+			shooter.position = Vector3(-8, 0.04, -6)
+			driver.armor = 0
+			assert(not teams.friendly(driver.actor_id, shooter.actor_id))
 		test_car = vehicle_fleet.spawn(self, Vector3(0, 0.04, 0))
 		vehicle_fleet.map_spawned = true
 		events = ["VEHICLE_ENTER"]
@@ -41,6 +55,7 @@ class DrivingServer:
 			assert(test_car.throttle == 0 and test_car.input_age >= test_car.INPUT_TIMEOUT)
 			print("VEHICLE_REVOCATION_INPUT_CLEARED")
 	func _physics_process(dt: float) -> void:
+		var hull_before: float = test_car.health if is_instance_valid(test_car) else -1
 		super._physics_process(dt)
 		if stage == 4:
 			done_elapsed += dt
@@ -58,6 +73,16 @@ class DrivingServer:
 			assert(driver.vehicle_seat == 0 and passenger.vehicle_seat == 1)
 			stage = 1
 			events = ["VEHICLE_DRIVE"]
+		elif stage == 1 and combat and test_car.position.z < -3:
+			stage = 9
+			events = ["VEHICLE_COMBAT"]
+		elif stage == 9 and driver.health < 100:
+			assert(test_car.speed > 4 and driver.alive and driver.is_seated())
+			assert(test_car.health == hull_before and test_car.health > 0 and passenger.alive and shooter.ammo < 30, "A driver hit must not also damage the hull in the same frame")
+			assert(rewind_peers.has(shooter.actor_id), "Real network shooter must use authoritative rewind")
+			print("VEHICLE_COMBAT_SERVER_HIT health=%.2f hull=%.2f passenger=%.2f speed=%.2f ammo=%d rewind=ok" % [driver.health, test_car.health, passenger.health, test_car.speed, shooter.ammo])
+			stage = 2
+			events = ["VEHICLE_BRAKE"]
 		elif stage == 1 and impaired and not network_recovered and test_car.position.z < -3:
 			stage = 7
 			events = ["VEHICLE_NETWORK_PAUSE"]
@@ -107,12 +132,14 @@ class DrivingServer:
 			stage = 3
 			events = ["VEHICLE_EXIT"]
 		elif stage == 3 and (not departure.is_empty() or not driver.is_seated()) and not passenger.is_seated():
-			assert(passenger.collision_mask == 7 and test_car.health == 600 and passenger.health == 100)
+			assert(passenger.collision_mask == 7)
+			assert(test_car.health > 0 and passenger.health > 0 if combat else test_car.health == 600 and passenger.health == 100)
 			if departure.is_empty():
-				assert(driver.collision_mask == 7 and driver.health == 100)
+				assert(driver.collision_mask == 7)
+				assert(driver.health > 0 and driver.health < 100 if combat else driver.health == 100)
 			stage = 4
 			events = ["VEHICLE_DONE"]
-			print("VEHICLE_LOGIN_SERVER_PASS admitted=2 seats=ok acceleration=ok fuel=ok brake=ok exits=ok")
+			print("VEHICLE_LOGIN_SERVER_PASS admitted=%d seats=ok acceleration=ok fuel=ok brake=ok exits=ok" % participants.size())
 
 func _initialize() -> void:
 	call_deferred("run")

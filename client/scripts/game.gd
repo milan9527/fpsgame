@@ -187,6 +187,7 @@ func _ready() -> void:
 		refresh_checkpoint_menu()
 		ui.leaderboard_requested.connect(show_leaderboard)
 		ui.online_requested.connect(sign_in)
+		ui.party_online_requested.connect(func(username, password, register, endpoint): sign_in(username, password, register, endpoint, "party"))
 		ui.logout_requested.connect(sign_out_all)
 		ui.leave_requested.connect(func(): leave())
 		ui.quit_requested.connect(request_quit)
@@ -1669,7 +1670,7 @@ func snapshot(packet: PackedByteArray) -> void:
 func sign_in(username: String, password: String, register: bool, endpoint: String, mode := "solo") -> void:
 	if bot_client and OS.has_environment("TEST_GAME_MODE"):
 		mode = OS.get_environment("TEST_GAME_MODE")
-	if mode not in ["solo", "duo"]:
+	if mode not in ["solo", "duo", "party"]:
 		ui.show_menu("Unknown operation mode.")
 		return
 	connection_attempt += 1
@@ -1704,6 +1705,12 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 	token = response.body.token
 	token_origin = api_url
 	ui.logout_button.disabled = false
+	if mode == "party":
+		ui.busy = false
+		ui.password.text = ""
+		ui.connection_cancel.disabled = true
+		ui.party_lobby.open(self, response.body.user_id)
+		return
 	var attempt_token: String = token
 	var join_payload := build_info.duplicate()
 	join_payload.mode = mode

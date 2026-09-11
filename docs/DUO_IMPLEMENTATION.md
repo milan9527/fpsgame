@@ -22,7 +22,7 @@
 3. 接入客户端模式入口、队友状态、地图标记与队伍观战；提供明确的邀请/组队流程，避免仅能随机配对却宣称完整组队。
 4. 将对局模式与队伍结果写入数据库和本地记录；处理现有单人检查点的兼容，验证旧数据不被错误解释为组队。
 5. 至少四个真实客户端验证两队对局、扶起与中断、淘汰/获胜、战绩落库、断开与会话撤销；同时回归现有单人、保存、协议门禁和发行包。
-6. 完成以上集成后再更新实际开发状态、发行包与持久专服配置。开发版现提供离线双人入口；在线邀请和其他未完成流程不提前开放。
+6. 完成以上集成后再更新实际开发状态、发行包与持久专服配置。开发源码现提供离线双人入口和在线邀请大厅；完整发行验收完成前不覆盖旧发布包。
 
 这些是组队功能的实施步骤，不替代原始完整游戏目标；载具、跳伞、更多内容与生产运营等其他未完成范围仍需继续推进。
 
@@ -30,7 +30,7 @@
 
 开发源码使用协议 16 / 0.35.0-dev；发布包仍为协议 15 / 0.34。原生对局已实现 16 角色分成 8 队、队友附近安全出生、友伤过滤（保留自伤）、机器人排除队友目标、整队排名和最后一队获胜。阵亡成员可随存活队友获得队伍排名。角色快照包含队伍；单人检查点仍使用原有字段。队伍检查点使用格式 2，旧单人格式 1 继续兼容；服务端队伍战绩现已接入独立模式字段。
 
-`artifacts/duo-team-rules.log`、`duo-solo-checkpoint.log`、`duo-solo-smoke.log` 记录原生队伍规则、旧存档及单人完整对局回归通过。倒地/扶起已完成原生规则验证，真实网络战斗验收、邀请、完整队伍 UI、持久化尚待实现，这不是完整双人模式。
+`artifacts/duo-team-rules.log`、`duo-solo-checkpoint.log`、`duo-solo-smoke.log` 记录原生队伍规则、旧存档及单人完整对局回归通过。倒地/扶起已完成原生规则验证，后续网络战斗、邀请大厅和持久化验证见本文后续章节，发行验收仍未完成。
 
 `tools/duo_dev.sh` 启动独立 Compose 项目 `fpsgame-duo`：API 仅监听本机 8001，双人专服 UDP 27031，数据库 `iron_duo`、Redis、数据卷及三项随机密钥均独立，容器使用 `unless-stopped` 重启策略。密钥文件 `artifacts/duo-dev.env` 权限 0600，不提交版本库。发布项目不变。
 
@@ -56,7 +56,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 `tests/rescue_rules.gd` 在实际 Godot 世界中验证倒地、动作限制、真实墙体遮挡、快照复制/恢复、受伤/移动/距离/再次交互中断、可靠动作重放、完成、机器人救援、流血归因、整队淘汰及单人立即死亡。证据 `artifacts/rescue-rules.log`。旧存档和单人完整对局分别见 `artifacts/rescue-solo-checkpoint.log` 与 `artifacts/rescue-solo-smoke.log`。
 
-四客户端倒地/扶起/两次受伤中断/队伍胜负同步已通过专门验收，战绩落库已接入本轮验收，退出/会话撤销组合验收仍待完成。原有入场脚本仍只证明入场与队伍快照。当前倒地使用蹲姿，没有专用倒地动画；队伍观战和地图已实现，邀请仍待开发。开发协议 16 扩展快照字段 `downed`、`down_health`、`bleed`、`revive_target`、`revive_left`；旧单人检查点不包含这些字段。
+四客户端倒地/扶起/两次受伤中断/队伍胜负同步已通过专门验收，战绩落库已接入本轮验收，退出/会话撤销组合验收仍待完成。原有入场脚本仍只证明入场与队伍快照。当前倒地使用蹲姿，没有专用倒地动画；队伍观战、地图及邀请大厅已实现。开发协议 16 扩展快照字段 `downed`、`down_health`、`bleed`、`revive_target`、`revive_left`；旧单人检查点不包含这些字段。
 
 ## 四客户端救援网络验收
 
@@ -70,7 +70,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 数据库迁移 `0004` 增加对局模式与玩家队伍编号；API 验证队伍人数、共享排名、跨队排名唯一性，并保留旧单人请求默认值。专服在回合开始保存每个人类成员的队伍编号，回合结束写入带模式的持久发送队列。JSON 队列重新加载后会将队伍编号规范为整数再提交。
 
-四客户端救援测试现会重载结果队列，等待正常后台发送，并直接查询 PostgreSQL 确认 4 条账号记录、两队共享名次、2 次击杀及 `duo` 模式；同时验证每个玩家的组队统计增量和单人统计未变。本地双人记录已接入模式区分；组队检查点已完成，邀请与其余组队功能仍待完成。
+四客户端救援测试现会重载结果队列，等待正常后台发送，并直接查询 PostgreSQL 确认 4 条账号记录、两队共享名次、2 次击杀及 `duo` 模式；同时验证每个玩家的组队统计增量和单人统计未变。本地双人记录已接入模式区分；组队检查点与邀请大厅已完成，其他未完成范围见当前状态。
 
 ## 本地组队记录
 
@@ -92,7 +92,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 ## 组队数据恢复验收
 
-备份工具提供独立开发环境入口，恢复器支持 0004 的队伍排名与账户总计检查。实际双人数据库备份已在无网络临时 PostgreSQL 容器恢复并验证，旧发布库 0003 也通过恢复回归；详见 [运维说明](OPERATIONS.md) 及 `artifacts/duo-restore-drill.json`。邀请、共享标点/语音与其余发行验收仍需继续完成。
+备份工具提供独立开发环境入口，恢复器支持 0004 的队伍排名与账户总计检查。实际双人数据库备份已在无网络临时 PostgreSQL 容器恢复并验证，旧发布库 0003 也通过恢复回归；详见 [运维说明](OPERATIONS.md) 及 `artifacts/duo-restore-drill.json`。共享标点/语音与其余发行验收仍需继续完成。
 
 ## 组队检查点与离线入口
 
@@ -106,7 +106,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 `backend/tests/test_parties.py` 验证单次邀请、16 个并发接受请求仅一个成功、成员唯一性、过期、解散、会话版本清理、HTTP 认证和验证错误隐私。连同房间/会话/故障/战绩回归共 46 项通过，证据 `artifacts/party-backend-tests.log`。已部署到独立开发 API 8001，两个隔离测试账号的真实 HTTP 创建/接受/查询/解散通过，证据 `artifacts/party-live-http.log`。
 
-邀请通过下述专用预约入口接入整队容量；普通逐人匹配目前仍不读取队伍。客户端邀请/准备/开始界面尚未完成；真实邀请队伍交错入场验收现已通过（见后文），不能仅用后端接口宣称完整在线邀请已交付。
+邀请通过下述专用预约入口接入整队容量；普通逐人匹配目前仍不读取队伍。客户端邀请/开始界面和真实邀请队伍交错入场均已有独立验收（见后文）；当前接受邀请后允许队长开始，没有单独的准备状态。
 
 ## 整队预约内部能力与专服配队
 
@@ -128,7 +128,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 响应以及 `GET /parties/current` 只返回请求者自己的 `admission`，包含房间绑定、模式、构建信息和实际票据剩余秒数；不会返回同伴票据、内部预约对象或会话版本。已消费或过期票据不再返回，状态为 `consumed_or_expired`。目前此状态需要离队后重新组队，没有自动重新排队。任一成员解散会释放同批未使用票据；已经连接的成员保留连接租约，由专服正常管理。
 
-61 项后端回归通过，证据 `artifacts/party-coordinator-tests.log`：包括并发幂等、队长权限、响应隐私、无可用房间重试、过期快照、注销失效、解散竞争、部分入场后解散及队伍即将过期。开发 API 8001 已更新；运行 `.venv/bin/python tools/test_party_http.py` 使用两个可复用隔离账号，对运行中的 UDP 27031 房间完成邀请、预约、幂等重试、按人取票及解散后容量再预约，日志 `artifacts/party-coordinator-http.log`。此 HTTP 验收不消费 ENet 票据；交错入场由后述独立网络验收覆盖，客户端界面仍待完成。
+61 项后端回归通过，证据 `artifacts/party-coordinator-tests.log`：包括并发幂等、队长权限、响应隐私、无可用房间重试、过期快照、注销失效、解散竞争、部分入场后解散及队伍即将过期。开发 API 8001 已更新；运行 `.venv/bin/python tools/test_party_http.py` 使用两个可复用隔离账号，对运行中的 UDP 27031 房间完成邀请、预约、幂等重试、按人取票及解散后容量再预约，日志 `artifacts/party-coordinator-http.log`。此 HTTP 验收不消费 ENet 票据；交错入场由后述独立网络验收覆盖，客户端界面另有下述双客户端验收。
 
 ## 邀请队伍真实交错入场验收
 
@@ -136,6 +136,16 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml run --rm
 
 该场景继续执行真实客户端救援交互、两次受伤中断、成功扶起、阵亡队友观战获胜、整队淘汰和结果队列磁盘重载。最终直接查询 PostgreSQL 的四条结果，按账号确认原邀请伙伴仍共享队伍和名次，并核对每人双人统计增量及单人统计不变。证据 `artifacts/invited-party-network.log`、`artifacts/invited-party-network-server.log` 和四份 `artifacts/invited-party-network-client-*.log`。
 
-客户端现在复用 `connect_admission` 完成构建/模式校验、票据登记、ENet 连接和握手超时处理。连接尝试编号会拒绝迟到预约并用原始账号来源取消票据；`artifacts/party-admission-cancellation.log` 验证取消与单机启动之后的迟到响应隔离。此轮邀请创建/接受/开始由测试驱动完成，尚未提供面向玩家的邀请界面，不能把该验收等同于界面流程交付。
+客户端现在复用 `connect_admission` 完成构建/模式校验、票据登记、ENet 连接和握手超时处理。连接尝试编号会拒绝迟到预约并用原始账号来源取消票据；`artifacts/party-admission-cancellation.log` 验证取消与单机启动之后的迟到响应隔离。这项四客户端验收由测试驱动创建邀请；面向玩家的界面由下述双客户端测试单独覆盖。
 
 共享入场入口改动后，普通逐人双人匹配仍通过四客户端救援、观战和战绩回归：`artifacts/party-admission-solo-queue-regression.log`（文件名中的 solo-queue 指单人排队，实际对局模式为 duo）。
+
+## 玩家邀请大厅（开发源码）
+
+启动 `tools/godot --path client`，在线账号区域选择 `DUO`，API 地址填写 `http://127.0.0.1:8001`，登录或创建账号后进入队伍大厅。队长点击 `CREATE TEAM` 并复制邀请码，另一名玩家粘贴后点击 `ACCEPT INVITATION`；队长看到两名成员后点击 `START DUO OPERATION`。大厅每两秒查询成员及自己的票据，两人通过同一房间的独立票据入场。登录成功后清除密码输入。
+
+`LEAVE TEAM & RETURN` 调用后端解散并释放待使用预约，成功后返回菜单；`RETURN / KEEP TEAM` 仅关闭大厅，允许保留队伍。重新选择 DUO 登录会加载已有队伍。面板打开时隐藏主菜单以隔离键盘焦点；请求期间避免重复操作，失败后恢复按钮并显示服务错误，轮询失败退避至五秒。401 清理登录并返回菜单。队伍寿命不续期；已消费或过期预约目前需要解散后重新组队，没有准备开关、自动再排队或完整赛后保队流程。
+
+`tests/party_lobby_rules.gd` 验证角色权限、邀请码、预约失败重试、按人入场、解散/保留返回、迟到响应与登录失效。实际渲染截图为 `artifacts/party-lobby-menu.png` 和 `artifacts/party-lobby.png`，使用合成姓名与邀请码。`artifacts/party-lobby-render.log` 为渲染和规则记录，连接取消回归见 `artifacts/party-lobby-cancel-regression.log`。
+
+`.venv/bin/python tools/test_party_lobby_network.py` 启动两个真实 Godot 客户端，操作正式登录入口与邀请面板控件，连接独立开发 API/UDP 27031，验证队长创建、成员接受、成员轮询、队长开始、ENet 入场及快照中同伴姓名/队伍编号。主日志 `artifacts/party-lobby-network.log`，客户端日志 `artifacts/party-lobby-network-0.log` 和 `-1.log`；邀请码仅通过权限 0700 的临时测试目录交换，结束后删除。此测试验证入场，完整战斗和落库由既有四客户端场景覆盖；发布包仍为 0.34。

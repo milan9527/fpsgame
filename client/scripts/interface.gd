@@ -8,6 +8,9 @@ var logout_button: Button
 signal solo_requested
 signal duo_requested
 signal online_requested(username: String, password: String, register: bool, endpoint: String)
+signal party_online_requested(username: String, password: String, register: bool, endpoint: String)
+var online_mode: OptionButton
+var party_lobby
 signal leave_requested
 signal quit_requested
 signal quit_without_save_requested
@@ -166,13 +169,17 @@ func _ready() -> void:
 	endpoint = field(right, "API URL", settings.get_value("network", "endpoint", "http://127.0.0.1:8000"))
 	var connection_row := HBoxContainer.new()
 	right.add_child(connection_row)
-	button(connection_row, "SIGN IN & DEPLOY", func(): online(false))
+	online_mode = OptionButton.new()
+	online_mode.add_item("SOLO")
+	online_mode.add_item("DUO")
+	connection_row.add_child(online_mode)
+	button(connection_row, "SIGN IN", func(): online(false))
 	connection_cancel = Button.new()
 	connection_cancel.text = "CANCEL"
 	connection_cancel.disabled = true
 	connection_cancel.pressed.connect(func(): connection_cancel_requested.emit())
 	connection_row.add_child(connection_cancel)
-	button(right, "CREATE ACCOUNT & DEPLOY", func(): online(true))
+	button(right, "CREATE ACCOUNT", func(): online(true))
 	status = label(right, "Offline operations need no account or connection.", 15, Color("9aafb4"))
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.custom_minimum_size.y = 65
@@ -333,6 +340,9 @@ func _ready() -> void:
 	controls.changed.connect(update_controls_hint)
 	controls.closed.connect(update_controls_hint)
 	update_controls_hint()
+	party_lobby = preload("res://scripts/party_lobby.gd").new()
+	party_lobby.theme = theme
+	add_child(party_lobby)
 
 func update_controls_hint() -> void:
 	controls_hint.text = "%s/%s/%s/%s  Move   •   %s  Sprint   •   %s  Jump\n%s  Reload   •   %s  Loot   •   %s  Heal\n%s/%s/%s  Weapons   •   RMB  Aim   •   ESC  Menu\n%s  Inventory   •   %s  Map   •   %s  Frag\n%s/%s  Lean   •   %s  Smoke" % [Bindings.key_label("forward"), Bindings.key_label("back"), Bindings.key_label("left"), Bindings.key_label("right"), Bindings.key_label("sprint"), Bindings.key_label("jump"), Bindings.key_label("reload"), Bindings.key_label("loot"), Bindings.key_label("heal"), Bindings.key_label("weapon1"), Bindings.key_label("weapon2"), Bindings.key_label("weapon3"), Bindings.key_label("inventory"), Bindings.key_label("map"), Bindings.key_label("throw"), Bindings.key_label("lean_left"), Bindings.key_label("lean_right"), Bindings.key_label("smoke_throw")]
@@ -383,7 +393,10 @@ func online(register: bool) -> void:
 	connection_cancel.disabled = false
 	status.text = "Connecting to operations service…"
 	save_settings()
-	online_requested.emit(username.text, password.text, register, endpoint.text.trim_suffix("/"))
+	if online_mode.selected == 1:
+		party_online_requested.emit(username.text, password.text, register, endpoint.text.trim_suffix("/"))
+	else:
+		online_requested.emit(username.text, password.text, register, endpoint.text.trim_suffix("/"))
 
 func save_settings() -> void:
 	settings.set_value("controls", "sensitivity", sensitivity)
@@ -393,6 +406,7 @@ func save_settings() -> void:
 	settings.save("user://settings.cfg")
 
 func show_menu(message := "") -> void:
+	party_lobby.dismiss()
 	controls.close()
 	set_map(false)
 	tactical_map.waypoint = null
@@ -411,6 +425,7 @@ func show_menu(message := "") -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func show_game() -> void:
+	party_lobby.dismiss()
 	death_recap.clear()
 	recap_panel.hide()
 	controls.close()

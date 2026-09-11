@@ -15,30 +15,34 @@ BASE = "http://127.0.0.1:8001"
 def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--requeue", action="store_true")
+    parser.add_argument("--api-url", default=BASE)
     parser.add_argument("--candidate-dir", type=Path)
     options = parser.parse_args()
+    base = options.api_url.rstrip("/")
     runtime = [str(ROOT / "tools/godot"), "--headless", "--path", str(ROOT / "client")]
     candidate = None
     if options.candidate_dir:
         runtime, candidate = candidate_command(options.candidate_dir)
-        response = httpx.get(BASE + "/protocol")
+        response = httpx.get(base + "/protocol")
         response.raise_for_status()
         assert response.json() == candidate["manifest"], "Candidate and development API builds differ"
-    identities = [account(f"duo-network-{i}", base=BASE) for i in range(2)]
+    identities = [account(f"duo-network-{i}", base=base) for i in range(2)]
     auth = [{"Authorization": "Bearer " + identity["token"]} for identity in identities]
     processes = []
     with tempfile.TemporaryDirectory(prefix="party-ui-", dir=ROOT / "artifacts") as private:
         for header in auth:
-            httpx.delete(BASE + "/parties/current", headers=header).raise_for_status()
+            httpx.delete(base + "/parties/current", headers=header).raise_for_status()
         try:
             for cycle in range(2 if options.requeue else 1):
                 for index, identity in enumerate(identities):
                     log_path = ROOT / "artifacts" / (f"party-requeue-{cycle}-{index}.log" if options.requeue else f"party-lobby-network-{index}.log")
                     if candidate:
                         log_path = log_path.with_name("candidate-" + log_path.name)
+                    if base != BASE:
+                        log_path = log_path.with_name("deployed-" + log_path.name)
                     output = log_path.open("w")
                     env = dict(os.environ, TEST_USERNAME=identity["username"],
-                               TEST_PASSWORD=identity["password"], API_URL=BASE,
+                               TEST_PASSWORD=identity["password"], API_URL=base,
                                XDG_DATA_HOME=str(Path(private) / f"client-{index}"),
                                PARTY_TEST_REQUEUE=str(cycle),
                                PARTY_TEST_ROLE="leader" if index == 0 else "member",
@@ -70,7 +74,7 @@ def run():
                     process.wait()
                 output.close()
             for header in auth:
-                httpx.delete(BASE + "/parties/current", headers=header).raise_for_status()
+                httpx.delete(base + "/parties/current", headers=header).raise_for_status()
 
 
 if __name__ == "__main__":

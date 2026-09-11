@@ -55,7 +55,7 @@ def validate_team_state(state):
         raise ValueError('Restored team results failed mode, placement or account-total checks')
 
 
-def drill(bundle, report_path):
+def drill(bundle, report_path, upgrade_image=None):
     os.umask(0o077)
     manifest = validate(bundle)  # Reject corruption before any container is created.
     name = 'iron-restore-drill-' + uuid.uuid4().hex[:12]
@@ -65,7 +65,9 @@ def drill(bundle, report_path):
                         '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', '-e', 'POSTGRES_USER=iron',
                         '-e', 'POSTGRES_DB=iron', 'postgres:16-alpine'], stdout=subprocess.DEVNULL, check=True)
         for _ in range(100):
-            ready = subprocess.run(['docker', 'exec', name, 'pg_isready', '-U', 'iron', '-d', 'iron'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # The image's initialization server exposes a temporary Unix socket.
+            # TCP readiness identifies the final server, after initialization exits.
+            ready = subprocess.run(['docker', 'exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', 'iron', '-d', 'iron'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if ready.returncode == 0:
                 break
             time.sleep(.2)
@@ -76,6 +78,45 @@ def drill(bundle, report_path):
                             '--exit-on-error', '--single-transaction', '--no-owner', '--no-privileges'], stdin=source, check=True)
         raw = subprocess.check_output(['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-At', '-v', 'ON_ERROR_STOP=1', '-c', SQL], text=True)
         state = json.loads(raw)
+        migration = None
+        if upgrade_image:
+            if state['schema_revision'] != '0003':
+                raise ValueError('This release upgrade rehearsal requires a schema 0003 backup')
+            image_id = subprocess.check_output(
+                ['docker', 'image', 'inspect', '--format', '{{.Id}}', upgrade_image], text=True).strip()
+            fingerprint_sql = """SELECT json_build_object(
+              'users', (SELECT md5(coalesce(string_agg(row_to_json(t)::text,E'\\n' ORDER BY id),'')) FROM users t),
+              'matches', (SELECT md5(coalesce(string_agg(row_to_json(t)::text,E'\\n' ORDER BY id),'')) FROM (SELECT id,created FROM matches) t),
+              'results', (SELECT md5(coalesce(string_agg(row_to_json(t)::text,E'\\n' ORDER BY id),'')) FROM (SELECT id,match_id,user_id,kills,rank FROM results) t));"""
+            def fingerprint():
+                return json.loads(subprocess.check_output(
+                    ['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-At',
+                     '-v', 'ON_ERROR_STOP=1', '-c', fingerprint_sql], text=True))
+            before = fingerprint()
+            counts = {key: state[key] for key in ['users', 'matches', 'results']}
+            # Share only the isolated PostgreSQL network namespace: loopback works,
+            # but neither container has an external interface or published port.
+            upgrade_log = subprocess.check_output(
+                ['docker', 'run', '--rm', '--network', 'container:' + name, '--memory', '512m',
+                 '-e', 'DATABASE_URL=postgresql+psycopg://iron@127.0.0.1:5432/iron',
+                 image_id, 'python', '-m', 'app.migrate'], text=True)
+            if 'DATABASE_SCHEMA_READY revision=0004' not in upgrade_log:
+                raise ValueError('Upgrade image did not report schema 0004')
+            raw = subprocess.check_output(
+                ['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-At',
+                 '-v', 'ON_ERROR_STOP=1', '-c', SQL], text=True)
+            state = json.loads(raw)
+            if fingerprint() != before or any(state[key] != value for key, value in counts.items()):
+                raise ValueError('Upgrade changed existing account or result data')
+            non_solo = subprocess.check_output(
+                ['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-At',
+                 '-v', 'ON_ERROR_STOP=1', '-c',
+                 "SELECT (SELECT count(*) FROM matches WHERE mode<>'solo') + (SELECT count(*) FROM results WHERE team_id<>0)"], text=True)
+            if int(non_solo.strip()):
+                raise ValueError('Historical data was not classified as solo')
+            migration = {'from': '0003', 'to': state['schema_revision'], 'image_id': image_id,
+                         'old_fields_unchanged': True, 'old_row_fingerprints': before,
+                         'historical_solo_backfill': True}
         if state['schema_revision'] not in ['0002', '0003', '0004'] or any(state[key] for key in ['invalid_stats', 'invalid_results', 'orphan_results', 'duplicate_results', 'unvalidated_constraints']):
             raise ValueError('Restored database failed schema or integrity checks')
         if state['schema_revision'] in ['0003', '0004']:
@@ -97,6 +138,8 @@ def drill(bundle, report_path):
                   'backup': str(bundle), 'files': manifest['files'], 'restored': state,
                   'queues': {filename: len(json.loads((bundle / filename).read_text())) for filename in ['results.json', 'results-game2.json']},
                   'scope': 'Isolated PostgreSQL restore and structural integrity; queues validated but not replayed; no production replacement.'}
+        if migration:
+            report['upgrade_rehearsal'] = migration
     finally:
         exists = subprocess.run(['docker', 'container', 'inspect', name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if exists.returncode == 0:
@@ -109,5 +152,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('bundle', type=Path)
     parser.add_argument('--report', type=Path, default=Path('artifacts/restore-drill.json'))
+    parser.add_argument('--upgrade-image', help='Rehearse 0003→0004 using this backend image in the isolated restore namespace')
     args = parser.parse_args()
-    drill(args.bundle.resolve(), args.report.resolve())
+    drill(args.bundle.resolve(), args.report.resolve(), args.upgrade_image)

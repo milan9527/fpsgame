@@ -57,6 +57,7 @@ services:
     environment:
       API_URL: http://api.internal:8000
       SERVER_SECRET: ${SERVER_SECRET}
+      GAME_MODE: solo
       GAME_PUBLIC_HOST: ${GAME_PUBLIC_HOST:-127.0.0.1}
     ports: ["27015:27015/udp"]
     volumes: ["game_data:/home/game/.local/share/godot/app_userdata"]
@@ -71,6 +72,7 @@ services:
     environment:
       API_URL: http://api.internal:8000
       SERVER_SECRET: ${SERVER_SECRET}
+      GAME_MODE: duo
       GAME_PORT: "27022"
       GAME_PUBLIC_HOST: ${GAME_PUBLIC_HOST:-127.0.0.1}
     ports: ["27022:27022/udp"]

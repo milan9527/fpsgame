@@ -45,4 +45,4 @@
 - 真实 OpenGL 渲染：原有九条角色动作和新增三条倒地动作、骨骼蒙皮边界、武器显示/隐藏、复活恢复及麦克风设置界面。`artifacts/candidate-render.log`；逐项日志和截图位于候选目录下 `render-verification/`。
 - 候选 PCK 的真实 PulseAudio 驱动采集：440 Hz 虚拟源、监听不发包、模式切换、按键松开后再次发送及本机零回声输出。`artifacts/candidate-voice-driver.log`。它仍不代表物理音频设备验收。
 
-验证报告的 `integration_verification` 记录这些证据；压缩包内容与校验和不变。发布服务版本切换尚未执行。
+验证报告的 `integration_verification` 记录这些证据；压缩包内容与校验和不变。发布服务现已切换为 0.35.0-dev / 协议 16 / 数据库 0004，默认包与此候选压缩包一致。0.34 归档于 `artifacts/releases/0.34/`；过程见 [运行服务升级](RELEASE_035.md)。

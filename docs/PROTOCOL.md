@@ -1,6 +1,6 @@
 # 客户端、专服与 API 兼容性
 
-**本分支协议 16 尚未发布；运行中的发布服务与游戏包仍为协议 15 / 0.34。开发联调使用独立 8001 / UDP 27031 环境。**
+**当前发布服务与默认游戏包为协议 16 / 0.35.0-dev。发布 API 8000，SOLO UDP 27015，DUO UDP 27022；独立开发环境仍为 8001 / UDP 27031。0.34 / 协议 15 已归档，不能连接新服务。**
 
 唯一版本清单是 `client/protocol.json`。Godot 客户端和专服读取同一资源；API 镜像构建时复制该文件，发行 PCK 也包含它。
 
@@ -59,6 +59,6 @@ docker compose up -d --build api game game2
 
 开发组队大厅接口：`POST /parties/ready` 只接受布尔 `ready`，两人准备后由队长调用 `POST /parties/reserve`。已预约队伍响应提供非秘密的 `reservation_id`；`POST /parties/reset` 需要构建信息和对应 `group_id`，用于在成员租约释放后保留队伍、撤销旧预约并清除双方准备状态。旧编号不能重置后来签发的新预约。票据仍仅按当前账号返回。
 
-开发版队伍标点：`request_team_ping(round_id, sequence, point: Vector2, clear: bool)` 使用可靠通道 4；服务器只接受当前回合的已认证存活双人成员。`team_ping_snapshot(round_id, states)` 使用通道 3 的有序不可靠更新，按接收者队伍筛选，最多两个标点；每项含发送者 id、point、name、remaining。标点不加入全员角色快照。新增 RPC 要求开发客户端与专服同步更新脚本，现有发布协议 15 / 0.34 未更新。
+开发版队伍标点：`request_team_ping(round_id, sequence, point: Vector2, clear: bool)` 使用可靠通道 4；服务器只接受当前回合的已认证存活双人成员。`team_ping_snapshot(round_id, states)` 使用通道 3 的有序不可靠更新，按接收者队伍筛选，最多两个标点；每项含发送者 id、point、name、remaining。标点不加入全员角色快照。新增 RPC 要求开发客户端与专服同步更新脚本，协议 15 / 0.34 客户端不兼容当前服务。
 
 开发语音转发使用独立不可靠通道 5：`submit_voice(round_id, sequence, packet)` 发往专服；`receive_voice(round_id, sender, sequence, packet)` 仅由专服向队友发送。包长固定 164 字节，50 包/秒、突发上限 6、重放窗口 64。发送者身份来自已认证 ENet 会话；大厅采用邀请队伍，对局采用权威队伍。编码与当前未完成范围见 [语音开发](VOICE.md)。

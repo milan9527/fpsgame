@@ -18,11 +18,13 @@ func run() -> void:
 	deadline = Time.get_ticks_msec() + 55000
 	game.ui.username.text = OS.get_environment("TEST_USERNAME")
 	game.ui.password.text = OS.get_environment("TEST_PASSWORD")
-	game.ui.endpoint.text = "http://127.0.0.1:8001"
+	var endpoint := OS.get_environment("API_URL")
+	game.ui.endpoint.text = endpoint if not endpoint.is_empty() else "http://127.0.0.1:8001"
 	game.ui.online_mode.select(1)
 	game.ui.online(false)
 	var lobby = game.ui.party_lobby
 	await wait_until(func(): return lobby.visible and not lobby.busy and lobby.known)
+	assert(game.api_url == game.ui.endpoint.text, "Fixture must connect to the selected deployment")
 	assert(game.ui.password.text.is_empty())
 	var path := OS.get_environment("PARTY_TEST_INVITATION_FILE")
 	var leader := OS.get_environment("PARTY_TEST_ROLE") == "leader"

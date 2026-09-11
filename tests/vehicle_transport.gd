@@ -22,7 +22,13 @@ class Fixture:
 		var port := int(OS.get_environment("VEHICLE_TEST_PORT"))
 		if dedicated:
 			assert(peer.create_server(port, 2) == OK)
-			multiplayer.peer_connected.connect(func(id): sessions[id] = {})
+			multiplayer.peer_connected.connect(func(id):
+				sessions[id] = {}
+				var actor = actors[1]
+				actors.erase(1)
+				actor.actor_id = id
+				actors[id] = actor
+				vehicle_fleet.vehicles[1].set_driver(id))
 			for id in range(1, 17):
 				spawn_actor(id, "Transport-%d" % id, false, Vector3(id, 0, 10))
 			var car = vehicle_fleet.spawn(self, Vector3.ZERO)
@@ -61,16 +67,19 @@ class Fixture:
 		if observed in [0, 1]:
 			assert(vehicle_fleet.vehicles.size() == 1)
 			var car = vehicle_fleet.vehicles[1]
-			assert(not car.authoritative and car.driver_id == 1)
-			assert(actors[1].is_seated() and actors[2].is_seated())
-			assert(actors[1].vehicle_seat == 0 and actors[2].vehicle_seat == 1)
+			assert(not car.authoritative and car.driver_id == multiplayer.get_unique_id())
+			var driver = actors[car.driver_id]
+			assert(driver.is_seated() and actors[2].is_seated())
+			assert(driver.vehicle_seat == 0 and actors[2].vehicle_seat == 1)
+			if observed == 0:
+				send_vehicle_input(driver, {"loot": false, "seq": 1, "z": -0.75, "x": 0.25, "crouch": false})
 			if observed == 1:
 				assert(vehicle_replica.targets[1].p.x == 8)
 				assert(car.fuel == 42)
 		else:
 			assert(vehicle_fleet.vehicles.is_empty())
-			assert(not actors[1].is_seated() and not actors[2].is_seated())
-			assert(actors[1].collision_mask == 7)
+			assert(not actors[multiplayer.get_unique_id()].is_seated() and not actors[2].is_seated())
+			assert(actors[multiplayer.get_unique_id()].collision_mask == 7)
 		reported = observed
 		stage_seen.rpc_id(1, observed)
 		if observed == 2:
@@ -83,16 +92,21 @@ class Fixture:
 			return
 		if stage == 0:
 			var car = vehicle_fleet.vehicles[1]
+			for _i in range(120):
+				if car.input_sequence >= 0:
+					break
+				await get_tree().process_frame
+			assert(car.input_sequence == 0 and car.throttle == 0.75 and car.steer_input == 0.25, "Production driving RPC must authenticate the ENet sender")
 			car.position.x = 8
 			car.fuel = 42
 			for index in range(2):
-				car.seats.sync_actor(actors[index + 1], index)
+				car.seats.sync_actor(car.seats.occupant(index), index)
 		elif stage == 1:
 			vehicle_fleet.clear()
-			actors[1].position = Vector3(7, 0, 3)
+			actors[multiplayer.get_remote_sender_id()].position = Vector3(7, 0, 3)
 			actors[2].position = Vector3(9, 0, 3)
 		else:
-			print("VEHICLE_TRANSPORT_SERVER_PASS acknowledged_stages=3")
+			print("VEHICLE_TRANSPORT_SERVER_PASS acknowledged_stages=3 driver_rpc=ok")
 			finish.rpc()
 			await get_tree().create_timer(0.3).timeout
 			multiplayer.multiplayer_peer.close()

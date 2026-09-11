@@ -29,6 +29,8 @@ var vehicle_fleet = preload("res://scripts/vehicle_fleet.gd").new()
 var vehicle_frames = preload("res://scripts/vehicle_frame_pair.gd").new()
 var vehicle_replica = preload("res://scripts/vehicle_replica.gd").new()
 var world_frame_sequence := 0
+var vehicle_input_key := ""
+var vehicle_input_sequence := -1
 var sessions: Dictionary = {}
 var pending: Dictionary = {}
 var participants: Dictionary = {}
@@ -425,6 +427,8 @@ func clear_actors() -> void:
 	vehicle_frames.reset(network_round_id)
 	vehicle_replica.reset(self, network_round_id)
 	world_frame_sequence = 0
+	vehicle_input_key = ""
+	vehicle_input_sequence = -1
 	voice_relay.reset()
 	if team_voice != null:
 		team_voice.reset_round()
@@ -754,12 +758,14 @@ func _physics_process(dt: float) -> void:
 			net_tick += dt
 			if net_tick >= 1.0 / 30:
 				net_tick = 0
-				if phase == "live" and has_actions(cmd):
+				send_vehicle_input(actor, cmd)
+				if phase == "live" and not actor.is_seated() and has_actions(cmd):
 					var supply_id := int(supply_target(actor).get("id", -1)) if cmd.loot else -1
 					if match_mode == "duo" and (actor.revive_target != 0 or rescue.target(self, actor) != null):
 						supply_id = -1
 					action_command.rpc_id(1, network_round_id, cmd, supply_id)
-				input_command.rpc_id(1, without_actions(cmd))
+				if not actor.is_seated():
+					input_command.rpc_id(1, without_actions(cmd))
 				action_latch.clear()
 		else:
 			apply_command(actor, cmd)
@@ -902,7 +908,7 @@ func local_command(actor) -> Dictionary:
 	cmd.lean = Input.get_axis("lean_left", "lean_right")
 	for action in ["fire", "sprint", "crouch"]:
 		cmd[action] = Input.is_action_pressed(action)
-	if actor.is_seated() and not online:
+	if actor.is_seated():
 		cmd.crouch = Input.is_action_pressed("jump") # Vehicle handbrake uses the jump binding.
 	if inventory_pointer_guard:
 		inventory_pointer_guard = Input.is_action_pressed("fire") or Input.is_action_pressed("aim")
@@ -939,6 +945,77 @@ func local_command(actor) -> Dictionary:
 			cmd.weapon = test_switch_stage % 3
 			action_latch.weapon = cmd.weapon
 	return cmd
+
+func send_vehicle_input(actor, cmd: Dictionary) -> void:
+	if actor.is_seated():
+		var car = actor.vehicle_ref.get_ref()
+		if cmd.loot:
+			vehicle_interaction.rpc_id(1, network_round_id, cmd.seq, car.vehicle_id, car.seats.epoch, -1)
+			cmd.loot = false
+		if actor.vehicle_seat == 0:
+			var key := "%s:%d:%d" % [network_round_id, car.vehicle_id, car.seats.epoch]
+			if key != vehicle_input_key:
+				vehicle_input_key = key
+				vehicle_input_sequence = car.input_sequence
+			# Bound unacknowledged input so loss cannot permanently outrun the
+			# authority's acceptance window. Seat epochs isolate delayed packets.
+			vehicle_input_sequence = mini(maxi(vehicle_input_sequence, car.input_sequence) + 1, car.input_sequence + 64)
+			vehicle_input.rpc_id(1, network_round_id, car.vehicle_id, car.seats.epoch, vehicle_input_sequence, -float(cmd.z), float(cmd.x), bool(cmd.crouch))
+		return
+	if not cmd.loot or phase != "live":
+		return
+	if match_mode == "duo" and (actor.revive_target != 0 or rescue.target(self, actor) != null):
+		return
+	var choices: Array = vehicle_fleet.candidates(actor)
+	if not choices.is_empty():
+		var choice: Dictionary = choices[0]
+		vehicle_interaction.rpc_id(1, network_round_id, cmd.seq, choice.vehicle.vehicle_id, choice.vehicle.seats.epoch, choice.seat)
+		cmd.loot = false
+
+@rpc("any_peer", "call_remote", "unreliable_ordered", 7)
+func vehicle_input(round_id: String, car_id: int, epoch: int, seq: int, forward: float, turn: float, brake: bool) -> void:
+	receive_vehicle_input(multiplayer.get_remote_sender_id(), round_id, car_id, epoch, seq, forward, turn, brake)
+
+func vehicle_actor(sender: int, round_id: String):
+	if not dedicated or round_id != match_id or phase != "live":
+		return null
+	if not sessions.has(sender) or sessions[sender].get("revoking", false) or not actors.has(sender):
+		return null
+	var actor = actors[sender]
+	return actor if actor.alive and not actor.downed else null
+
+func receive_vehicle_input(sender: int, round_id: String, car_id: int, epoch: int, seq: int, forward: float, turn: float, brake: bool) -> bool:
+	var actor = vehicle_actor(sender, round_id)
+	if actor == null or actor.command_tokens < 1:
+		return false
+	actor.command_tokens -= 1
+	if not vehicle_fleet.vehicles.has(car_id) or not actor.is_seated() or actor.vehicle_seat != 0:
+		return false
+	var car = vehicle_fleet.vehicles[car_id]
+	if actor.vehicle_ref.get_ref() != car or car.seats.occupant(0) != actor or seq > 2147483647:
+		return false
+	return car.command(sender, seq, forward, turn, brake, epoch)
+
+@rpc("any_peer", "call_remote", "reliable", 4)
+func vehicle_interaction(round_id: String, seq: int, car_id: int, epoch: int, seat: int) -> void:
+	receive_vehicle_interaction(multiplayer.get_remote_sender_id(), round_id, seq, car_id, epoch, seat)
+
+func receive_vehicle_interaction(sender: int, round_id: String, seq: int, car_id: int, epoch: int, seat: int) -> bool:
+	var actor = vehicle_actor(sender, round_id)
+	if actor == null or seq < 0 or seq > 2147483647 or seq <= actor.last_action_sequence:
+		return false
+	actor.last_action_sequence = seq
+	if actor.action_tokens < 1 or seq < actor.last_sequence - 120:
+		return false
+	actor.action_tokens -= 1
+	if seat < -1 or seat > 1 or not vehicle_fleet.vehicles.has(car_id):
+		return false
+	var car = vehicle_fleet.vehicles[car_id]
+	if car.seats.epoch != epoch:
+		return false
+	if seat == -1:
+		return actor.is_seated() and actor.vehicle_ref.get_ref() == car and car.seats.exit(actor)
+	return not actor.is_seated() and car.seats.enter(actor, seat)
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
 func input_command(cmd: Dictionary) -> void:
@@ -1026,7 +1103,7 @@ func valid_command(cmd: Dictionary) -> bool:
 
 func apply_command(actor, cmd: Dictionary) -> void:
 	if actor.is_seated():
-		if not online:
+		if not online and not dedicated:
 			vehicle_fleet.controls(actor, cmd, phase == "live")
 		return
 	actor.move_input = Vector2(cmd.x, cmd.z).limit_length()
@@ -1046,7 +1123,7 @@ func apply_actions(actor, cmd: Dictionary, loot_target := -1, explicit_pickup :=
 		rescue.cancel(actor)
 	if cmd.loot and loot_target < 0 and match_mode == "duo" and rescue.interact(self, actor):
 		return
-	if cmd.loot and loot_target < 0 and not online and vehicle_fleet.interact(actor):
+	if cmd.loot and loot_target < 0 and not online and not dedicated and vehicle_fleet.interact(actor):
 		return
 	actor.jump_requested = actor.jump_requested or cmd.jump
 	if cmd.cancel_heal:
@@ -1531,7 +1608,7 @@ func _process(dt: float) -> void:
 			var quantity_text := str(int(quantity)) if is_equal_approx(quantity, roundf(quantity)) else String.num(quantity, 1)
 			ui.supply_prompt = ("%s  %s ×%s" % [Bindings.key_label("loot"), item_name, quantity_text]) if supply.usable else item_name + " / INVENTORY FULL"
 		var message := ""
-		if not online and phase == "live" and actor.alive and not actor.downed and not actor.is_seated():
+		if phase == "live" and actor.alive and not actor.downed and not actor.is_seated():
 			var seats: Array = vehicle_fleet.candidates(actor)
 			if not seats.is_empty():
 				ui.supply_prompt = Bindings.key_label("loot") + ("  DRIVE BUGGY" if seats[0].seat == 0 else "  ENTER PASSENGER SEAT")

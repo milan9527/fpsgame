@@ -16,6 +16,32 @@ class DrivingServer:
 	var diagnostic_second := -1
 	var combat := OS.get_environment("VEHICLE_COMBAT") == "1"
 	var shooter
+	func shot_rewind_age(actor) -> float:
+		var age: float = super.shot_rewind_age(actor)
+		if combat and actor == shooter and driver.is_seated():
+			var direction := Basis(Vector3.UP, actor.yaw) * Basis(Vector3.RIGHT, actor.pitch + actor.recoil) * Vector3.FORWARD
+			var origin: Vector3 = actor.eye_position()
+			var best_error := INF
+			var best_age := 0.0
+			for step in range(41):
+				var sample_age := step * 0.005
+				var poses: Dictionary = hit_history.poses_at(elapsed - sample_age)
+				if not poses.has(driver_peer) or not poses[driver_peer].has("boxes"):
+					continue
+				var pose: Dictionary = poses[driver_peer]
+				for box in pose.boxes:
+					if box.bone != "Hips":
+						continue
+					var point: Vector3 = pose.p + pose.basis * (box.transform * box.bounds.get_center())
+					var delta := point - origin
+					var error := (delta - direction * delta.dot(direction)).length()
+					if error < best_error:
+						best_error = error
+						best_age = sample_age
+			var hit: Dictionary = trace_shot(actor, origin, direction, age)
+			var name := "miss" if hit.is_empty() else str(hit.collider.name)
+			print("VEHICLE_AIM_DIAGNOSTIC time=%.3f protected=%s ammo=%d configured_ms=%d matched_ms=%d error=%.4f speed=%.2f hit=%s part=%s" % [elapsed, str(elapsed < 5), actor.ammo, int(age * 1000), int(best_age * 1000), best_error, test_car.speed, name, str(hit.get("part", hit.get("bone", "")))])
+		return age
 	func reset_round() -> void:
 		super.reset_round()
 		phase_time = 8
@@ -69,16 +95,17 @@ class DrivingServer:
 			diagnostic_second = int(test_elapsed) / 5
 			print("VEHICLE_NETWORK_PROGRESS stage=%d phase=%s speed=%.2f position=%s" % [stage, phase, test_car.speed, str(test_car.position)])
 		assert(test_elapsed < 45, "Authenticated driving did not complete")
-		if stage == 0 and driver.is_seated() and passenger.is_seated():
+		if stage == 0 and driver.is_seated() and passenger.is_seated() and (not combat or elapsed >= 5.5):
 			assert(driver.vehicle_seat == 0 and passenger.vehicle_seat == 1)
 			stage = 1
 			events = ["VEHICLE_DRIVE"]
-		elif stage == 1 and combat and test_car.position.z < -3:
+		elif stage == 1 and combat and test_car.position.z < -3 and test_car.speed >= 12:
 			stage = 9
 			events = ["VEHICLE_COMBAT"]
 		elif stage == 9 and driver.health < 100:
 			assert(test_car.speed > 4 and driver.alive and driver.is_seated())
 			assert(test_car.health == hull_before and test_car.health > 0 and passenger.alive and shooter.ammo < 30, "A driver hit must not also damage the hull in the same frame")
+			assert(elapsed > 5 and shooter.ammo >= 28 and passenger.health == 100, "Unprotected moving driver must be hit promptly without hitting the passenger")
 			assert(rewind_peers.has(shooter.actor_id), "Real network shooter must use authoritative rewind")
 			print("VEHICLE_COMBAT_SERVER_HIT health=%.2f hull=%.2f passenger=%.2f speed=%.2f ammo=%d rewind=ok" % [driver.health, test_car.health, passenger.health, test_car.speed, shooter.ammo])
 			stage = 2
@@ -101,7 +128,7 @@ class DrivingServer:
 				stage = 1
 				events = ["VEHICLE_DRIVE"]
 				print("VEHICLE_NETWORK_RECOVERED")
-		elif stage == 1 and test_car.position.z < -8 and test_car.speed > 8:
+		elif stage == 1 and not combat and test_car.position.z < -8 and test_car.speed > 8:
 			assert(test_car.speed > 8 and test_car.fuel < 100)
 			assert(test_car.driver_id == driver.actor_id)
 			if departure.is_empty():

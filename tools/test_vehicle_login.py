@@ -95,6 +95,9 @@ def main():
         outage_started = False
         while any(process.poll() is None for process, _, _, _ in entries):
             assert time.monotonic() < deadline, "Vehicle login integration timed out"
+            for _, _, log_path, _ in entries:
+                text = log_path.read_text()
+                assert "SCRIPT ERROR:" not in text, f"{log_path}\n{text[-3000:]}"
             if options.impaired and not outage_started and "VEHICLE_NETWORK_BLACKOUT_READY" in path.read_text():
                 outage_started = True
                 for relay in relays:

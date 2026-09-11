@@ -2,7 +2,9 @@ extends RefCounted
 
 # Server-owned history. No client timestamp or client hit result is accepted.
 const MAX_REWIND := 0.2
-const PRESENTATION_DELAY := 0.05
+# Includes 20 Hz snapshot sampling, remote smoothing and input/frame scheduling.
+# Calibrated against the rendered moving target; still bounded by MAX_REWIND.
+const PRESENTATION_DELAY := 0.085
 const MAX_SAMPLES := 32
 const RADIUS := 0.38
 const SeatedPose = preload("res://scripts/seated_hit_pose.gd")

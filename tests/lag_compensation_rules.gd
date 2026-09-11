@@ -15,7 +15,7 @@ func sync() -> void:
 	await physics_frame
 
 func run() -> void:
-	assert(is_equal_approx(History.rewind_age(100), 0.15))
+	assert(is_equal_approx(History.rewind_age(100), 0.185))
 	assert(History.rewind_age(900) == 0.2)
 	assert(History.rewind_age(-1) == 0 and History.rewind_age(NAN) == 0)
 	assert(is_equal_approx(History.capsule_distance(Vector3(0, 1, 3), Vector3.FORWARD, Vector3.ZERO, 1.8), 2.62))

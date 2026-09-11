@@ -16,6 +16,8 @@ func occupant(index: int):
 	return slots[index].actor.get_ref()
 
 func can_enter(actor, index: int) -> bool:
+	if vehicle.destroyed:
+		return false
 	if index < 0 or index >= slots.size() or slots[index] != null:
 		return false
 	if not actor.alive or actor.downed or actor.is_seated() or actor.revive_target != 0:
@@ -145,11 +147,11 @@ func refresh() -> void:
 			continue
 		sync_actor(actor, index)
 		if index == 0:
-			var desired_driver: int = actor.actor_id if actor.alive and not actor.downed else 0
+			var desired_driver: int = actor.actor_id if actor.alive and not actor.downed and not vehicle.destroyed else 0
 			if vehicle.driver_id != desired_driver:
 				vehicle.set_driver(desired_driver)
 				epoch += 1
-		if not actor.alive or actor.downed:
+		if not actor.alive or actor.downed or vehicle.destroyed:
 			exit(actor) # Stay secured and brake if there is no safe exit yet.
 
 func clear() -> void:

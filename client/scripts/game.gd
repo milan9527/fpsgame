@@ -3,6 +3,7 @@ extends Node3D
 const BlastEffect = preload("res://scripts/blast_effect.gd")
 const Grenade = preload("res://scripts/grenade.gd")
 const Actor = preload("res://scripts/actor.gd")
+const Vehicle = preload("res://scripts/vehicle.gd")
 const World = preload("res://scripts/world.gd")
 const Interface = preload("res://scripts/interface.gd")
 const Sound = preload("res://scripts/sound.gd")
@@ -1232,6 +1233,11 @@ func shoot(actor) -> void:
 		var direction := Basis(Vector3.UP, actor.yaw) * Basis(Vector3.RIGHT, clampf(actor.pitch + actor.recoil, -1.5, 1.5)) * Vector3(rng.randf_range(-spread, spread), rng.randf_range(-spread, spread), -1).normalized()
 		var hit := trace_shot(actor, origin, direction, rewind)
 		last_end = origin + direction * 100 if hit.is_empty() else hit.position
+		if not hit.is_empty() and hit.collider is Vehicle:
+			var vehicle_damage: float = actor.DAMAGE[actor.weapon]
+			if actor.weapon == 1:
+				vehicle_damage *= clampf(1 - origin.distance_to(hit.position) / 60, 0.15, 1)
+			hit.collider.take_damage(vehicle_damage, actor.actor_id)
 		if not hit.is_empty() and hit.collider is Actor:
 			var target = hit.collider
 			var headshot: bool = hit.get("headshot", target.is_headshot(hit.position))
@@ -2191,6 +2197,7 @@ func detonate_grenade(id: int) -> void:
 			smoke_clouds[id] = {"p": origin + Vector3.UP * 2, "age": 0.0}
 		return
 	if phase == "live":
+		vehicle_fleet.blast(self, origin, attacker_id, Grenade.RADIUS, Grenade.MAX_DAMAGE * 2)
 		if training != null and attacker_id == local_id:
 			training.record_frag()
 		for actor in actors.values():
@@ -2208,6 +2215,15 @@ func detonate_grenade(id: int) -> void:
 				grenade_exploded.rpc_id(peer, match_id, id, origin)
 	else:
 		grenade_exploded(match_id, id, origin)
+
+func vehicle_wrecked(attacker_id: int, vehicle) -> void:
+	# A disabled buggy is a persistent non-explosive wreck. The destructive hit
+	# causes cabin injury once; normal team and attribution rules still apply.
+	for index in range(2):
+		var occupant = vehicle.seats.occupant(index)
+		if occupant != null and occupant.alive:
+			damage(occupant, 40.0, attacker_id, false, false, "VEHICLE WRECK", vehicle.global_position, true)
+	add_event("BUGGY DISABLED")
 
 @rpc("authority", "call_remote", "unreliable_ordered", 4)
 func grenade_snapshot(packet: PackedByteArray) -> void:

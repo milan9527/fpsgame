@@ -642,10 +642,15 @@ func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: 
 	if vehicle_view:
 		var vehicle = actor.vehicle_ref.get_ref()
 		weapon.text = "BUGGY / %s   %03d km/h" % ["DRIVER" if actor.vehicle_seat == 0 else "PASSENGER", roundi(absf(vehicle.speed) * 3.6)]
+		weapon.text += "   HULL %d%%   FUEL %d%%" % [ceili(vehicle.health / vehicle.MAX_HEALTH * 100), ceili(vehicle.fuel)]
 		loadout_label.text = "%s/%s THROTTLE   %s/%s STEER   %s BRAKE" % [Bindings.key_label("forward"), Bindings.key_label("back"), Bindings.key_label("left"), Bindings.key_label("right"), Bindings.key_label("jump")] if actor.vehicle_seat == 0 else "MOUSE LOOK / WHEEL ZOOM"
 		prompt.text = Bindings.key_label("loot") + ("  EXIT VEHICLE" if vehicle.grounded and absf(vehicle.speed) <= 2 else "  SLOW TO EXIT")
 		if vehicle.grounded and absf(vehicle.speed) <= 2 and vehicle.seats.find_exit(actor) == null:
 			prompt.text = "EXIT BLOCKED / MOVE TO CLEAR GROUND"
+		if vehicle.destroyed:
+			prompt.text = "VEHICLE DISABLED / EXIT WHEN CLEAR"
+		elif vehicle.fuel <= 0:
+			prompt.text = "OUT OF FUEL / " + prompt.text
 	if actor.throw_left > 0:
 		prompt.text = "THROWING GRENADE"
 	elif actor.reload_left > 0:

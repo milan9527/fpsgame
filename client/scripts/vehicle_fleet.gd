@@ -12,6 +12,8 @@ func spawn(parent: Node3D, at: Vector3, heading := 0.0):
 	vehicle.position = at
 	vehicle.rotation.y = heading
 	parent.add_child(vehicle)
+	if parent.has_method("vehicle_wrecked"):
+		vehicle.wrecked.connect(parent.vehicle_wrecked.bind(vehicle))
 	vehicles[next_id] = vehicle
 	next_id += 1
 	return vehicle
@@ -72,4 +74,19 @@ func step(dt: float, live: bool) -> void:
 			continue
 		if not live:
 			vehicle.reset_controls()
-		vehicle.simulate(dt)
+		vehicle.simulate(dt, live)
+
+func blast(game, origin: Vector3, attacker_id: int, radius: float, maximum: float) -> void:
+	for vehicle in vehicles.values():
+		if not is_instance_valid(vehicle) or vehicle.destroyed:
+			continue
+		var local_origin: Vector3 = vehicle.to_local(origin)
+		var nearest := Vector3(clampf(local_origin.x, -vehicle.BODY_SIZE.x / 2, vehicle.BODY_SIZE.x / 2), clampf(local_origin.y, 0, vehicle.BODY_SIZE.y), clampf(local_origin.z, -vehicle.BODY_SIZE.z / 2, vehicle.BODY_SIZE.z / 2))
+		var distance: float = origin.distance_to(vehicle.to_global(nearest))
+		if distance >= radius:
+			continue
+		var center: Vector3 = vehicle.global_position + Vector3.UP * 0.9
+		var ray := PhysicsRayQueryParameters3D.create(origin, center, 5, [vehicle.get_rid()])
+		ray.hit_from_inside = true
+		if game.get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
+			vehicle.take_damage(maximum * (1.0 - distance / radius), attacker_id)

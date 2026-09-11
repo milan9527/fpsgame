@@ -1,4 +1,5 @@
 extends CharacterBody3D
+signal wrecked(attacker_id: int)
 
 # Authority owns simulation. Input contains controls, never position or velocity.
 const FORWARD_SPEED := 22.0
@@ -8,6 +9,11 @@ const BRAKING := 16.0
 const ROLLING_DRAG := 2.5
 const WHEELBASE := 2.4
 const INPUT_TIMEOUT := 0.35
+const MAX_HEALTH := 600.0
+const MAX_FUEL := 100.0
+var health := MAX_HEALTH
+var fuel := MAX_FUEL
+var destroyed := false
 const BODY_SIZE := Vector3(2.25, 1.8, 3.6) # Includes tire sweep at full steering lock.
 var driver_id := 0
 var speed := 0.0
@@ -66,6 +72,8 @@ func set_driver(peer: int) -> void:
 	reset_controls()
 
 func command(peer: int, sequence: int, forward: float, turn: float, brake: bool, seat_epoch := -1) -> bool:
+	if destroyed:
+		return false
 	if seats != null and seats.slots[0] != null:
 		var driver = seats.occupant(0)
 		if driver == null or not driver.alive or driver.downed or seat_epoch != seats.epoch:
@@ -81,6 +89,23 @@ func command(peer: int, sequence: int, forward: float, turn: float, brake: bool,
 	handbrake = brake
 	return true
 
+func take_damage(amount: float, attacker_id := 0) -> float:
+	if destroyed or not is_finite(amount) or amount <= 0:
+		return 0.0
+	var applied := minf(health, amount)
+	health -= applied
+	if health <= 0:
+		destroyed = true
+		set_driver(0)
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("292c2b")
+		material.roughness = 1.0
+		if visual != null:
+			for mesh in visual.find_children("*", "MeshInstance3D", true, false):
+				mesh.material_override = material
+		wrecked.emit(attacker_id)
+	return applied
+
 func can_rotate(target_yaw: float) -> bool:
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = collision_shape.shape
@@ -90,13 +115,17 @@ func can_rotate(target_yaw: float) -> bool:
 	query.margin = 0.001
 	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
 
-func simulate(dt: float) -> void:
+func simulate(dt: float, engine_enabled := true) -> void:
 	if not is_finite(dt) or dt <= 0 or dt > 0.05:
 		return
 	seats.refresh()
 	input_age += dt
-	var stale := driver_id == 0 or input_age > INPUT_TIMEOUT
+	var stale := not engine_enabled or destroyed or driver_id == 0 or input_age > INPUT_TIMEOUT
 	var pedal := 0.0 if stale else throttle
+	if engine_enabled and not destroyed and driver_id != 0 and fuel > 0:
+		fuel = maxf(0, fuel - dt * (0.1 + 0.3 * absf(pedal)))
+	if fuel <= 0:
+		pedal = 0.0
 	var brake := stale or handbrake
 	var steering_limit := deg_to_rad(28) * lerpf(1.0, 0.45, clampf(absf(speed) / FORWARD_SPEED, 0, 1))
 	steering = move_toward(steering, (0.0 if stale else steer_input) * steering_limit, dt * 2.5)

@@ -21,6 +21,9 @@ CASES = [
     "zone_rules", "inventory_rules", "death_loot_rules", "drop_rules",
     "voice_resampler", "voice_relay", "voice_playback", "voice_capture",
     "vehicle_slopes", "vehicle_spectator", "bot_driver", "bot_driver_checkpoint",
+    "vehicle_motion", "vehicle_seats", "vehicle_driving", "vehicle_checkpoint",
+    "vehicle_ballistics", "vehicle_shooting", "vehicle_audio", "vehicle_camera",
+    "vehicle_snapshot", "vehicle_authority", "vehicle_frame_pair",
 ]
 
 
@@ -80,8 +83,9 @@ def main():
             f"Development candidate {manifest['client_version']}, commit {commit}.\n"
             "Run ./play.sh on a Linux x86_64 desktop with OpenGL 3.3.\n"
             "Offline SOLO and DUO require no account. Online requires a compatible protocol "
-            f"{manifest['protocol']} server. Existing protocol 15 services are incompatible.\n"
-            "This candidate is not the published 0.34 release or a finished commercial game.\n"
+            f"{manifest['protocol']} server with matching content revision "
+            f"{manifest['content_revision']}; servers with other manifests are incompatible.\n"
+            "This is an isolated development candidate, not a finished commercial game.\n"
         )
         with tempfile.TemporaryDirectory(prefix="iron-candidate-profile-") as profile:
             for directory in ("duo-profile", "duo-checkpoint"):

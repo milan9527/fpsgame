@@ -26,7 +26,9 @@ func update(actor, dt: float) -> void:
 		return
 	var speed := Vector2(actor.velocity.x, actor.velocity.z).length()
 	var desired := "Idle"
-	if not actor.alive:
+	if actor.is_seated():
+		desired = "SeatedDowned" if not actor.alive or actor.downed else ("SeatedDriver" if actor.vehicle_seat == 0 else "SeatedPassenger")
+	elif not actor.alive:
 		desired = "DownedDeath" if active_clip.begins_with("Downed") and clips.has("DownedDeath") else "Death"
 	elif actor.downed:
 		desired = "DownedCrawl" if speed > 0.1 else "DownedIdle"
@@ -44,15 +46,18 @@ func update(actor, dt: float) -> void:
 		desired = "CrouchIdle" if actor.crouched else "Idle"
 	skeleton.clear_bones_global_pose_override()
 	if active_clip != desired:
+		var seat_transition := active_clip.begins_with("Seated") or desired.begins_with("Seated")
 		active_clip = desired
 		# Stance changes must immediately match the collision height; locomotion blends.
-		var blend := 0.0 if desired.begins_with("Crouch") or desired.begins_with("Downed") or desired == "Death" else 0.12
+		var blend := 0.0 if seat_transition or desired.begins_with("Crouch") or desired.begins_with("Downed") or desired == "Death" else 0.12
 		player.play(clips[desired], blend)
 		if desired.ends_with("Reload"):
 			var length := player.get_animation(clips[desired]).length
 			player.seek(length * clampf(1 - actor.reload_left / actor.RELOAD[actor.weapon], 0, 1), true)
 	player.speed_scale = 1.0
-	if desired == "Walk":
+	if desired == "SeatedDowned" and not actor.alive:
+		player.speed_scale = 0.0
+	elif desired == "Walk":
 		player.speed_scale = clampf(speed / 4.5, 0.5, 1.5)
 	elif desired == "Run":
 		player.speed_scale = clampf(speed / 8, 0.6, 1.4)
@@ -63,7 +68,7 @@ func update(actor, dt: float) -> void:
 	elif desired.ends_with("Reload"):
 		player.speed_scale = player.get_animation(clips[desired]).length / actor.RELOAD[actor.weapon]
 	player.advance(dt)
-	if actor.alive and not actor.downed:
+	if actor.alive and not actor.downed and not actor.is_seated():
 		var spine := skeleton.find_bone("Spine")
 		if spine >= 0:
 			var pose := skeleton.get_bone_global_pose(spine)

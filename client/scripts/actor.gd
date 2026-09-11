@@ -216,7 +216,7 @@ func change_grip(index: int, attach: bool) -> bool:
 func update_weapon_attachment() -> void:
 	if third_person_gun == null:
 		return
-	third_person_gun.visible = not downed and character_animation.active_clip != "DownedDeath"
+	third_person_gun.visible = not is_seated() and not downed and character_animation.active_clip != "DownedDeath"
 	var skeleton: Skeleton3D = character_animation.skeleton
 	var bone := skeleton.find_bone("Weapon")
 	var rest := skeleton.get_bone_global_rest(bone)
@@ -481,7 +481,7 @@ func unpack(data: Dictionary, local: bool) -> void:
 
 func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> void:
 	update_weapon_visuals()
-	gun.visible = local_view and alive and not downed
+	gun.visible = local_view and alive and not downed and not is_seated()
 	character_animation.update(self, dt)
 	update_weapon_attachment()
 	if network_client and not local:
@@ -490,7 +490,7 @@ func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> vo
 	head.rotation.x = pitch
 	apply_lean_pose()
 	flash_left = maxf(0, flash_left - dt)
-	muzzle.visible = flash_left > 0
+	muzzle.visible = flash_left > 0 and not is_seated()
 	weapon_kick = move_toward(weapon_kick, 0, dt * 8)
 	gun.rotation.x = weapon_kick * 0.06
 	if local:

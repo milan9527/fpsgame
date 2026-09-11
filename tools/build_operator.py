@@ -22,7 +22,7 @@ def joint_between(start, end, length, bend):
     return (start + end) * 0.5 + perpendicular * math.sqrt(max(0.001, length * length - distance * distance / 4))
 
 
-def joints(crouch=0.0, phase=0.0, stride=0.0, lift=0.0, reload=0.0, jump=0.0, breath=0.0, death=0.0, downed=0.0):
+def joints(crouch=0.0, phase=0.0, stride=0.0, lift=0.0, reload=0.0, jump=0.0, breath=0.0, death=0.0, downed=0.0, seated=0, slump=0):
     body = vec(0, -0.12 * crouch, -0.65 * crouch + breath)
     p = {'Root': vec(0, 0, 0), 'Hips': vec(0, 0, 0.94) + body,
          'Spine': vec(0, 0, 1.36) + body, 'Neck': vec(0, 0, 1.48) + body,
@@ -56,6 +56,26 @@ def joints(crouch=0.0, phase=0.0, stride=0.0, lift=0.0, reload=0.0, jump=0.0, br
             elbow = joint_between(shoulder, hand, 0.31, vec(sign, -0.2, 0))
             p.update({f'Hip.{side}': hip, f'Knee.{side}': knee, f'Ankle.{side}': ankle,
                       f'Toe.{side}': ankle + vec(0, -0.23, -0.025),
+                      f'Shoulder.{side}': shoulder, f'Elbow.{side}': elbow,
+                      f'Hand.{side}': hand, f'Finger.{side}': hand + vec(0, 0.09, 0)})
+        p['Weapon'] = p['Spine']
+        p['Barrel'] = p['Weapon'] + vec(0, 0.3, 0)
+    if seated:
+        # Seat origin is at ground level. The pelvis rests on the buggy cushion;
+        # forward-bent legs fit under the dashboard, hands meet the steering rim.
+        p.update({'Hips': vec(0, 0, 0.99),
+                  'Spine': vec(0, 0.08 + slump * 0.13, 1.34 + breath),
+                  'Neck': vec(0, 0.10 + slump * 0.20, 1.43 + breath),
+                  'Head': vec(0, 0.17 + slump * 0.24, 1.68 - slump * 0.12 + breath)})
+        for side, sign in [('L', -1), ('R', 1)]:
+            hip = p['Hips'] + vec(sign * 0.14, 0, 0)
+            knee = vec(sign * 0.16, 0.38, 0.81)
+            ankle = vec(sign * 0.16, 0.47, 0.41)
+            shoulder = p['Spine'] + vec(sign * 0.28, 0, 0)
+            hand = vec(sign * 0.15, 0.28, 1.19) if seated == 1 and not slump else vec(sign * 0.14, 0.34, 0.94)
+            elbow = joint_between(shoulder, hand, 0.31, vec(sign * 0.35, -0.2, -1.0))
+            p.update({f'Hip.{side}': hip, f'Knee.{side}': knee, f'Ankle.{side}': ankle,
+                      f'Toe.{side}': ankle + vec(0, 0.23, -0.035),
                       f'Shoulder.{side}': shoulder, f'Elbow.{side}': elbow,
                       f'Hand.{side}': hand, f'Finger.{side}': hand + vec(0, 0.09, 0)})
         p['Weapon'] = p['Spine']
@@ -160,6 +180,9 @@ clips = [('Idle', 60, {}), ('Walk', 30, {'stride': 0.22, 'lift': 0.10}),
          ('DownedIdle', 60, {'downed': 1}),
          ('DownedCrawl', 48, {'downed': 1, 'stride': 0.07}),
          ('DownedDeath', 24, {'downed': 1, 'death': 1}),
+         ('SeatedDriver', 60, {'seated': 1}),
+         ('SeatedPassenger', 60, {'seated': 2}),
+         ('SeatedDowned', 60, {'seated': 2, 'slump': 1}),
          ('Jump', 24, {'jump': 1}), ('Reload', 60, {'reload': 1}), ('Death', 32, {'death': 1})]
 bpy.context.scene.render.fps = 30
 for clip, end_frame, options in clips:

@@ -37,7 +37,7 @@ def run():
                 for index, identity in enumerate(identities):
                     log_path = ROOT / "artifacts" / (f"party-requeue-{cycle}-{index}.log" if options.requeue else f"party-lobby-network-{index}.log")
                     if candidate:
-                        log_path = log_path.with_name("candidate-" + log_path.name)
+                        log_path = log_path.with_name("candidate-" + candidate["commit"][:8] + "-" + log_path.name)
                     if base != BASE:
                         log_path = log_path.with_name("deployed-" + log_path.name)
                     output = log_path.open("w")

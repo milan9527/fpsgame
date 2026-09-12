@@ -49,7 +49,23 @@ solo 在游戏时间约 82.3 秒自然结算，真人排名 13；duo 约 99.5 �
 
 本候选镜像标签 `iron-meridian-candidate:8245350d2e2c`，已验证具体 ID：
 `sha256:d7e86476802eb4299d989ae77854dd8fca85246d12b8f9a113abda8de8753e91`。
-报告 `server-image.json`，构建和隔离启动日志在候选目录 `logs/server-image-{build,smoke}.log`。发布时应使用具体镜像 ID 并另做服务与网络验收；目前尚未部署。
+报告 `server-image.json`，构建和隔离启动日志在候选目录 `logs/server-image-{build,smoke}.log`。该镜像现已部署至独立开发专服，发布专服仍保持 0.35。
+
+### 开发专服部署与重开
+
+`tools/deploy_candidate_dev.py --candidate-dir <候选目录>` 要求开发 API 与候选兼容、房间无玩家及有效预约、结果重试队列为空。记录旧镜像后停止开发专服，等待旧房间租约过期，再用具体镜像 ID 启动；核对新房间实例、版本及 `unless-stopped` 重启策略。失败路径会尝试恢复旧镜像。数据库、缓存和 API 不参与此次重建。
+
+开发房间 `room-27031` / UDP 27031 已切换成功；报告 `dev-deployment.json`，执行日志 `artifacts/candidate-036-dev-deployment.log`。保持候选镜像的启动配置保存在 `artifacts/duo-candidate.override.json`，使用：
+
+```sh
+docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml -f artifacts/duo-candidate.override.json up -d --no-deps --no-build game
+```
+
+两个候选客户端通过邀请大厅连续两轮登录、准备、入场和返回，保留原队伍并使用新回合。证据 `artifacts/candidate-036-dev-requeue.log`，四份客户端日志为 `artifacts/candidate-8245350d-party-requeue-{0,1}-{0,1}.log`。开发 API 8001 返回 0.36 / 协议 17，发布 API 8000 仍为 0.35 / 协议 16。
+
+候选 PCK 的驾驶者账号撤销及进程强制终止场景也通过，证据 `artifacts/vehicle-login-duo-{revoke,drop}-packed-8245350d-verification.json`。服务端确认输入清除或超时制动、驾驶位释放，乘客通过正常输入安全下车，完成时仍处于 live 阶段。
+
+首次强制断线检查因对局提前结束超时，失败日志保留为 `artifacts/vehicle-login-duo-drop-packed-8245350d-*-early-finish.log`。夹具原先把静止机器人放在初始安全区外；现改为圈内位置，并要求下车检查在 live 阶段完成，防止回合清理产生假通过。最终复测中账号撤销/断线座位释放分别发生在约 5.48 / 12.87 秒。此修改只影响测试场景，不改写游戏缩圈或死亡规则。
 
 ## 2026-09-11 的 0.35 候选
 

@@ -71,7 +71,9 @@ class DrivingServer:
 		if combat:
 			shooter = actors[ids[2]]
 		for actor in actors.values():
-			actor.position = Vector3(95, 0.1, 90 + abs(actor.actor_id) % 12)
+			# Keep inactive bots inside the initial zone. Their deaths must not
+			# finish the match while waiting for a disconnected peer's timeout.
+			actor.position = Vector3(60, 0.1, 30 + abs(actor.actor_id) % 12)
 		driver.position = Vector3(-1.65, 0.04, 0.1)
 		if bot_driving:
 			driver.position.x = -6
@@ -186,11 +188,12 @@ class DrivingServer:
 			if absf(test_car.speed) < 0.01:
 				stage = 3
 				events = ["VEHICLE_EXIT"]
-				print("VEHICLE_DEPARTURE_RELEASED driver=0 seat=empty passenger=secured stopped=ok")
+				print("VEHICLE_DEPARTURE_RELEASED driver=0 seat=empty passenger=secured stopped=ok phase=%s elapsed=%.2f" % [phase, elapsed])
 		elif stage == 2 and absf(test_car.speed) < 0.01:
 			stage = 3
 			events = ["VEHICLE_EXIT"]
 		elif stage == 3 and (not departure.is_empty() or not driver.is_seated()) and not passenger.is_seated():
+			assert(phase == "live", "Vehicle exit must complete before round cleanup, not because actors were cleared")
 			assert(passenger.collision_mask == 7)
 			assert(test_car.health > 0 and passenger.health > 0 if combat else test_car.health == 600 and passenger.health == 100)
 			if departure.is_empty():

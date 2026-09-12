@@ -19,6 +19,7 @@ var vehicle_id := 0
 var authoritative := true
 var collision_time := 0.0
 var collision_cooldowns: Dictionary = {}
+var collision_releases: Dictionary = {}
 const BODY_SIZE := Vector3(2.25, 1.8, 3.6) # Includes tire sweep at full steering lock.
 const ARENA_LIMIT := 115.0
 var driver_id := 0
@@ -38,6 +39,7 @@ var seats
 var ballistics = preload("res://scripts/vehicle_ballistics.gd").new()
 
 func _ready() -> void:
+	set_physics_process(false)
 	add_to_group("vehicles")
 	seats = preload("res://scripts/vehicle_seats.gd").new(self)
 	collision_layer = 4
@@ -225,3 +227,24 @@ func simulate(dt: float, engine_enabled := true) -> void:
 func _exit_tree() -> void:
 	if seats != null:
 		seats.clear()
+
+# Seat teleports and collision queries can occur in the same physics update.
+# Keep the existing exception until the exit pose has crossed a physics boundary.
+# Use a node-owned queue rather than coroutines that outlive scene teardown.
+func defer_rider_collision(actor) -> void:
+	if not is_inside_tree():
+		remove_collision_exception_with(actor)
+		return
+	collision_releases[actor.get_instance_id()] = {"actor": weakref(actor), "after": Engine.get_physics_frames() + 2}
+	set_physics_process(true)
+
+func _physics_process(_dt: float) -> void:
+	for id in collision_releases.keys():
+		var entry: Dictionary = collision_releases[id]
+		if Engine.get_physics_frames() < entry.after:
+			continue
+		var actor = entry.actor.get_ref()
+		if actor != null and (not actor.is_seated() or actor.vehicle_ref.get_ref() != self):
+			remove_collision_exception_with(actor)
+		collision_releases.erase(id)
+	set_physics_process(not collision_releases.is_empty())

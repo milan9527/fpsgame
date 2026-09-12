@@ -159,14 +159,26 @@ func run() -> void:
 	await sync_space()
 	car.seats.refresh()
 	assert(not a.is_seated() and a.downed)
-	b.queue_free()
-	await process_frame
-	car.seats.refresh()
-	assert(car.seats.occupant(1) == null)
 	a.downed = false
 	a.position = Vector3(-2, 0, 0.1)
 	await sync_space()
 	assert(car.seats.enter(a, 0))
+	assert(car.seats.exit(a))
+	assert(car.get_collision_exceptions().has(a))
+	assert(car.seats.enter(a, 0), "Immediate re-entry remains valid")
+	await sync_space()
+	await physics_frame
+	assert(car.get_collision_exceptions().has(a), "Pending exit must not undo a new seat exception")
+	assert(car.seats.exit(a))
+	await sync_space()
+	await physics_frame
+	assert(not car.get_collision_exceptions().has(a), "Exited actor must regain chassis collision")
+	assert(car.collision_releases.is_empty())
+	assert(car.seats.enter(a, 0))
+	b.queue_free()
+	await process_frame
+	car.seats.refresh()
+	assert(car.seats.occupant(1) == null)
 	car.queue_free()
 	await process_frame
 	assert(not a.is_seated() and a.vehicle_seat == -1 and a.collision_mask == 7)

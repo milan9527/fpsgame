@@ -119,8 +119,12 @@ class DrivingServer:
 			assert(test_car.throttle == 0 and test_car.input_age >= test_car.INPUT_TIMEOUT)
 			print("VEHICLE_REVOCATION_INPUT_CLEARED")
 	func _physics_process(dt: float) -> void:
+		var before_pose: Vector3 = test_car.position if is_instance_valid(test_car) else Vector3.ZERO
 		var hull_before: float = test_car.health if is_instance_valid(test_car) else -1
 		super._physics_process(dt)
+		if stage >= 3 and not bot_turn.is_empty() and is_instance_valid(test_car):
+			assert(test_car.position.distance_to(before_pose) < 0.03,
+				"Stopped chassis must not jump during rider collision restoration")
 		if stage == 4:
 			done_elapsed += dt
 			if not bot_turn.is_empty() and done_elapsed >= 1 and not turn_pose_reported:

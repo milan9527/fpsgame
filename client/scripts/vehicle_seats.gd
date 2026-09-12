@@ -114,7 +114,7 @@ func release(actor, point: Vector3) -> void:
 	slots[index] = null
 	actor.vehicle_ref = null
 	actor.vehicle_seat = -1
-	vehicle.remove_collision_exception_with(actor)
+	vehicle.defer_rider_collision(actor)
 	actor.collision_mask = saved.mask if actor.alive else 0
 	actor.collision_layer = saved.layer if actor.alive else 0
 	if actor.is_inside_tree():

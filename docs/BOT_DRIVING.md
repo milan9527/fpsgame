@@ -88,3 +88,12 @@
 `tests/bot_early_transport.gd` 设置仍有 120 秒的可见下圈预告，从车门外约 4.35 m 开始，验证正常 AI 走近、驾驶超过 48 m、停车下车；同时检查无车、无油、近期交战、低生命及路线被墙阻挡时不提前转移。日志 `artifacts/bot-early-transport-early-rotation.log`。原有驾驶、手雷避险与烟雾工具回归为 `artifacts/{bot-driver,bot-hazards-rules,bot-utilities-rules}-early-rotation.log`。测试已加入后续候选构建检查。
 
 本项尚未打包部署，也尚未在自然对局中证明会增加合理用车次数。此前两场自然对局没有机器人驾驶，不能仅凭此推断唯一原因；本次修正的是可明确复现的“附近有可行车辆但只能等待步行期限”决策限制。
+
+
+### 提前转移的自然对局观察
+
+`tools/test_candidate_full_round.py --source --mode solo`（或 `duo`）支持在干净、已提交源码上运行正常时间对局。与 `--candidate-dir` 互斥；报告显式标记 `committed_source`，归档校验和为空，不冒充已发布包验证。开始和结束均核对源码提交与工作区状态。
+
+提交 `954722277653f623f81360709b12a692365502d6` 的两场观察均正常结算：solo 约 91.82 秒、客户端第 13 名；duo 约 121.48 秒、队伍第 7 名。每场为一个自动客户端和 15 个正常机器人，4 辆车，结果落库与分模式统计增量一致。报告 `artifacts/natural-source-95472227-{solo,duo}/verification.json`；汇总日志 `artifacts/early-rotation-natural-{solo,duo}.log`。
+
+两场驾驶帧数仍均为零，因此没有证明提前转移增加了自然用车，也不能与此前两个非配对样本作因果比较。下一步应观察候选车辆距离、战斗状态、目标距离和路线拒绝原因，区分缺少机会与选择/接近失败；不能通过强迫上车来替代自然行为验证。

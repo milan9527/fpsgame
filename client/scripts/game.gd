@@ -1228,8 +1228,9 @@ func bot_input(actor, dt: float) -> void:
 		var next_radius: float = zone_state.next_radius
 		var next_offset := Vector2(actor.position.x, actor.position.z) - next_center
 		var travel := maxf(0, next_offset.length() - next_radius)
-		if travel > 0 and (zone_state.moving or zone_state.remaining <= travel / 4.0 + 8.0):
-			var safe := next_center + next_offset.normalized() * maxf(0, next_radius - 7)
+		var safe := next_center + next_offset.normalized() * maxf(0, next_radius - 7)
+		var early_transport: bool = travel > 25 and actor.navigator.driver.early_transport_available(self, actor, Vector3(safe.x, 0, safe.y))
+		if travel > 0 and (early_transport or zone_state.moving or zone_state.remaining <= travel / 4.0 + 8.0):
 			destination = Vector3(safe.x, 0, safe.y)
 			actor.sprint = true
 	var escape: Vector3 = actor.navigator.hazards.select(self, actor, dt)

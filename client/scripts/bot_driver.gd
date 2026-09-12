@@ -8,6 +8,28 @@ var approach_point := Vector3.INF
 var route := PackedVector3Array()
 var route_index := 0
 
+func usable_vehicle(car, actor) -> bool:
+	if car.destroyed or not car.grounded or car.fuel < 5 or car.seats.occupant(0) != null or absf(car.speed) > 0.1:
+		return false
+	var door: Vector3 = car.to_global(car.seats.DOORS[0]) - Vector3.UP * 0.9
+	return actor.position.distance_to(door) <= 12
+
+func early_transport_available(game, actor, goal: Vector3) -> bool:
+	if (cooldown > 0 and not approach_point.is_finite()) or actor.health < 50 or actor.heal_left > 0 or actor.shooting or actor.bot_memory_left > 0:
+		return false
+	for car in game.vehicle_fleet.vehicles.values():
+		if usable_vehicle(car, actor):
+			if cooldown > 0:
+				return true # Preserve an already selected door approach between checks.
+			var delta: Vector3 = goal - car.position
+			if absf(wrapf(atan2(-delta.x, -delta.z) - car.rotation.y, -PI, PI)) <= 0.5:
+				if flat_route(car, goal, actor):
+					return true
+			elif not turning_route(car, goal, actor).is_empty():
+				return true
+	cooldown = 0.5
+	return false
+
 # A bounded smooth turn from the current heading. Every segment is checked with
 # an orientation-independent hull envelope; infantry navigation is not sufficient.
 func turning_route(car, end: Vector3, actor) -> PackedVector3Array:
@@ -93,11 +115,9 @@ func approach(game, actor, goal: Vector3, dt: float, eligible: bool) -> Vector3:
 	# Expensive corridor/ground checks are budgeted per bot, not per physics frame.
 	cooldown = 0.5
 	for car in game.vehicle_fleet.vehicles.values():
-		if car.destroyed or not car.grounded or car.fuel < 5 or car.seats.occupant(0) != null or absf(car.speed) > 0.1:
+		if not usable_vehicle(car, actor):
 			continue
 		var door: Vector3 = car.to_global(car.seats.DOORS[0]) - Vector3.UP * 0.9
-		if actor.position.distance_to(door) > 12:
-			continue
 		var delta: Vector3 = goal - car.position
 		var points := PackedVector3Array()
 		if absf(wrapf(atan2(-delta.x, -delta.z) - car.rotation.y, -PI, PI)) <= 0.5:

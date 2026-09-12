@@ -1245,6 +1245,8 @@ func bot_input(actor, dt: float) -> void:
 	if actor.sprint:
 		actor.navigator.cover.clear()
 		actor.crouch = false
+	if actor.navigator.driver.board_teammate(self, actor, not actor.shooting and actor.bot_memory_left <= 0 and not escape.is_finite()):
+		return
 	destination = actor.navigator.driver.approach(self, actor, destination, dt, actor.sprint and not actor.shooting and actor.bot_memory_left <= 0 and not escape.is_finite())
 	if actor.is_seated():
 		return

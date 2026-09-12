@@ -170,11 +170,30 @@ func wait_for_teammate(game, actor, car) -> bool:
 	boarding_departed = true
 	return false
 
+func board_teammate(game, actor, eligible: bool) -> bool:
+	if not eligible or game.match_mode != "duo" or cooldown > 0 or actor.health < 50 or actor.heal_left > 0:
+		return false
+	for car in game.vehicle_fleet.vehicles.values():
+		var driver = car.seats.occupant(0)
+		if driver == null or not driver.alive or driver.downed or not game.teams.friendly(actor.actor_id, driver.actor_id):
+			continue
+		if car.fuel <= 0 or absf(car.speed) > 0.1:
+			continue
+		if car.seats.enter(actor, 1):
+			approach_point = Vector3.INF
+			return true
+	return false
+
 func drive(actor, dt: float, game = null) -> void:
 	actor.move_input = Vector2.ZERO
 	actor.shooting = false
 	actor.sprint = false
 	var car = actor.vehicle_ref.get_ref()
+	if actor.vehicle_seat == 1:
+		var driver = car.seats.occupant(0)
+		if (driver == null or not driver.alive or driver.downed or car.destroyed or car.fuel <= 0) and absf(car.speed) < 0.1 and car.seats.exit(actor):
+			cooldown = 8
+		return
 	if actor.vehicle_seat != 0 or not actor.alive or actor.downed:
 		return
 	boarding_time += dt

@@ -80,14 +80,22 @@ def drill(bundle, report_path, upgrade_image=None):
         state = json.loads(raw)
         migration = None
         if upgrade_image:
-            if state['schema_revision'] != '0003':
-                raise ValueError('This release upgrade rehearsal requires a schema 0003 backup')
+            before_revision = state['schema_revision']
+            if before_revision not in ('0003', '0004'):
+                raise ValueError('Release startup rehearsal requires a schema 0003 or 0004 backup')
             image_id = subprocess.check_output(
                 ['docker', 'image', 'inspect', '--format', '{{.Id}}', upgrade_image], text=True).strip()
             fingerprint_sql = """SELECT json_build_object(
               'users', (SELECT md5(coalesce(string_agg(row_to_json(t)::text,E'\\n' ORDER BY id),'')) FROM users t),
               'matches', (SELECT md5(coalesce(string_agg(row_to_json(t)::text,E'\\n' ORDER BY id),'')) FROM (SELECT id,created FROM matches) t),
               'results', (SELECT md5(coalesce(string_agg(row_to_json(t)::text,E'\\n' ORDER BY id),'')) FROM (SELECT id,match_id,user_id,kills,rank FROM results) t));"""
+            if before_revision == '0004':
+                # An idempotent startup must preserve every existing field,
+                # including duo mode and team assignments.
+                fingerprint_sql = """SELECT json_build_object(
+                  'users', (SELECT md5(coalesce(string_agg(row_to_json(t)::text,E'\\n' ORDER BY id),'')) FROM users t),
+                  'matches', (SELECT md5(coalesce(string_agg(row_to_json(t)::text,E'\\n' ORDER BY id),'')) FROM matches t),
+                  'results', (SELECT md5(coalesce(string_agg(row_to_json(t)::text,E'\\n' ORDER BY id),'')) FROM results t));"""
             def fingerprint():
                 return json.loads(subprocess.check_output(
                     ['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-At',
@@ -112,11 +120,12 @@ def drill(bundle, report_path, upgrade_image=None):
                 ['docker', 'exec', name, 'psql', '-U', 'iron', '-d', 'iron', '-At',
                  '-v', 'ON_ERROR_STOP=1', '-c',
                  "SELECT (SELECT count(*) FROM matches WHERE mode<>'solo') + (SELECT count(*) FROM results WHERE team_id<>0)"], text=True)
-            if int(non_solo.strip()):
+            if before_revision == '0003' and int(non_solo.strip()):
                 raise ValueError('Historical data was not classified as solo')
-            migration = {'from': '0003', 'to': state['schema_revision'], 'image_id': image_id,
+            migration = {'from': before_revision, 'to': state['schema_revision'], 'image_id': image_id,
                          'old_fields_unchanged': True, 'old_row_fingerprints': before,
-                         'historical_solo_backfill': True}
+                         'historical_solo_backfill': before_revision == '0003',
+                         'idempotent_startup': before_revision == '0004'}
         if state['schema_revision'] not in ['0002', '0003', '0004'] or any(state[key] for key in ['invalid_stats', 'invalid_results', 'orphan_results', 'duplicate_results', 'unvalidated_constraints']):
             raise ValueError('Restored database failed schema or integrity checks')
         if state['schema_revision'] in ['0003', '0004']:
@@ -152,6 +161,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('bundle', type=Path)
     parser.add_argument('--report', type=Path, default=Path('artifacts/restore-drill.json'))
-    parser.add_argument('--upgrade-image', help='Rehearse 0003→0004 using this backend image in the isolated restore namespace')
+    parser.add_argument('--upgrade-image', help='Rehearse 0003→0004 or idempotent 0004 startup with this backend image in isolation')
     args = parser.parse_args()
     drill(args.bundle.resolve(), args.report.resolve(), args.upgrade_image)

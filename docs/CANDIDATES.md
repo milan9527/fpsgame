@@ -67,6 +67,18 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml -f artif
 
 首次强制断线检查因对局提前结束超时，失败日志保留为 `artifacts/vehicle-login-duo-drop-packed-8245350d-*-early-finish.log`。夹具原先把静止机器人放在初始安全区外；现改为圈内位置，并要求下车检查在 live 阶段完成，防止回合清理产生假通过。最终复测中账号撤销/断线座位释放分别发生在约 5.48 / 12.87 秒。此修改只影响测试场景，不改写游戏缩圈或死亡规则。
 
+### 后端镜像与恢复演练
+
+0.36 后端镜像 `iron-meridian-api:0.36-8245350d` 的具体 ID 为
+`sha256:0c04fb918b00618e7c87878d21f758eaf654ce734f72348fcbd2d1c6c5a4b5c8`。
+后端源码及协议清单与候选源提交一致，镜像内清单也已核对。数据库仍使用 0004，没有新增迁移版本。
+
+`tools/test_candidate_backend.py --candidate-dir <候选目录> --image <后端镜像>` 在独立内部 Docker 网络中启动临时 PostgreSQL、Redis 和实际 API，不映射宿主端口。95 项后端集成测试全部通过，没有跳过；包括会话、房间、队伍、战绩、迁移、恢复关系、隐私及依赖故障处理。报告 `backend-verification.json`，日志 `logs/backend-tests.log`。测试结束后移除临时容器、网络和数据。
+
+发布库备份 `artifacts/backups/20260912T054031Z-f6132172` 在隔离容器恢复后，使用该后端镜像执行 0004 启动迁移：55 个账号、106 场对局、157 条战绩的全部已有字段和行数保持一致，队伍关系、外键与统计检查通过，两个结果队列均为空。报告 `artifacts/candidate-036-startup-restore.json`。旧 0003 备份升级回归也通过，保留 51 个账号、103 场对局和 151 条战绩的旧字段；报告 `artifacts/candidate-036-legacy-restore.json`。
+
+这些是隔离演练结果，在线数据库和发布 API 尚未切换。备份是创建时点的快照，实际发布前仍应重新检查在线玩家、预约和待提交结果。
+
 ## 2026-09-11 的 0.35 候选
 
 - 版本：0.35.0-dev；协议 16；资源 ash-valley-17。

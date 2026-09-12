@@ -129,3 +129,11 @@
 固定单向 30 ms / 150 ms 两种延迟均通过，服务端分别观察到 70 / 86 个物理帧的等待。客户端实测约 30 FPS。记录 `artifacts/bot-boarding-network.log`、`artifacts/bot-boarding-network-delay150.log`，详细日志及报告前缀为 `artifacts/vehicle-login-duo-bot-driver-boarding-wait-fps30-delay{30,150}-`。原有乘客先入座场景回归记录于 `artifacts/bot-boarding-network-existing-regression.log`。
 
 本项使用源码运行；尚未发布候选包，也未验证丢包、超出等待期限的真人反应或公网长期体验。测试仅覆盖可行的直线路线，不绕过队友站在弯曲车体包络内时的路线拒绝。
+
+### 等待期间的危险中断（未发布源码）
+
+等待期间驾驶员生命比入座时下降，即使仍高于 50，也会立即结束可选等待。附近 9 m 内仍有引信的破片手雷，在通往车体中心的爆炸视线未被遮挡时也结束等待；烟雾和远处手雷不触发。使用与车辆爆炸伤害相同的碰撞掩码及排除本车的射线，避免车体遮住乘员导致步兵暴露检查漏判。随后继续正常驾驶与前方障碍制动，不保证所有情况下都能逃出爆炸范围，也不会强制队友上车。
+
+`tests/bot_boarding_wait.gd` 新增实际物理场景：等待一秒后受 5 点伤害、近处破片手雷、烟雾及远处手雷。日志 `artifacts/bot_boarding_wait-boarding-threat-final.log`；七个场景均通过。初次测试因直接使用步兵暴露检查而失败，修正后重跑通过；没有将失败记录计为通过。危险中断尚未进行延迟网络专项验证或打包部署。
+
+原有驾驶回归 `artifacts/bot_driver-boarding-threat.log`、提前转移 `artifacts/bot_early_transport-boarding-threat-final.log` 及四种驾驶检查点恢复 `artifacts/bot_driver_checkpoint-boarding-threat-final.log` 通过。检查点首次运行缺少夹具要求的 `CHECKPOINT_TEST_ROOT`，在配置临时隔离目录后重跑通过。

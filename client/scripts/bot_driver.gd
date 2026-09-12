@@ -9,6 +9,7 @@ var route := PackedVector3Array()
 var route_index := 0
 var boarding_departed := false
 var boarding_time := 0.0
+var boarding_health := 100.0
 
 func usable_vehicle(car, actor) -> bool:
 	if car.destroyed or not car.grounded or car.fuel < 5 or car.seats.occupant(0) != null or absf(car.speed) > 0.1:
@@ -138,6 +139,7 @@ func approach(game, actor, goal: Vector3, dt: float, eligible: bool) -> Vector3:
 			stopping = false
 			boarding_departed = false
 			boarding_time = 0.0
+			boarding_health = actor.health
 			return actor.position
 		approach_point = door
 		return door
@@ -146,9 +148,18 @@ func approach(game, actor, goal: Vector3, dt: float, eligible: bool) -> Vector3:
 func wait_for_teammate(game, actor, car) -> bool:
 	if boarding_departed or game == null or game.match_mode != "duo":
 		return false
-	if boarding_time >= 3 or absf(car.speed) > 0.1 or car.seats.occupant(1) != null or actor.health < 50:
+	if boarding_time >= 3 or absf(car.speed) > 0.1 or car.seats.occupant(1) != null or actor.health < 50 or actor.health < boarding_health:
 		boarding_departed = true
 		return false
+	# Seated bots skip infantry hazard planning. End the optional boarding pause
+	# for nearby frag threats to the chassis, while retaining driving collision checks.
+	for grenade in game.grenades.values():
+		if grenade.kind == 0 and grenade.fuse > 0 and car.position.distance_to(grenade.position) < 9:
+			var ray := PhysicsRayQueryParameters3D.create(grenade.position + Vector3.UP * 0.04, car.global_position + Vector3.UP * 0.9, 5, [car.get_rid()])
+			ray.hit_from_inside = true
+			if game.get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
+				boarding_departed = true
+				return false
 	for teammate in game.actors.values():
 		if teammate == actor or not teammate.alive or teammate.downed or teammate.is_seated():
 			continue

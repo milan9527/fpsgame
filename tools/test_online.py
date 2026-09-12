@@ -4,9 +4,24 @@ from pathlib import Path
 import subprocess
 import re
 import time
+import argparse
+import httpx
 from test_accounts import account
+from candidate_runtime import candidate_command
 
 root = Path(__file__).resolve().parent.parent
+parser = argparse.ArgumentParser()
+parser.add_argument("--candidate-dir", type=Path)
+options = parser.parse_args()
+runtime = [str(root / 'tools/godot'), '--headless', '--path', str(root / 'client')]
+prefix = ""
+candidate = None
+if options.candidate_dir:
+    runtime, candidate = candidate_command(options.candidate_dir)
+    response = httpx.get('http://127.0.0.1:8000/protocol')
+    response.raise_for_status()
+    assert response.json() == candidate["manifest"]
+    prefix = "candidate-" + candidate["commit"][:8] + "-"
 processes = []
 peer_ids = []
 try:
@@ -15,9 +30,9 @@ try:
         name = credentials['username']
         password = credentials['password']
         env = dict(os.environ, TEST_USERNAME=name, TEST_PASSWORD=password, API_URL='http://127.0.0.1:8000', TEST_ROOM_ID=os.getenv('TEST_ROOM_ID', 'room-27015'))
-        log_path = root / 'artifacts' / f'online-client-{i}.log'
+        log_path = root / 'artifacts' / f'{prefix}online-client-{i}.log'
         log = open(log_path, 'w')
-        proc = subprocess.Popen([str(root / 'tools/godot'), '--headless', '--path', str(root / 'client'), '--', '--bot-client'], env=env, stdout=log, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen(runtime + ['--', '--bot-client'], env=env, stdout=log, stderr=subprocess.STDOUT)
         processes.append((proc, log, log_path))
     for proc, log, path in processes:
         code = proc.wait(timeout=50)
@@ -40,7 +55,7 @@ for _ in range(100):
     time.sleep(0.2)
 else:
     raise AssertionError('Server did not confirm both disconnects')
-(root / 'artifacts' / 'online-server.log').write_text(server_output)
+(root / 'artifacts' / (prefix + 'online-server.log')).write_text(server_output)
 assert 'Unable to send packet' not in server_output, server_output
 assert 'SCRIPT ERROR' not in server_output, server_output
 # Readiness is emitted once at startup, which may precede the two-minute
@@ -50,3 +65,6 @@ startup_output = subprocess.check_output(
 ready_lines = [line for line in startup_output.splitlines() if 'SERVER_READY ' in line]
 assert ready_lines and 'relay=false' in ready_lines[-1], 'Dedicated server must disable client-to-client relay'
 print('TWO_CLIENT_ONLINE_PASS disconnect=ok')
+if candidate:
+    candidate_command(options.candidate_dir)
+    print("PUBLISHED_CANDIDATE_ONLINE_PASS commit=" + candidate["commit"] + " sha256=" + candidate["sha256"])

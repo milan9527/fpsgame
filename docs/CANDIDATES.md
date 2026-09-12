@@ -12,7 +12,7 @@
 
 构建失败会保留日志和失败状态，不将失败目录当作通过的候选包。成功报告中的 `scope` 仅说明包内离线规则验证，不代替网络、渲染或物理音频设备验收。后续发布仍需相应回归与服务版本切换。
 
-## 0.36 候选（未发布）
+## 0.36 候选（已作为开发版本发布）
 
 - 版本：0.36.0-dev / 协议 17 / 资源 ash-valley-18。
 - 源提交：`8245350d`。
@@ -23,9 +23,9 @@
 - 实际 OpenGL 的人物动画、倒地动画、语音界面及载具观战检查通过；证据 `artifacts/candidate-036-render.log`，该目录的 `render-verification/` 保存报告与截图。
 - 报告为该目录的 `verification.json`，逐项日志在 `logs/`；构建汇总为 `artifacts/candidate-036-build.log`。
 
-此候选包含载具、空间音频、坐姿命中与回溯、观战跟车、机器人直线进圈驾驶及存档恢复处理。游戏包内包含更新后的 0.36 玩家指南。真人仍可在离线 SOLO/DUO 入口运行；在线需要兼容的 0.36 服务。当前发布服务和默认包仍保持 0.35，已核对默认压缩包校验和未变化。
+此候选包含载具、空间音频、坐姿命中与回溯、观战跟车、机器人直线进圈驾驶及存档恢复处理。游戏包内包含更新后的 0.36 玩家指南。真人仍可在离线 SOLO/DUO 入口运行；在线需要兼容的 0.36 服务。发布服务和默认包已切换至此 0.36 候选，详见 [发行记录](RELEASE_036.md)。
 
-候选 PCK 已通过以下受控联网联调及下述自然完整对局检查，后续发布切换尚未完成。整体商业级游戏目标也仍未完成。
+候选 PCK 已通过以下受控联网联调及下述自然完整对局检查，发布切换及发布端口验证已完成。整体商业级游戏目标也仍未完成。
 
 - 双客户端驾驶/乘坐与发动机音频同步。
 - 30 FPS、单向 30 ms 延迟下三客户端移动射击：13.2 m/s 时首发命中驾驶员，乘客和车体未受伤。
@@ -49,7 +49,7 @@ solo 在游戏时间约 82.3 秒自然结算，真人排名 13；duo 约 99.5 �
 
 本候选镜像标签 `iron-meridian-candidate:8245350d2e2c`，已验证具体 ID：
 `sha256:d7e86476802eb4299d989ae77854dd8fca85246d12b8f9a113abda8de8753e91`。
-报告 `server-image.json`，构建和隔离启动日志在候选目录 `logs/server-image-{build,smoke}.log`。该镜像现已部署至独立开发专服，发布专服仍保持 0.35。
+报告 `server-image.json`，构建和隔离启动日志在候选目录 `logs/server-image-{build,smoke}.log`。该镜像现已部署至独立开发专服及两台发布专服。
 
 ### 开发专服部署与重开
 
@@ -61,7 +61,7 @@ solo 在游戏时间约 82.3 秒自然结算，真人排名 13；duo 约 99.5 �
 docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml -f artifacts/duo-candidate.override.json up -d --no-deps --no-build game
 ```
 
-两个候选客户端通过邀请大厅连续两轮登录、准备、入场和返回，保留原队伍并使用新回合。证据 `artifacts/candidate-036-dev-requeue.log`，四份客户端日志为 `artifacts/candidate-8245350d-party-requeue-{0,1}-{0,1}.log`。开发 API 8001 返回 0.36 / 协议 17，发布 API 8000 仍为 0.35 / 协议 16。
+两个候选客户端通过邀请大厅连续两轮登录、准备、入场和返回，保留原队伍并使用新回合。证据 `artifacts/candidate-036-dev-requeue.log`，四份客户端日志为 `artifacts/candidate-8245350d-party-requeue-{0,1}-{0,1}.log`。开发 API 8001 返回 0.36 / 协议 17，发布 API 8000 也已升级至 0.36 / 协议 17，并通过发布端口连续两轮邀请入场检查。
 
 候选 PCK 的驾驶者账号撤销及进程强制终止场景也通过，证据 `artifacts/vehicle-login-duo-{revoke,drop}-packed-8245350d-verification.json`。服务端确认输入清除或超时制动、驾驶位释放，乘客通过正常输入安全下车，完成时仍处于 live 阶段。
 
@@ -77,7 +77,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml -f artif
 
 发布库备份 `artifacts/backups/20260912T054031Z-f6132172` 在隔离容器恢复后，使用该后端镜像执行 0004 启动迁移：55 个账号、106 场对局、157 条战绩的全部已有字段和行数保持一致，队伍关系、外键与统计检查通过，两个结果队列均为空。报告 `artifacts/candidate-036-startup-restore.json`。旧 0003 备份升级回归也通过，保留 51 个账号、103 场对局和 151 条战绩的旧字段；报告 `artifacts/candidate-036-legacy-restore.json`。
 
-这些是隔离演练结果，在线数据库和发布 API 尚未切换。备份是创建时点的快照，实际发布前仍应重新检查在线玩家、预约和待提交结果。
+以上为发布前隔离演练。实际切换已重新检查玩家、预约和结果队列，并创建新备份；已有数据全字段指纹保持一致。切换后的备份再次隔离恢复成功，证据见 [发行记录](RELEASE_036.md)。
 
 ## 2026-09-11 的 0.35 候选
 
@@ -112,7 +112,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml -f artif
 - 真实 OpenGL 渲染：原有九条角色动作和新增三条倒地动作、骨骼蒙皮边界、武器显示/隐藏、复活恢复及麦克风设置界面。`artifacts/candidate-render.log`；逐项日志和截图位于候选目录下 `render-verification/`。
 - 候选 PCK 的真实 PulseAudio 驱动采集：440 Hz 虚拟源、监听不发包、模式切换、按键松开后再次发送及本机零回声输出。`artifacts/candidate-voice-driver.log`。它仍不代表物理音频设备验收。
 
-验证报告的 `integration_verification` 记录这些证据；压缩包内容与校验和不变。发布服务现已切换为 0.35.0-dev / 协议 16 / 数据库 0004，默认包与此候选压缩包一致。0.34 归档于 `artifacts/releases/0.34/`；过程见 [运行服务升级](RELEASE_035.md)。
+验证报告的 `integration_verification` 记录这些证据；压缩包内容与校验和不变。当时发布服务切换为 0.35.0-dev / 协议 16 / 数据库 0004，默认包与此候选压缩包一致。0.34 归档于 `artifacts/releases/0.34/`；过程见 [运行服务升级](RELEASE_035.md)。
 
 ## 0.36 构建检查调整
 

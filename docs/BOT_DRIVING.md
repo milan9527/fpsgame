@@ -137,3 +137,7 @@
 `tests/bot_boarding_wait.gd` 新增实际物理场景：等待一秒后受 5 点伤害、近处破片手雷、烟雾及远处手雷。日志 `artifacts/bot_boarding_wait-boarding-threat-final.log`；七个场景均通过。初次测试因直接使用步兵暴露检查而失败，修正后重跑通过；没有将失败记录计为通过。危险中断尚未进行延迟网络专项验证或打包部署。
 
 原有驾驶回归 `artifacts/bot_driver-boarding-threat.log`、提前转移 `artifacts/bot_early_transport-boarding-threat-final.log` 及四种驾驶检查点恢复 `artifacts/bot_driver_checkpoint-boarding-threat-final.log` 通过。检查点首次运行缺少夹具要求的 `CHECKPOINT_TEST_ROOT`，在配置临时隔离目录后重跑通过。
+
+后续补齐车体受损中断：保存入座时车辆生命值，等待期间车辆受损即结束等待，即使驾驶员未受伤。新增车体受 5 点伤害、实体墙挡住手雷视线、手雷引信结束三项场景；后两者仍保持等待并允许队友正常上车。十项场景与四种驾驶检查点恢复通过，日志 `artifacts/{bot_boarding_wait,bot_driver_checkpoint}-boarding-cover.log`。掩体只用于爆炸视线判断，不改变碰撞、爆炸伤害或行车路线规则。
+
+修改后的正常联网上车回归通过：真实账号自动客户端、30 FPS、固定单向 150 ms 延迟，服务端等待 86 个物理帧后乘客正常入座，随后驾驶、停车、下车成功。独立保存报告与日志于 `artifacts/boarding-cover-network/`，汇总 `artifacts/bot-boarding-cover-network.log`。这是正常等待流程回归，不是联网伤害或手雷注入验证。

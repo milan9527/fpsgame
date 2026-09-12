@@ -10,6 +10,7 @@ var route_index := 0
 var boarding_departed := false
 var boarding_time := 0.0
 var boarding_health := 100.0
+var boarding_vehicle_health := 600.0
 
 func usable_vehicle(car, actor) -> bool:
 	if car.destroyed or not car.grounded or car.fuel < 5 or car.seats.occupant(0) != null or absf(car.speed) > 0.1:
@@ -140,6 +141,7 @@ func approach(game, actor, goal: Vector3, dt: float, eligible: bool) -> Vector3:
 			boarding_departed = false
 			boarding_time = 0.0
 			boarding_health = actor.health
+			boarding_vehicle_health = car.health
 			return actor.position
 		approach_point = door
 		return door
@@ -148,7 +150,7 @@ func approach(game, actor, goal: Vector3, dt: float, eligible: bool) -> Vector3:
 func wait_for_teammate(game, actor, car) -> bool:
 	if boarding_departed or game == null or game.match_mode != "duo":
 		return false
-	if boarding_time >= 3 or absf(car.speed) > 0.1 or car.seats.occupant(1) != null or actor.health < 50 or actor.health < boarding_health:
+	if boarding_time >= 3 or absf(car.speed) > 0.1 or car.seats.occupant(1) != null or actor.health < 50 or actor.health < boarding_health or car.health < boarding_vehicle_health:
 		boarding_departed = true
 		return false
 	# Seated bots skip infantry hazard planning. End the optional boarding pause

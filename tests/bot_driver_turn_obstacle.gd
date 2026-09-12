@@ -59,7 +59,7 @@ func run() -> void:
 		assert(passenger.is_seated() and car.seats.occupant(1) == passenger)
 		assert(wall.to_local(car.position).z > car.BODY_SIZE.z / 2 + 0.25)
 		assert(controller.route.is_empty() and controller.cooldown > 0)
-		print("TURN_OBSTACLE_SIDE_PASS ", side)
+		print("TURN_OBSTACLE_SIDE_OK ", side)
 		wall.queue_free()
 		game.local_recorded_id = game.match_id
 		game.leave()

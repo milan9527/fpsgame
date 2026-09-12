@@ -84,7 +84,7 @@ func run() -> void:
 			"Restore must stop within the physical braking distance plus integration tolerance")
 		assert(bot.health == 100 and passenger.health == 100 and car.health == car.MAX_HEALTH)
 		assert(bot.navigator.driver.cooldown > 0)
-		print("CHECKPOINT_SCENARIO_PASS ", scenario, " saved_steering=", saved_steering,
+		print("CHECKPOINT_SCENARIO_OK ", scenario, " saved_steering=", saved_steering,
 			" heading_change=", absf(wrapf(car.rotation.y - saved_heading, -PI, PI)),
 			" stopping_travel=", car.position.distance_to(saved_position))
 		game.local_recorded_id = game.match_id

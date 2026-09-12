@@ -90,7 +90,7 @@ func check_removed_car(game) -> bool:
 	if moved < 0.4 or exceptions_remain:
 		print("REMOVED_CAR_EXIT_FAILED moved=", moved, " stale_exception=", exceptions_remain)
 		return false
-	print("REMOVED_CAR_EXIT_PASS movement=restored collision_exception=cleared")
+	print("REMOVED_CAR_EXIT_OK movement=restored collision_exception=cleared")
 	game.local_recorded_id = game.match_id
 	game.leave()
 	return true

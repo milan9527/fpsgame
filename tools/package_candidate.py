@@ -21,7 +21,7 @@ CASES = [
     "zone_rules", "inventory_rules", "death_loot_rules", "drop_rules",
     "voice_resampler", "voice_relay", "voice_playback", "voice_capture",
     "vehicle_slopes", "vehicle_spectator", "bot_driver", "bot_driver_turn",
-    "bot_driver_turn_obstacle", "bot_driver_checkpoint", "bot_early_transport",
+    "bot_driver_turn_obstacle", "bot_driver_checkpoint", "bot_early_transport", "bot_boarding_wait",
     "vehicle_motion", "vehicle_seats", "vehicle_exit_movement", "vehicle_driving", "vehicle_checkpoint",
     "vehicle_ballistics", "vehicle_shooting", "vehicle_audio", "vehicle_camera",
     "vehicle_snapshot", "vehicle_authority", "vehicle_frame_pair",

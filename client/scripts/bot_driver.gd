@@ -7,6 +7,8 @@ var stopping := false
 var approach_point := Vector3.INF
 var route := PackedVector3Array()
 var route_index := 0
+var boarding_departed := false
+var boarding_time := 0.0
 
 func usable_vehicle(car, actor) -> bool:
 	if car.destroyed or not car.grounded or car.fuel < 5 or car.seats.occupant(0) != null or absf(car.speed) > 0.1:
@@ -134,17 +136,37 @@ func approach(game, actor, goal: Vector3, dt: float, eligible: bool) -> Vector3:
 			route_index = 0
 			trip_time = 0
 			stopping = false
+			boarding_departed = false
+			boarding_time = 0.0
 			return actor.position
 		approach_point = door
 		return door
 	return goal
 
-func drive(actor, dt: float) -> void:
+func wait_for_teammate(game, actor, car) -> bool:
+	if boarding_departed or game == null or game.match_mode != "duo":
+		return false
+	if boarding_time >= 3 or absf(car.speed) > 0.1 or car.seats.occupant(1) != null or actor.health < 50:
+		boarding_departed = true
+		return false
+	for teammate in game.actors.values():
+		if teammate == actor or not teammate.alive or teammate.downed or teammate.is_seated():
+			continue
+		if game.teams.friendly(actor.actor_id, teammate.actor_id) and car.seats.can_enter(teammate, 1):
+			return true
+	boarding_departed = true
+	return false
+
+func drive(actor, dt: float, game = null) -> void:
 	actor.move_input = Vector2.ZERO
 	actor.shooting = false
 	actor.sprint = false
 	var car = actor.vehicle_ref.get_ref()
 	if actor.vehicle_seat != 0 or not actor.alive or actor.downed:
+		return
+	boarding_time += dt
+	if destination.is_finite() and not stopping and wait_for_teammate(game, actor, car):
+		car.command(actor.actor_id, car.input_sequence + 1, 0, 0, true, car.seats.epoch)
 		return
 	trip_time += dt
 	var delta: Vector3 = destination - car.position if destination.is_finite() else Vector3.ZERO

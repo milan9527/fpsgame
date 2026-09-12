@@ -1148,7 +1148,7 @@ func bot_input(actor, dt: float) -> void:
 	if not actor.alive:
 		return
 	if actor.is_seated():
-		actor.navigator.driver.drive(actor, dt)
+		actor.navigator.driver.drive(actor, dt, self)
 		return
 	if match_mode == "duo" and rescue.bot_rescue(self, actor, dt):
 		return

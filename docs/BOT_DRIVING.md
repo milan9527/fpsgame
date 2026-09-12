@@ -12,7 +12,7 @@
 
 `tests/bot_driver_checkpoint.gd` 在机器人实际加速至 9 m/s 以上、真人乘客已入座时保存，分别验证 solo/duo 磁盘恢复。速度、位置、燃料、座位保持；旧座位代次输入被拒绝，机器人不再加速，直线驾驶场景停车时不产生额外转向，最后安全下车，乘客保持座位和生命。证据 `artifacts/bot-driver-checkpoint-resume.log`。回归为 `artifacts/bot-driver-resume.log` 和 `artifacts/vehicle-checkpoint-resume.log`。测试已加入候选包检查。
 
-此前失效目标被转换成零方向，再传给 `atan2` 生成意外转向，实际恢复测试发现了停车期间打方向的问题。失败证据保留于 `artifacts/bot-driver-checkpoint-baseline.log`；生产控制器现已对零方向和制动转向分别处理。这些检查未覆盖转弯中保存、所有出口被堵、连续多次保存或多车同时恢复。
+此前失效目标被转换成零方向，再传给 `atan2` 生成意外转向，实际恢复测试发现了停车期间打方向的问题。失败证据保留于 `artifacts/bot-driver-checkpoint-baseline.log`；生产控制器现已对零方向和制动转向分别处理。此前检查仅覆盖直线保存；新增的转弯保存验证见下方。所有出口被堵、连续多次保存或多车同时恢复仍待专项验证。
 
 `tests/bot_driver.gd` 从距离车门约 4.35 m 的位置开始，通过实际导航、正常机器人决策、真实车辆输入与物理模拟，验证走近、上车、行驶、制动、下车。另验证无油、战斗优先、静态路线堵塞和行驶途中出现障碍后的无碰撞停车。证据 `artifacts/bot-driver-realtime.log`；此前车门旁起步的规则证据为 `artifacts/bot-driver.log`。手雷避险、烟雾战术、人工驾驶及座位规则回归通过，日志后缀 `-driver-regression.log`。新增测试已通过 0.36 候选包内验证，见 [候选记录](CANDIDATES.md)。
 
@@ -31,3 +31,12 @@
 上车后按前方路线点转向，弯曲路线限目标速度 6 m/s，保留前向动态障碍制动、失效目标停车、输入代次校验和安全下车。路线是临时 AI 状态，恢复存档后仍停车下车。此功能改善开放区域的转向选择，不提供道路网络寻路、多段绕障或倒车脱困。
 
 `tests/bot_driver_turn.gd` 使用真实车辆物理和正常座位/输入接口检查左右转向、抵达后停车下车、车体无损、弯曲路线障碍拒绝及后方目标拒绝。验证日志分别为 `artifacts/bot-driver-turn-{right,left}.log`；原有直线驾驶与存档恢复回归为 `artifacts/bot-driver-turn-{straight,checkpoint}-regression.log`。测试已加入后续候选包检查；本次尚不构成打包或真实网络验证。
+
+
+### 转弯驾驶的故障场景
+
+`tests/bot_driver_turn_obstacle.gd` 在左右转弯过程中放置动态墙体，使用正常 `Game.bot_input` 和实际车辆物理验证制动、安全下车、乘客留座，以及车体和双方角色不受损。乘客先坐进副驾驶；站在车轮旁的人物仍属于真实障碍，单独验证其会阻止路线选择，不能通过忽略所有队友碰撞来发车。
+
+`tests/bot_driver_checkpoint.gd` 扩展为 solo/duo 直线与转弯共四种保存恢复场景。转弯时真实速度超过 5 m/s，前轮仍有转角后才写盘。恢复检查位置、速度、燃料和前轮转角保持，临时曲线路线不恢复、旧座位代次输入被拒绝。随后检查不再加速、转向输入归零、前轮逐步回正、在制动距离加积分容差内停车并安全下车，乘客保持座位与生命。回正期间允许物理产生的小幅车身偏转，不瞬间抹掉前轮角度或车身朝向。
+
+证据：`artifacts/bot-driver-turn-obstacle-turn-safety.log` 与 `artifacts/bot-driver-checkpoint-turn-safety.log`。新增动态障碍测试已加入候选构建检查。这些仍是源码单机物理验证，不能代表打包客户端的网络转弯、复杂地形或所有出口被堵的处理已经验收。

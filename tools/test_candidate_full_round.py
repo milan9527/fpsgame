@@ -1,4 +1,4 @@
-"""Run a normal-speed candidate match, observing rather than scripting its outcome."""
+"""Observe a normal-speed match from a verified candidate or committed source."""
 import argparse
 import json
 import os
@@ -20,10 +20,18 @@ BASE = "http://127.0.0.1:8001"
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--candidate-dir", type=Path, required=True)
+    selection = parser.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--candidate-dir", type=Path)
+    selection.add_argument("--source", action="store_true", help="Use a clean committed source tree, not the published package")
     parser.add_argument("--mode", choices=["solo", "duo"], required=True)
     options = parser.parse_args()
-    runtime, candidate = candidate_command(options.candidate_dir)
+    if options.source:
+        assert not subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).strip(), "Commit source before recording a natural match"
+        commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+        runtime = [str(ROOT / "tools/godot"), "--headless", "--path", str(ROOT / "client")]
+        candidate = {"commit": commit, "sha256": None, "manifest": json.loads((ROOT / "client/protocol.json").read_text())}
+    else:
+        runtime, candidate = candidate_command(options.candidate_dir)
     response = httpx.get(BASE + "/protocol")
     response.raise_for_status()
     assert response.json() == candidate["manifest"]
@@ -33,11 +41,13 @@ def main():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
         probe.bind(("127.0.0.1", 0))
         port = str(probe.getsockname()[1])
-    output = options.candidate_dir.resolve() / ("natural-round-" + options.mode)
+    output = (ROOT / "artifacts" / ("natural-source-" + candidate["commit"][:8] + "-" + options.mode)
+              if options.source else options.candidate_dir.resolve() / ("natural-round-" + options.mode))
     output.mkdir(exist_ok=True)
     report_path = output / "verification.json"
     report = {"status": "running", "commit": candidate["commit"],
-              "archive_sha256": candidate["sha256"], "mode": options.mode, "time_scale": 1}
+              "archive_sha256": candidate["sha256"], "mode": options.mode, "time_scale": 1,
+              "runtime": "committed_source" if options.source else "verified_candidate"}
     report_path.write_text(json.dumps(report, indent=2) + "\n")
     processes = []
     streams = []
@@ -107,11 +117,15 @@ def main():
             assert after["matches"] == before["matches"] + 1
             assert after["kills"] == before["kills"] + rows[0]["kills"]
             assert after["wins"] == before["wins"] + int(rank == 1)
-            candidate_command(options.candidate_dir)
+            if options.source:
+                assert subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip() == candidate["commit"]
+                assert not subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).strip(), "Source changed during match"
+            else:
+                candidate_command(options.candidate_dir)
             report.update(status="passed", summary=summary, rank=rank, result_rows=len(rows),
                           seconds=round(time.monotonic() - started, 2),
                           scope="One automated human client and 15 normal bots; no outcome or circle overrides, no time acceleration")
-            print("CANDIDATE_NATURAL_ROUND_PASS " + json.dumps(report), flush=True)
+            print(("SOURCE_NATURAL_ROUND_PASS " if options.source else "CANDIDATE_NATURAL_ROUND_PASS ") + json.dumps(report), flush=True)
     except Exception as error:
         report.update(status="failed", failure=str(error))
         raise

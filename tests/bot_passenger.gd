@@ -11,7 +11,7 @@ func run() -> void:
 	await process_frame
 	game.set_process(false)
 	game.set_physics_process(false)
-	for scenario in ["ride", "enemy", "combat", "healing", "no_fuel", "moving", "blocked_door"]:
+	for scenario in ["ride", "blocked_exit", "enemy", "combat", "healing", "no_fuel", "moving", "blocked_door"]:
 		game.start_solo("duo")
 		for actor in game.actors.values():
 			actor.position = Vector3(95, 0.1, 95 + actor.actor_id)
@@ -44,7 +44,7 @@ func run() -> void:
 			game.world.block(Vector3(2.7, 1.5, 0.1), Vector3(0.2, 3, 3), "657477")
 			await physics_frame
 		game.bot_input(bot, 1.0 / 60)
-		if scenario != "ride":
+		if scenario not in ["ride", "blocked_exit"]:
 			assert(not bot.is_seated(), "Unsafe or unavailable teammate rides must be rejected: " + scenario)
 		else:
 			assert(bot.is_seated() and car.seats.occupant(1) == bot)
@@ -58,6 +58,29 @@ func run() -> void:
 			car.seats.release(driver, Vector3(-5, 0.04, car.position.z))
 			game.bot_input(bot, 1.0 / 60)
 			assert(bot.is_seated(), "A passenger must not jump out of a moving vehicle when the driver leaves")
+			if scenario == "blocked_exit":
+				for _step in range(180):
+					await physics_frame
+					car.simulate(1.0 / 60)
+					if absf(car.speed) < 0.1:
+						break
+				assert(absf(car.speed) < 0.1)
+				var barriers: Array = []
+				for point in car.seats.EXIT_POINTS:
+					barriers.append(game.world.block(car.to_global(point) + Vector3.UP, Vector3(0.6, 2, 0.6), "657477"))
+				await physics_frame
+				await physics_frame
+				for _step in range(30):
+					await physics_frame
+					game.bot_input(bot, 1.0 / 60)
+					car.simulate(1.0 / 60)
+					assert(bot.is_seated() and bot.position.distance_to(car.to_global(car.seats.ANCHORS[1])) < 0.01,
+						"Blocked exits must keep the bot secured at the seat")
+				for barrier in barriers:
+					game.world.remove_child(barrier)
+					barrier.queue_free()
+				await physics_frame
+				await physics_frame
 			for _step in range(180):
 				await physics_frame
 				car.simulate(1.0 / 60)
@@ -105,5 +128,5 @@ func run() -> void:
 	assert(driver.health == 100 and passenger.health == 100)
 	game.local_recorded_id = game.match_id
 	game.leave()
-	print("BOT_PASSENGER_PASS normal_ai=board moving=ride driver_departure=wait_for_stop safe_exit=ok enemy=reject combat=priority healing=priority fuel=required moving_entry=reject blocked_door=reject bot_pair=drive_and_exit")
+	print("BOT_PASSENGER_PASS normal_ai=board moving=ride driver_departure=wait_for_stop safe_exit=ok blocked_exit=wait_and_retry enemy=reject combat=priority healing=priority fuel=required moving_entry=reject blocked_door=reject bot_pair=drive_and_exit")
 	game.request_quit()

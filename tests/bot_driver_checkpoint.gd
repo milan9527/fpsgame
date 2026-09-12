@@ -14,15 +14,18 @@ func run() -> void:
 	await process_frame
 	game.set_process(false)
 	game.set_physics_process(false)
-	for scenario in ["solo", "duo", "solo_turn", "duo_turn"]:
+	for scenario in ["solo", "duo", "solo_turn", "duo_turn", "duo_bots", "duo_bots_turn"]:
 		var turning: bool = scenario.ends_with("_turn")
-		var mode: String = scenario.trim_suffix("_turn")
+		var bot_passenger: bool = scenario.begins_with("duo_bots")
+		var mode := "solo" if scenario.begins_with("solo") else "duo"
+		var driver_id := -2 if bot_passenger else -1
+		var passenger_id := -3 if bot_passenger else 1
 		game.start_solo(mode)
 		game.elapsed = 30
 		for actor in game.actors.values():
 			actor.position = Vector3(90, 0.1, 90 + actor.actor_id)
-		var bot = game.actors[-1]
-		var passenger = game.actors[1]
+		var bot = game.actors[driver_id]
+		var passenger = game.actors[passenger_id]
 		bot.position = Vector3(-1.65, 0.04, 0.1)
 		passenger.position = Vector3(1.65, 0.04, 0.1)
 		var car = game.vehicle_fleet.spawn(game, Vector3.ZERO)
@@ -53,9 +56,11 @@ func run() -> void:
 		assert(game.suspend_solo())
 		assert(game.resume_solo() and paused)
 		car = game.vehicle_fleet.vehicles[car_id]
-		bot = game.actors[-1]
-		passenger = game.actors[1]
+		bot = game.actors[driver_id]
+		passenger = game.actors[passenger_id]
 		assert(bot.is_bot and bot.is_seated() and passenger.is_seated())
+		if bot_passenger:
+			assert(passenger.is_bot and game.teams.friendly(bot.actor_id, passenger.actor_id))
 		assert(car.speed == saved_speed and car.position.is_equal_approx(saved_position) and car.fuel == saved_fuel)
 		assert(car.throttle == 0 and car.seats.epoch == saved_epoch + 1)
 		assert(car.steering == saved_steering and bot.navigator.driver.route.is_empty())
@@ -69,6 +74,8 @@ func run() -> void:
 		for _i in range(120):
 			await physics_frame
 			game.bot_input(bot, 1.0 / 60)
+			if bot_passenger:
+				game.bot_input(passenger, 1.0 / 60)
 			car.simulate(1.0 / 60)
 			assert(car.speed <= previous_speed + 0.01, "Restored bot must brake without accelerating")
 			previous_speed = car.speed
@@ -79,7 +86,11 @@ func run() -> void:
 			if not bot.is_seated():
 				break
 		assert(not bot.is_seated() and bot.collision_mask == 7 and car.driver_id == 0)
-		assert(absf(car.speed) < 0.1 and passenger.is_seated() and car.seats.occupant(1) == passenger)
+		assert(absf(car.speed) < 0.1)
+		if bot_passenger:
+			assert(not passenger.is_seated() and passenger.collision_mask == 7 and passenger.navigator.driver.cooldown > 0)
+		else:
+			assert(passenger.is_seated() and car.seats.occupant(1) == passenger)
 		assert(car.position.distance_to(saved_position) < saved_speed * saved_speed / (2 * car.BRAKING) + 1,
 			"Restore must stop within the physical braking distance plus integration tolerance")
 		assert(bot.health == 100 and passenger.health == 100 and car.health == car.MAX_HEALTH)
@@ -89,5 +100,5 @@ func run() -> void:
 			" stopping_travel=", car.position.distance_to(saved_position))
 		game.local_recorded_id = game.match_id
 		game.leave()
-	print("BOT_DRIVER_CHECKPOINT_PASS solo=ok duo=ok actual_driving=ok disk_restore=ok stale_epoch=ok no_acceleration=ok heading=ok safe_exit=ok passenger=ok turning_restore=ok steering_decay=ok")
+	print("BOT_DRIVER_CHECKPOINT_PASS solo=ok duo=ok actual_driving=ok disk_restore=ok stale_epoch=ok no_acceleration=ok heading=ok safe_exit=ok passenger=ok turning_restore=ok steering_decay=ok bot_passenger_restore=ok")
 	game.request_quit()

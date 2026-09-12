@@ -151,3 +151,9 @@
 `tests/bot_passenger.gd` 验证正常 AI 搭乘、移动中保持座位、驾驶员离车后停稳下车，以及敌队、交战、治疗、缺油、移动中车辆和车门被墙挡住时拒绝搭乘；还通过实际分队的双机器人正常上车、行驶超过 25 m、停车和双方下车完整流程。日志 `artifacts/bot_passenger-pair-final.log`，已加入候选包规则检查。原有十种等待和四种驾驶存档恢复回归通过，日志 `artifacts/{bot_boarding_wait,bot_driver_checkpoint}-bot-passenger.log`。
 
 当前仅在已有正常上车距离内搭乘，尚无远距离追车、乘车召集或道路协同寻路；机器人乘客尚未进行专项联网验证或发布，受控双机器人流程不证明自然对局搭乘率。
+
+### 乘客出口受阻与存档恢复
+
+`tests/bot_passenger.gd` 新增四个下车点全部被实体障碍挡住的场景：驾驶员离车后等待车辆停稳，正常 AI 连续 30 个物理帧保持座位位置，不穿过障碍；移除障碍后自动重试并安全下车。八种乘客场景及双机器人行驶流程通过，日志 `artifacts/bot_passenger-passenger-recovery.log`。
+
+`tests/bot_driver_checkpoint.gd` 新增双机器人直行、转弯两种移动中磁盘存档恢复。恢复后保留双方座位、车速和燃油，拒绝旧座位 epoch 输入；临时路线清空后制动、不重新加速、转向输入归零，驾驶员和机器人乘客均正常下车并恢复碰撞。两种新增场景及原有四种场景通过，日志 `artifacts/bot_driver_checkpoint-passenger-recovery.log`。直行制动位移约 3.04 m，转弯约 1.08 m，均满足测试中的物理制动距离容差。本轮未修改运行逻辑，验证对象仍是尚未发布的机器人乘客源码。

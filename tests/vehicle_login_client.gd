@@ -57,6 +57,9 @@ func run() -> void:
 	var saw_bot_turn := false
 	var turn_done_at := 0
 	var bot_car
+	var boarding_wait := OS.get_environment("VEHICLE_BOARDING_WAIT") == "1"
+	var observed_wait_at := 0
+	var observed_wait_position := Vector3.INF
 	var bot_turn := OS.get_environment("VEHICLE_BOT_TURN")
 	while true:
 		await physics_frame
@@ -141,7 +144,19 @@ func run() -> void:
 			last_frame_at = now
 			last_frame = game.vehicle_replica.last_sequence
 			applied_frames += 1
-		if stage == "VEHICLE_ENTER" and not actor.is_seated() or stage == "VEHICLE_EXIT" and actor.is_seated():
+		var may_board := true
+		if boarding_wait and stage == "VEHICLE_ENTER" and not actor.is_seated():
+			may_board = false
+			for waiting_car in game.vehicle_fleet.vehicles.values():
+				if waiting_car.driver_id >= 0:
+					continue
+				assert(absf(waiting_car.speed) < 0.01)
+				if observed_wait_at == 0:
+					observed_wait_at = Time.get_ticks_msec()
+					observed_wait_position = waiting_car.position
+				assert(waiting_car.position.distance_to(observed_wait_position) < 0.03)
+				may_board = Time.get_ticks_msec() - observed_wait_at >= 1000
+		if stage == "VEHICLE_ENTER" and not actor.is_seated() and may_board or stage == "VEHICLE_EXIT" and actor.is_seated():
 			if Time.get_ticks_msec() >= next_interact:
 				Input.action_press("loot")
 				release_interact = true
@@ -190,6 +205,9 @@ func run() -> void:
 					continue
 			if OS.get_environment("VEHICLE_BOT_DRIVER") == "1":
 				assert(saw_bot_driver)
+				if boarding_wait:
+					assert(observed_wait_at > 0)
+					print("BOT_BOARDING_CLIENT_PASS stationary_wait=observed normal_interact=ok departure=ok")
 				if not bot_turn.is_empty():
 					var goal := Vector3(-35 if bot_turn == "left" else 35, 0, -5)
 					assert(saw_bot_turn and bot_car.position.distance_to(goal) < 6 and absf(bot_car.speed) < 0.1)

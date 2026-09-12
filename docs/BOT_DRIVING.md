@@ -121,3 +121,11 @@
 `tests/bot_boarding_wait.gd` 通过正常 `Game.bot_input` 与实际物理验证静止等待、队友成功上车后发车、队友离开后发车、超时发车，以及等待不占驾驶时限。日志 `artifacts/bot-boarding-wait-boarding-regression.log`；原有驾驶、提前转移和四种存档恢复回归为 `artifacts/{bot-driver,bot-early-transport,bot-driver-checkpoint}-boarding-regression.log`。已加入后续候选构建检查。
 
 本项尚未打包部署，等待窗口的真人联网体验及复杂危险场景仍待验证。它改善已有驾驶决策后的队友上车机会，不等于已经改善自然对局中的车辆选择率。
+
+### 真人账号客户端观察等待并上车
+
+`tools/test_vehicle_login.py --mode duo --bot-driver --boarding-wait --client-fps 30 --latency-ms 30` 使用真实后端账号和专服正常分配的机器人队友。该夹具允许机器人在乘客尚未入座时执行正常 AI；客户端先看到机器人占据驾驶座并静止，持续观察至少一秒后才按正常交互键上车。服务器检查乘客未上车期间车辆不移动，之后继续原有驾驶、制动和安全下车验证，不直接设置车辆控制或座位。
+
+固定单向 30 ms / 150 ms 两种延迟均通过，服务端分别观察到 70 / 86 个物理帧的等待。客户端实测约 30 FPS。记录 `artifacts/bot-boarding-network.log`、`artifacts/bot-boarding-network-delay150.log`，详细日志及报告前缀为 `artifacts/vehicle-login-duo-bot-driver-boarding-wait-fps30-delay{30,150}-`。原有乘客先入座场景回归记录于 `artifacts/bot-boarding-network-existing-regression.log`。
+
+本项使用源码运行；尚未发布候选包，也未验证丢包、超出等待期限的真人反应或公网长期体验。测试仅覆盖可行的直线路线，不绕过队友站在弯曲车体包络内时的路线拒绝。

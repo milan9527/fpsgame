@@ -18,6 +18,9 @@ class DrivingServer:
 	var shooter
 	var spectating := OS.get_environment("VEHICLE_SPECTATOR") == "1"
 	var turn_pose_reported := false
+	var boarding_wait := OS.get_environment("VEHICLE_BOARDING_WAIT") == "1"
+	var boarding_frames := 0
+	var boarding_position := Vector3.INF
 	var bot_turn := OS.get_environment("VEHICLE_BOT_TURN")
 	var turn_goal := Vector3.ZERO
 	var bot_driving := OS.get_environment("VEHICLE_BOT_DRIVER") == "1"
@@ -96,7 +99,7 @@ class DrivingServer:
 			assert(not observer.alive and driver.alive)
 			print("VEHICLE_SPECTATOR_SERVER_READY eliminated=ok teammate=ok")
 	func bot_input(actor, _dt: float) -> void:
-		if bot_driving and actor == driver and passenger.is_seated() and (stage < 2 or driver.is_seated()):
+		if bot_driving and actor == driver and (passenger.is_seated() or boarding_wait) and (stage < 2 or driver.is_seated()):
 			# Supply a nearby evacuation objective without altering team allocation,
 			# navigation, driver controls, seats, or physical vehicle motion.
 			var previous_zone := zone
@@ -135,6 +138,11 @@ class DrivingServer:
 			return
 		if test_car == null:
 			return
+		if boarding_wait and stage == 0 and driver.is_seated() and not passenger.is_seated():
+			if not boarding_position.is_finite():
+				boarding_position = test_car.position
+			assert(absf(test_car.speed) < 0.01 and test_car.position.distance_to(boarding_position) < 0.03)
+			boarding_frames += 1
 		test_elapsed += dt
 		if impaired and int(test_elapsed) / 5 != diagnostic_second:
 			diagnostic_second = int(test_elapsed) / 5
@@ -142,6 +150,9 @@ class DrivingServer:
 		assert(test_elapsed < 45, "Authenticated driving did not complete")
 		if stage == 0 and driver.is_seated() and passenger.is_seated() and (not combat or elapsed >= 5.5):
 			assert(driver.vehicle_seat == 0 and passenger.vehicle_seat == 1)
+			if boarding_wait:
+				assert(boarding_frames >= 30, "Real AI must wait while passenger has not boarded")
+				print("BOT_BOARDING_SERVER_PASS waiting_frames=", boarding_frames, " passenger=boarded")
 			stage = 1
 			events = ["VEHICLE_DRIVE"]
 		elif stage == 1 and combat and test_car.position.z < -3 and test_car.speed >= 12:

@@ -24,15 +24,29 @@
 
 本候选包含机器人平坦开放区域转向驾驶、转弯动态障碍和存档恢复检查，以及下车车体跳位、疾跑穿入、车体移出场景后移动卡住的修复。包内测试新增三个场景；辅助场景日志统一为 OK，保留每个脚本唯一的整体 PASS 标记，避免把局部通过当作整项通过。
 
-源码联网场景已有记录，但此候选尚未完成打包联网、自然完整对局与服务切换验证；后端和专服镜像验证结果如下。当前发布和独立开发 API 仍为 0.36，不能连接此候选；离线 SOLO/DUO 可运行。默认 0.36 压缩包 SHA-256 仍为 `31357a83d0fcf6896cf8bc0c6acfa4b3c4c408528626f18f3afa4af169a54895`，已核对未变化。复杂道路寻路、绕障、倒车脱困和商业级完整体验仍未完成。
+源码联网场景已有记录，但此候选已完成开发服务切换和部分打包联网验证；自然完整对局、其他网络回归与发布切换仍待完成。发布 API 仍为 0.36，开发 API 8001 已升级为 0.37，可连接此候选；离线 SOLO/DUO 可运行。默认 0.36 压缩包 SHA-256 仍为 `31357a83d0fcf6896cf8bc0c6acfa4b3c4c408528626f18f3afa4af169a54895`，已核对未变化。复杂道路寻路、绕障、倒车脱困和商业级完整体验仍未完成。
 
 ### 0.37 后端与专服镜像
 
 后端镜像 `iron-meridian-api:0.37-967bc7d9` 的固定 ID 为 `sha256:b34066b045a95f39cb81d12b17b940ab4e2357d3af94f6a523a9a3ca1463bf26`。它在内部 Docker 网络、临时 PostgreSQL 与 Redis 中通过 95 项测试，无跳过；有一项第三方 Starlette 弃用警告。报告为候选目录内 `backend-verification.json`，日志 `logs/backend-tests.log`。
 
-专服镜像 `iron-meridian-candidate:967bc7d92816` 的固定 ID 为 `sha256:98458f71e3d9fc80f1f2c5ea03e8ed2561d012e015f6958d99f534c40533a874`。镜像内执行文件、PCK 和 build.json 与候选包逐字节一致，以非 root 用户运行，禁用网络的离线启动检查通过。报告 `server-image.json`；尚未部署。
+专服镜像 `iron-meridian-candidate:967bc7d92816` 的固定 ID 为 `sha256:98458f71e3d9fc80f1f2c5ea03e8ed2561d012e015f6958d99f534c40533a874`。镜像内执行文件、PCK 和 build.json 与候选包逐字节一致，以非 root 用户运行，禁用网络的离线启动检查通过。报告 `server-image.json`；已部署至独立开发专服 UDP 27031。
 
-最新备份 `artifacts/backups/20260912T061609Z-0c7aa6de` 在独立 PostgreSQL 中恢复，并使用上述新后端镜像执行 0004 幂等启动。55 个账户、109 场对局、163 条玩家结果的全字段指纹保持一致，约束和统计完整性检查通过。报告 `artifacts/candidate-037-startup-restore.json`。没有回灌或替换在线数据库；发布 API 8000 和开发 API 8001 均仍为 0.36。
+最新备份 `artifacts/backups/20260912T061609Z-0c7aa6de` 在独立 PostgreSQL 中恢复，并使用上述新后端镜像执行 0004 幂等启动。55 个账户、109 场对局、163 条玩家结果的全字段指纹保持一致，约束和统计完整性检查通过。报告 `artifacts/candidate-037-startup-restore.json`。没有回灌或替换在线数据库；发布 API 8000 仍为 0.36，开发环境后续切换如下。
+
+### 0.37 开发环境切换与打包联网
+
+`tools/deploy_candidate_dev.py --candidate-dir artifacts/candidates/0.37.0-dev-967bc7d9-0vrlx33n --with-api` 在房间无人、无有效预约、结果队列为空时备份开发数据库，保留旧 API/专服镜像 ID，然后停止专服并等待旧租约失效，使用已验证的固定镜像启动新 API 和专服。新 API 健康后才启动专服。切换前后 users、matches、results 全字段指纹一致，PostgreSQL/Redis 数据卷保留，API 与专服均为 `unless-stopped`。备份权限为 0600，保存在候选目录 `dev-backup/database.pgdump`；报告 `dev-deployment.json`。失败处理会尝试切回旧镜像，本次未执行故障回退或数据库回灌。
+
+开发 API 8001 / 双人专服 UDP 27031 现为 0.37。启动现有固定镜像使用：
+
+```sh
+docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml -f artifacts/duo-candidate.override.json up -d --no-build
+```
+
+两个候选客户端通过真实邀请大厅连续两轮登录、准备、入场与返回，使用同一队伍和新回合。证据 `artifacts/candidate-037-dev-requeue.log`。候选专服与一个已认证的候选客户端还验证机器人队友左右转向驾驶、乘客同步、制动与下车；客户端约 30 FPS，上下行各 30 ms 延迟，停车阶段每帧车体位移小于 0.03 m。日志 `artifacts/candidate-037-bot-turn-{right,left}.log`，完整日志和网络报告前缀 `artifacts/vehicle-login-duo-bot-driver-turn-{right,left}-fps30-delay30-packed-967bc7d9-`。
+
+以上绑定候选归档 SHA-256，不等同于公网长期体验、自然完整对局或全部网络场景验收。发布端口与默认 0.36 压缩包保持不变。
 
 ## 0.36 候选（已作为开发版本发布）
 

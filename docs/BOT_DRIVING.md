@@ -24,7 +24,7 @@
 
 ## 后续源码：平坦开放区域转向路线
 
-0.36 发行之后的源码新增平滑转向路线，尚未重新打包或部署。直线目标保留原检查；对原先因车头夹角过大而拒绝的目标，尝试从当前车头切线出发的二次曲线。目标距离限制 25–100 m，后方目标仍拒绝，不执行倒车或原地转向。
+0.36 发行之后的源码新增平滑转向路线，已随 0.37 打包部署。直线目标保留原检查；对原先因车头夹角过大而拒绝的目标，尝试从当前车头切线出发的二次曲线。目标距离限制 25–100 m，后方目标仍拒绝，不执行倒车或原地转向。
 
 曲线按约 1.5 m 的参数步长分段，每段使用覆盖任意车身朝向并留有余量的方形车体包络进行空间扫掠；同时检查采样点的地面法线及高度。任何一段被阻挡即拒绝整条路线。这里的地面检查仍是离散采样，不代表已支持复杂坡面或路面断裂。
 
@@ -49,10 +49,10 @@
 
 首次右转检查在刚完成下车时比较位置，观察到约 0.71 m 差异；等待插值后仍相差约 0.64 m。补充服务端时序采样发现，专服车体在下车之后继续侧移约 0.64 m，稳定后的客户端与服务端位置一致。当时原因未定位；后续碰撞时序修复见下节。早期失败证据保留在 `artifacts/bot-turn-network-right-{before-settle,after-settle-mismatch}.log`。
 
-左右转向日志为 `artifacts/vehicle-login-duo-bot-driver-turn-{left,right}-fps30-delay30-{server,client-0}.log`，同前缀 `network.json` 和 `verification.json` 记录真实转发与检查结果。原直线场景回归使用 `artifacts/bot-turn-network-straight.log`。本次为源码客户端、实测约 30 FPS、上下行各 30 ms 的受控验证；未发布新包，尚不覆盖公网长时间运行、丢包转弯或一般道路寻路。
+左右转向日志为 `artifacts/vehicle-login-duo-bot-driver-turn-{left,right}-fps30-delay30-{server,client-0}.log`，同前缀 `network.json` 和 `verification.json` 记录真实转发与检查结果。原直线场景回归使用 `artifacts/bot-turn-network-straight.log`。本次为源码客户端、实测约 30 FPS、上下行各 30 ms 的受控验证；该次源码验证后，0.37 打包验证与发布已完成；仍不覆盖公网长时间运行、丢包转弯或一般道路寻路。
 
 
-### 下车时的车体跳位修复（未发布源码）
+### 下车时的车体跳位修复（0.37 已发布）
 
 专服逐物理帧记录发现，速度为零时车体先侧移约 0.84 m、再反向约 0.64 m，接触对象均涉及刚下车的机器人。基线日志：`artifacts/bot-turn-exit-collision-baseline.log`。提前刷新角色变换、修改车辆或角色的平台跟随均未消除问题，这些尝试已撤回。
 
@@ -60,10 +60,10 @@
 
 联网转弯夹具现在逐帧断言：停车进入下车阶段后，车体每帧位移不得超过 0.03 m。左右转向在 30 FPS/单向 30 ms 延迟下复验，另回归双真人上下车。日志：`artifacts/bot-turn-exit-fixed-{right,left,human}.log`，详细状态仍由相应 `vehicle-login-*` 日志和报告记录。修复后的右转出口位置与一秒后位置相同。
 
-本地回归包括碰撞例外按时恢复、立即重新上车不被迟到清理干扰、动态障碍停车及四种存档恢复：`artifacts/{vehicle-seats,bot-driver-turn-obstacle,bot-driver-checkpoint}-exit-regression.log`。本次尚未重新打包部署。下车瞬间持续向车体冲刺的后续检查见下节；其他输入与地形组合仍需继续验证。
+本地回归包括碰撞例外按时恢复、立即重新上车不被迟到清理干扰、动态障碍停车及四种存档恢复：`artifacts/{vehicle-seats,bot-driver-turn-obstacle,bot-driver-checkpoint}-exit-regression.log`。本次已随 0.37 打包部署。下车瞬间持续向车体冲刺的后续检查见下节；其他输入与地形组合仍需继续验证。
 
 
-### 碰撞恢复期间的移动保护（未发布源码）
+### 碰撞恢复期间的移动保护（0.37 已发布）
 
 在两个物理帧的碰撞恢复窗口中，持续向车体疾跑会让人物穿入碰撞包络。基线 `artifacts/vehicle-exit-movement-baseline.log` 记录第二次移动时人物局部 x 为 -1.4 m，而车体半宽加人物半径为 1.505 m。
 
@@ -71,10 +71,10 @@
 
 `tests/vehicle_exit_movement.gd` 覆盖左右座位及 ±1.93 rad 车身朝向，在下车同一帧即持续向车体疾跑，验证没有穿入、车体不跳位、恢复后能正常离车走开。已加入候选包检查。证据为 `artifacts/vehicle-exit-movement-guard.log`；座位与四种存档恢复回归为 `artifacts/{vehicle-seats,bot-driver-checkpoint}-guard.log`。30 FPS/单向 30 ms 的双真人及机器人转弯乘客网络回归记录于 `artifacts/vehicle-exit-guard-network-{human,turn}.log`。联网回归未专门注入持续向车体疾跑，该输入组合目前由实际单机物理检查覆盖。
 
-### 车辆移出场景时结束下车保护（未发布源码）
+### 车辆移出场景时结束下车保护（0.37 已发布）
 
 进一步检查发现，车辆从场景树移除但仍被保留时，弱引用仍然有效，而物理回调已停止。下车保护队列因此不再处理，人物会持续不能移动，重新加入场景的车辆也保留旧碰撞例外。基线 `artifacts/vehicle-exit-removed-baseline.log` 记录持续输入五帧后移动距离为零、碰撞例外仍在。
 
 `Vehicle._exit_tree` 现在在清理座位后，立即恢复所有仍有效角色的车体碰撞，清空队列并关闭清理回调。下一次人物移动便能解除保护，不需要等待车体销毁。`tests/vehicle_exit_movement.gd` 新增实际移出、保留对象、人物走开、重新加入车体的场景，验证能移动且没有遗留碰撞例外。原有双座位、旋转车体、向车体疾跑检查继续执行。
 
-证据：`artifacts/vehicle-exit-movement-removed-car.log`；座位清理及四种磁盘存档恢复回归为 `artifacts/{vehicle-seats,bot-driver-checkpoint}-removed-car.log`；双真人 30 FPS/单向 30 ms 网络回归为 `artifacts/vehicle-exit-removed-network.log`。这些源码变更尚未进入默认发行包。
+证据：`artifacts/vehicle-exit-movement-removed-car.log`；座位清理及四种磁盘存档恢复回归为 `artifacts/{vehicle-seats,bot-driver-checkpoint}-removed-car.log`；双真人 30 FPS/单向 30 ms 网络回归为 `artifacts/vehicle-exit-removed-network.log`。这些变更已随 0.37 进入默认发行包。

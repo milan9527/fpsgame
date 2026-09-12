@@ -5,6 +5,51 @@ var cooldown := 0.0
 var trip_time := 0.0
 var stopping := false
 var approach_point := Vector3.INF
+var route := PackedVector3Array()
+var route_index := 0
+
+# A bounded smooth turn from the current heading. Every segment is checked with
+# an orientation-independent hull envelope; infantry navigation is not sufficient.
+func turning_route(car, end: Vector3, actor) -> PackedVector3Array:
+	var result := PackedVector3Array()
+	var start: Vector3 = car.position
+	var length := start.distance_to(end)
+	if length < 25 or length > 100:
+		return result
+	var forward: Vector3 = -car.global_basis.z
+	var direction: Vector3 = (end - start).normalized()
+	if forward.dot(direction) < -0.1:
+		return result
+	var control: Vector3 = start + forward * clampf(length * 0.55, 14, 30)
+	var count := ceili(length / 1.5)
+	var previous := start
+	var shape := BoxShape3D.new()
+	var width: float = Vector2(car.BODY_SIZE.x, car.BODY_SIZE.z).length() + 0.8
+	shape.size = Vector3(width, car.BODY_SIZE.y, width)
+	var space = car.get_world_3d().direct_space_state
+	for index in range(1, count + 1):
+		var t := float(index) / count
+		var point := start.lerp(control, t).lerp(control.lerp(end, t), t)
+		var query := PhysicsShapeQueryParameters3D.new()
+		query.shape = shape
+		query.transform = Transform3D(Basis.IDENTITY, previous + Vector3.UP * (car.BODY_SIZE.y / 2 + 0.08))
+		query.motion = point - previous
+		query.collision_mask = 7
+		var excluded: Array[RID] = [car.get_rid(), actor.get_rid()]
+		for seat in range(2):
+			var occupant = car.seats.occupant(seat)
+			if occupant != null and occupant != actor:
+				excluded.append(occupant.get_rid())
+		query.exclude = excluded
+		if not space.intersect_shape(query, 1).is_empty() or space.cast_motion(query)[0] < 0.999:
+			return PackedVector3Array()
+		var ray := PhysicsRayQueryParameters3D.create(point + Vector3.UP, point - Vector3.UP, 1)
+		var hit: Dictionary = space.intersect_ray(ray)
+		if hit.is_empty() or hit.normal.y < 0.98 or absf(hit.position.y - start.y) > 0.25:
+			return PackedVector3Array()
+		result.append(point)
+		previous = point
+	return result
 
 func corridor(car, end: Vector3, actor) -> bool:
 	var query := PhysicsShapeQueryParameters3D.new()
@@ -54,13 +99,19 @@ func approach(game, actor, goal: Vector3, dt: float, eligible: bool) -> Vector3:
 		if actor.position.distance_to(door) > 12:
 			continue
 		var delta: Vector3 = goal - car.position
-		if absf(wrapf(atan2(-delta.x, -delta.z) - car.rotation.y, -PI, PI)) > 0.5:
-			continue
-		if not flat_route(car, goal, actor):
-			continue
+		var points := PackedVector3Array()
+		if absf(wrapf(atan2(-delta.x, -delta.z) - car.rotation.y, -PI, PI)) <= 0.5:
+			if not flat_route(car, goal, actor):
+				continue
+		else:
+			points = turning_route(car, goal, actor)
+			if points.is_empty():
+				continue
 		if car.seats.enter(actor, 0):
 			approach_point = Vector3.INF
 			destination = goal
+			route = points
+			route_index = 0
 			trip_time = 0
 			stopping = false
 			return actor.position
@@ -79,13 +130,20 @@ func drive(actor, dt: float) -> void:
 	var delta: Vector3 = destination - car.position if destination.is_finite() else Vector3.ZERO
 	delta.y = 0
 	var distance := delta.length()
+	if not route.is_empty():
+		while route_index < route.size() - 1 and car.position.distance_to(route[route_index]) < 6:
+			route_index += 1
+		delta = route[route_index] - car.position
+		delta.y = 0
 	var stopping_distance: float = car.speed * car.speed / (2 * car.BRAKING) + 4
 	var probe_end: Vector3 = car.position - car.global_basis.z * maxf(4, stopping_distance)
 	stopping = stopping or distance <= stopping_distance or trip_time > 20 or car.fuel <= 0 or car.destroyed or not corridor(car, probe_end, actor)
 	var error := 0.0 if distance < 0.001 else wrapf(atan2(-delta.x, -delta.z) - car.rotation.y, -PI, PI)
 	stopping = stopping or absf(error) > 1.1
-	car.command(actor.actor_id, car.input_sequence + 1, 1.0 if not stopping and car.speed < 12 else 0.0,
+	var target_speed := 12.0 if route.is_empty() else 6.0
+	car.command(actor.actor_id, car.input_sequence + 1, 1.0 if not stopping and car.speed < target_speed else 0.0,
 		0.0 if stopping else clampf(-error * 1.8, -1, 1), stopping, car.seats.epoch)
 	if stopping and absf(car.speed) < 0.1 and car.seats.exit(actor):
 		cooldown = 8
 		destination = Vector3.INF
+		route.clear()

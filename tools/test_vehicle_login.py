@@ -28,11 +28,14 @@ def main():
     parser.add_argument("--combat", action="store_true", help="Third authenticated client shoots the moving driver")
     parser.add_argument("--spectator", action="store_true", help="Eliminated duo teammate follows the network driver")
     parser.add_argument("--bot-driver", action="store_true", help="Authenticated passenger rides with its server-assigned bot teammate")
+    parser.add_argument("--bot-turn", choices=["left", "right"], default="", help="Exercise a curved evacuation route with the bot teammate")
     parser.add_argument("--client-fps", type=int, choices=[30, 60, 120], default=0)
     parser.add_argument("--latency-ms", type=int, default=0, help="Constant one-way UDP delay without packet loss")
     parser.add_argument("--candidate-dir", type=Path, help="Run server and all clients from a verified candidate PCK")
     options = parser.parse_args()
     mode = options.mode
+    if options.bot_turn and not options.bot_driver:
+        parser.error("--bot-turn requires --bot-driver")
     if options.bot_driver and (mode != "duo" or options.spectator or options.combat or options.departure or options.impaired):
         parser.error("Bot driver requires a separate duo passenger scenario")
     if options.spectator and (mode != "duo" or options.combat or options.departure):
@@ -56,6 +59,8 @@ def main():
     account_suffix = suffix
     if options.bot_driver:
         suffix += "-bot-driver"
+        if options.bot_turn:
+            suffix += "-turn-" + options.bot_turn
         account_suffix = ""
     if options.spectator:
         suffix += "-spectator"
@@ -85,6 +90,7 @@ def main():
                VEHICLE_COMBAT="1" if options.combat else "",
                VEHICLE_SPECTATOR="1" if options.spectator else "",
                VEHICLE_BOT_DRIVER="1" if options.bot_driver else "",
+               VEHICLE_BOT_TURN=options.bot_turn,
                XDG_DATA_HOME=str(ROOT / f"artifacts/vehicle-login-{mode}-server-data"))
     env["SERVER_SECRET"] = next(line.split("=", 1)[1] for line in
                                (ROOT / "artifacts/duo-dev.env").read_text().splitlines()
@@ -126,6 +132,7 @@ def main():
                              VEHICLE_COMBAT="1" if options.combat else "",
                              VEHICLE_SPECTATOR="1" if options.spectator else "",
                              VEHICLE_BOT_DRIVER="1" if options.bot_driver else "",
+                             VEHICLE_BOT_TURN=options.bot_turn,
                              VEHICLE_CLIENT_FPS=str(options.client_fps),
                              XDG_DATA_HOME=str(ROOT / f"artifacts/vehicle-login-client-{i}-data"))
             launch(f"client-{i}", "vehicle_login_client.gd", variables, ["--bot-client"])
@@ -192,6 +199,14 @@ def main():
             assert entries[0][2].read_text().count("AUTHENTICATED peer=") == 1
             assert "VEHICLE_BOT_DRIVER_SERVER_PASS" in entries[0][2].read_text()
             assert "VEHICLE_BOT_PASSENGER_PASS" in entries[1][2].read_text()
+        if options.bot_turn:
+            poses = []
+            for entry in entries:
+                match = re.search(r"VEHICLE_BOT_TURN_POSE (.+)", entry[2].read_text())
+                assert match, entry[2]
+                poses.append(json.loads(match.group(1)))
+            assert sum((a-b)**2 for a,b in zip(poses[0]["position"], poses[1]["position"])) < 0.09, poses
+            assert abs(poses[0]["yaw"] - poses[1]["yaw"]) < 0.03, poses
         if relays:
             if options.impaired:
                 assert outage_started and "VEHICLE_NETWORK_RECOVERED" in entries[0][2].read_text()
@@ -224,7 +239,7 @@ def main():
                           "pck_sha256": candidate["pck_sha256"]} if candidate else None,
             "scenario": {key: getattr(options, key) for key in
                          ("departure", "impaired", "audio", "combat", "spectator",
-                          "bot_driver", "client_fps", "latency_ms")},
+                          "bot_driver", "bot_turn", "client_fps", "latency_ms")},
             "logs": [str(entry[2].relative_to(ROOT)) for entry in entries],
             "fixture_sha256": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
                                for name in ("tools/test_vehicle_login.py", "tests/vehicle_login_server.gd",

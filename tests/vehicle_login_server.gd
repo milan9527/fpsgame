@@ -17,6 +17,9 @@ class DrivingServer:
 	var combat := OS.get_environment("VEHICLE_COMBAT") == "1"
 	var shooter
 	var spectating := OS.get_environment("VEHICLE_SPECTATOR") == "1"
+	var turn_pose_reported := false
+	var bot_turn := OS.get_environment("VEHICLE_BOT_TURN")
+	var turn_goal := Vector3.ZERO
 	var bot_driving := OS.get_environment("VEHICLE_BOT_DRIVER") == "1"
 	func shot_rewind_age(actor) -> float:
 		var age: float = super.shot_rewind_age(actor)
@@ -100,7 +103,8 @@ class DrivingServer:
 			var previous_center := zone_center
 			var previous_state := zone_state
 			zone = 5
-			zone_center = Vector2(0, -35)
+			turn_goal = Vector3(-35 if bot_turn == "left" else 35, 0, -5)
+			zone_center = Vector2(turn_goal.x, turn_goal.z) if not bot_turn.is_empty() else Vector2(0, -35)
 			zone_state = {}
 			super.bot_input(actor, _dt)
 			zone = previous_zone
@@ -119,6 +123,9 @@ class DrivingServer:
 		super._physics_process(dt)
 		if stage == 4:
 			done_elapsed += dt
+			if not bot_turn.is_empty() and done_elapsed >= 1 and not turn_pose_reported:
+				turn_pose_reported = true
+				print("VEHICLE_BOT_TURN_POSE ", JSON.stringify({"position": [test_car.position.x, test_car.position.y, test_car.position.z], "yaw": test_car.rotation.y}))
 			if done_elapsed > 2:
 				request_quit()
 			return
@@ -162,6 +169,10 @@ class DrivingServer:
 				stage = 1
 				events = ["VEHICLE_DRIVE"]
 				print("VEHICLE_NETWORK_RECOVERED")
+		elif stage == 1 and bot_driving and not bot_turn.is_empty() and driver.navigator.driver.stopping:
+			assert(test_car.position.distance_to(turn_goal) < 7 and absf(test_car.rotation.y) > 0.8)
+			stage = 2
+			events = ["VEHICLE_BRAKE"]
 		elif stage == 1 and not combat and test_car.position.z < -8 and test_car.speed > 8:
 			assert(test_car.speed > 8 and test_car.fuel < 100)
 			assert(test_car.driver_id == driver.actor_id)
@@ -202,7 +213,12 @@ class DrivingServer:
 			stage = 4
 			events = ["VEHICLE_DONE"]
 			if bot_driving:
-				assert(driver.is_bot and test_car.position.z < -28 and driver.navigator.driver.cooldown > 0)
+				assert(driver.is_bot and driver.navigator.driver.cooldown > 0)
+				if bot_turn.is_empty():
+					assert(test_car.position.z < -28)
+				else:
+					assert(test_car.position.distance_to(turn_goal) < 6 and absf(test_car.speed) < 0.1)
+					print("VEHICLE_BOT_TURN_EXIT_POSE ", JSON.stringify({"position": [test_car.position.x, test_car.position.y, test_car.position.z], "yaw": test_car.rotation.y}))
 				print("VEHICLE_BOT_DRIVER_SERVER_PASS assigned_teammate=ok normal_ai=ok destination=ok parked=ok exit=ok")
 			print("VEHICLE_LOGIN_SERVER_PASS admitted=%d seats=ok acceleration=ok fuel=ok brake=ok exits=ok" % participants.size())
 

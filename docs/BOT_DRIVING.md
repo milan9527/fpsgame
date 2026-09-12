@@ -40,3 +40,13 @@
 `tests/bot_driver_checkpoint.gd` 扩展为 solo/duo 直线与转弯共四种保存恢复场景。转弯时真实速度超过 5 m/s，前轮仍有转角后才写盘。恢复检查位置、速度、燃料和前轮转角保持，临时曲线路线不恢复、旧座位代次输入被拒绝。随后检查不再加速、转向输入归零、前轮逐步回正、在制动距离加积分容差内停车并安全下车，乘客保持座位与生命。回正期间允许物理产生的小幅车身偏转，不瞬间抹掉前轮角度或车身朝向。
 
 证据：`artifacts/bot-driver-turn-obstacle-turn-safety.log` 与 `artifacts/bot-driver-checkpoint-turn-safety.log`。新增动态障碍测试已加入候选构建检查。这些仍是源码单机物理验证，不能代表打包客户端的网络转弯、复杂地形或所有出口被堵的处理已经验收。
+
+### 真实账号乘客的转向同步
+
+`tools/test_vehicle_login.py --mode duo --bot-driver --bot-turn right --client-fps 30 --latency-ms 30`（也支持 `left`）通过开发 API 登录一个真人账号，由专服正常分配机器人队友。夹具设置左/右进圈目标并等待乘客入座；机器人仍使用正常步行接近、路线选择、驾驶输入和物理模拟，不直接设置轨迹或车速。
+
+检查真人客户端观测到自己的机器人队友驾驶、行驶中朝向变化、燃料消耗、停车和下车。比较下车后稳定状态的服务端与客户端车体位置（误差小于 0.3 m）和朝向（误差小于 0.03 rad）。服务端于完成后 1 秒采样，客户端至少等待 1.2 秒以继续接收快照；这不是对每个运动帧的误差上界。
+
+首次右转检查在刚完成下车时比较位置，观察到约 0.71 m 差异；等待插值后仍相差约 0.64 m。补充服务端时序采样发现，专服车体在下车之后继续侧移约 0.64 m，稳定后的客户端与服务端位置一致。原因尚未定位，不把它归为网络插值问题或已修复的问题；下车后的车体位移仍需调查。早期失败证据保留在 `artifacts/bot-turn-network-right-{before-settle,after-settle-mismatch}.log`。
+
+左右转向日志为 `artifacts/vehicle-login-duo-bot-driver-turn-{left,right}-fps30-delay30-{server,client-0}.log`，同前缀 `network.json` 和 `verification.json` 记录真实转发与检查结果。原直线场景回归使用 `artifacts/bot-turn-network-straight.log`。本次为源码客户端、实测约 30 FPS、上下行各 30 ms 的受控验证；未发布新包，尚不覆盖公网长时间运行、丢包转弯或一般道路寻路。

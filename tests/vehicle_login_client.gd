@@ -54,6 +54,10 @@ func run() -> void:
 	var followed_moving := false
 	var followed_exit := false
 	var saw_bot_driver := false
+	var saw_bot_turn := false
+	var turn_done_at := 0
+	var bot_car
+	var bot_turn := OS.get_environment("VEHICLE_BOT_TURN")
 	while true:
 		await physics_frame
 		assert(Time.get_ticks_msec() < deadline, "Authenticated client driving timeout")
@@ -149,6 +153,8 @@ func run() -> void:
 				var driver = car.seats.occupant(0)
 				assert(driver != null and driver.team_id == actor.team_id and actor.vehicle_seat == 1)
 				saw_bot_driver = true
+				bot_car = car
+				saw_bot_turn = saw_bot_turn or (absf(car.rotation.y) > 0.8 and car.speed > 3)
 			assert(not car.authoritative)
 			if audio_test and game.sound.vehicle_audio.emitters.has(car.vehicle_id):
 				var engine = game.sound.vehicle_audio.emitters[car.vehicle_id].players.engine
@@ -177,8 +183,17 @@ func run() -> void:
 				else:
 					Input.action_release("jump")
 		if stage == "VEHICLE_DONE":
+			if not bot_turn.is_empty():
+				if turn_done_at == 0:
+					turn_done_at = Time.get_ticks_msec()
+				if Time.get_ticks_msec() - turn_done_at < 1200:
+					continue
 			if OS.get_environment("VEHICLE_BOT_DRIVER") == "1":
 				assert(saw_bot_driver)
+				if not bot_turn.is_empty():
+					var goal := Vector3(-35 if bot_turn == "left" else 35, 0, -5)
+					assert(saw_bot_turn and bot_car.position.distance_to(goal) < 6 and absf(bot_car.speed) < 0.1)
+					print("VEHICLE_BOT_TURN_POSE ", JSON.stringify({"position": [bot_car.position.x, bot_car.position.y, bot_car.position.z], "yaw": bot_car.rotation.y}))
 				print("VEHICLE_BOT_PASSENGER_PASS teammate=ok bot_seat=ok proxy=ok motion=ok fuel=ok stopped=ok exit=ok")
 			if combat:
 				assert(saw_combat_damage)

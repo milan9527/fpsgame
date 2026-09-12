@@ -227,6 +227,14 @@ func simulate(dt: float, engine_enabled := true) -> void:
 func _exit_tree() -> void:
 	if seats != null:
 		seats.clear()
+	# A detached vehicle can remain alive without receiving physics callbacks.
+	# Finish pending exits now so riders cannot retain a permanent movement guard.
+	for entry in collision_releases.values():
+		var actor = entry.actor.get_ref()
+		if actor != null:
+			remove_collision_exception_with(actor)
+	collision_releases.clear()
+	set_physics_process(false)
 
 # Seat teleports and collision queries can occur in the same physics update.
 # Keep the existing exception until the exit pose has crossed a physics boundary.

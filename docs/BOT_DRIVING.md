@@ -70,3 +70,11 @@
 人物现在通过原车体的弱引用检查碰撞恢复队列。在队列完成前保持出口位置、清零速度和跳跃请求；保留移动方向输入，恢复碰撞后继续正常移动。此保护在权威模拟和客户端预测共用的 `Actor.move_step` 中生效，不改变正常步行速度或人物碰撞层。原车体销毁后弱引用失效，保护自动结束；立即重新上车沿用座位逻辑。
 
 `tests/vehicle_exit_movement.gd` 覆盖左右座位及 ±1.93 rad 车身朝向，在下车同一帧即持续向车体疾跑，验证没有穿入、车体不跳位、恢复后能正常离车走开。已加入候选包检查。证据为 `artifacts/vehicle-exit-movement-guard.log`；座位与四种存档恢复回归为 `artifacts/{vehicle-seats,bot-driver-checkpoint}-guard.log`。30 FPS/单向 30 ms 的双真人及机器人转弯乘客网络回归记录于 `artifacts/vehicle-exit-guard-network-{human,turn}.log`。联网回归未专门注入持续向车体疾跑，该输入组合目前由实际单机物理检查覆盖。
+
+### 车辆移出场景时结束下车保护（未发布源码）
+
+进一步检查发现，车辆从场景树移除但仍被保留时，弱引用仍然有效，而物理回调已停止。下车保护队列因此不再处理，人物会持续不能移动，重新加入场景的车辆也保留旧碰撞例外。基线 `artifacts/vehicle-exit-removed-baseline.log` 记录持续输入五帧后移动距离为零、碰撞例外仍在。
+
+`Vehicle._exit_tree` 现在在清理座位后，立即恢复所有仍有效角色的车体碰撞，清空队列并关闭清理回调。下一次人物移动便能解除保护，不需要等待车体销毁。`tests/vehicle_exit_movement.gd` 新增实际移出、保留对象、人物走开、重新加入车体的场景，验证能移动且没有遗留碰撞例外。原有双座位、旋转车体、向车体疾跑检查继续执行。
+
+证据：`artifacts/vehicle-exit-movement-removed-car.log`；座位清理及四种磁盘存档恢复回归为 `artifacts/{vehicle-seats,bot-driver-checkpoint}-removed-car.log`；双真人 30 FPS/单向 30 ms 网络回归为 `artifacts/vehicle-exit-removed-network.log`。这些源码变更尚未进入默认发行包。

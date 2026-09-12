@@ -16,6 +16,9 @@ func run() -> void:
 			if not await check_exit(game, seat, yaw):
 				game.request_quit(1)
 				return
+	if not await check_removed_car(game):
+		game.request_quit(1)
+		return
 	print("VEHICLE_EXIT_MOVEMENT_PASS both_seats=ok rotated_hulls=ok sprint_into_hull=blocked chassis=stable movement_resumes=ok")
 	game.request_quit()
 
@@ -55,6 +58,39 @@ func check_exit(game, seat: int, yaw: float) -> bool:
 		actor.move_step(1.0 / 60)
 		car.simulate(1.0 / 60)
 	assert(actor.position.distance_to(before) > 0.4, "Movement must resume after collision restoration")
+	game.local_recorded_id = game.match_id
+	game.leave()
+	return true
+
+
+func check_removed_car(game) -> bool:
+	game.start_solo()
+	for other in game.actors.values():
+		other.position = Vector3(90, 0.1, 90 + other.actor_id)
+	var actor = game.actors[1]
+	var car = game.vehicle_fleet.spawn(game, Vector3.ZERO)
+	actor.position = Vector3(-1.65, 0.04, 0.1)
+	await physics_frame
+	await physics_frame
+	for _step in range(5):
+		car.simulate(1.0 / 60)
+	assert(car.seats.enter(actor, 0) and car.seats.exit(actor))
+	game.vehicle_fleet.vehicles.erase(car.vehicle_id)
+	game.remove_child(car) # Keep it alive: weak-reference expiry cannot release the guard.
+	var before: Vector3 = actor.position
+	for _step in range(5):
+		await physics_frame
+		actor.sprint = true
+		actor.move_input = Vector2.LEFT
+		actor.move_step(1.0 / 60)
+	var moved: float = actor.position.distance_to(before)
+	game.add_child(car)
+	var exceptions_remain: bool = car.get_collision_exceptions().has(actor)
+	car.queue_free()
+	if moved < 0.4 or exceptions_remain:
+		print("REMOVED_CAR_EXIT_FAILED moved=", moved, " stale_exception=", exceptions_remain)
+		return false
+	print("REMOVED_CAR_EXIT_PASS movement=restored collision_exception=cleared")
 	game.local_recorded_id = game.match_id
 	game.leave()
 	return true

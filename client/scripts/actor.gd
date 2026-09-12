@@ -34,6 +34,7 @@ var is_bot := false
 var health := 100.0
 var team_id := 0
 var vehicle_ref: WeakRef
+var vehicle_exit_guard: WeakRef
 var vehicle_seat := -1
 
 var armor := 50.0
@@ -273,6 +274,15 @@ func move_step(dt: float) -> void:
 	landing_speed = 0.0
 	if not alive or is_seated():
 		return
+	if vehicle_exit_guard != null:
+		var previous_car = vehicle_exit_guard.get_ref()
+		if previous_car != null and previous_car.collision_releases.has(get_instance_id()):
+			# The exit pose must remain clear until chassis collision is restored.
+			# Keep movement input so a held direction resumes after this boundary.
+			velocity = Vector3.ZERO
+			jump_requested = false
+			return
+		vehicle_exit_guard = null
 	if downed:
 		shooting = false
 		aiming = false

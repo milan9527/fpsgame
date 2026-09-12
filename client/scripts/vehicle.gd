@@ -236,6 +236,7 @@ func defer_rider_collision(actor) -> void:
 		remove_collision_exception_with(actor)
 		return
 	collision_releases[actor.get_instance_id()] = {"actor": weakref(actor), "after": Engine.get_physics_frames() + 2}
+	actor.vehicle_exit_guard = weakref(self)
 	set_physics_process(true)
 
 func _physics_process(_dt: float) -> void:

@@ -22,7 +22,7 @@ CASES = [
     "voice_resampler", "voice_relay", "voice_playback", "voice_capture",
     "vehicle_slopes", "vehicle_spectator", "bot_driver", "bot_driver_turn",
     "bot_driver_turn_obstacle", "bot_driver_checkpoint",
-    "vehicle_motion", "vehicle_seats", "vehicle_driving", "vehicle_checkpoint",
+    "vehicle_motion", "vehicle_seats", "vehicle_exit_movement", "vehicle_driving", "vehicle_checkpoint",
     "vehicle_ballistics", "vehicle_shooting", "vehicle_audio", "vehicle_camera",
     "vehicle_snapshot", "vehicle_authority", "vehicle_frame_pair",
 ]

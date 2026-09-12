@@ -60,4 +60,13 @@
 
 联网转弯夹具现在逐帧断言：停车进入下车阶段后，车体每帧位移不得超过 0.03 m。左右转向在 30 FPS/单向 30 ms 延迟下复验，另回归双真人上下车。日志：`artifacts/bot-turn-exit-fixed-{right,left,human}.log`，详细状态仍由相应 `vehicle-login-*` 日志和报告记录。修复后的右转出口位置与一秒后位置相同。
 
-本地回归包括碰撞例外按时恢复、立即重新上车不被迟到清理干扰、动态障碍停车及四种存档恢复：`artifacts/{vehicle-seats,bot-driver-turn-obstacle,bot-driver-checkpoint}-exit-regression.log`。本次尚未重新打包部署，未覆盖下车瞬间持续向车体冲刺等所有输入组合。
+本地回归包括碰撞例外按时恢复、立即重新上车不被迟到清理干扰、动态障碍停车及四种存档恢复：`artifacts/{vehicle-seats,bot-driver-turn-obstacle,bot-driver-checkpoint}-exit-regression.log`。本次尚未重新打包部署。下车瞬间持续向车体冲刺的后续检查见下节；其他输入与地形组合仍需继续验证。
+
+
+### 碰撞恢复期间的移动保护（未发布源码）
+
+在两个物理帧的碰撞恢复窗口中，持续向车体疾跑会让人物穿入碰撞包络。基线 `artifacts/vehicle-exit-movement-baseline.log` 记录第二次移动时人物局部 x 为 -1.4 m，而车体半宽加人物半径为 1.505 m。
+
+人物现在通过原车体的弱引用检查碰撞恢复队列。在队列完成前保持出口位置、清零速度和跳跃请求；保留移动方向输入，恢复碰撞后继续正常移动。此保护在权威模拟和客户端预测共用的 `Actor.move_step` 中生效，不改变正常步行速度或人物碰撞层。原车体销毁后弱引用失效，保护自动结束；立即重新上车沿用座位逻辑。
+
+`tests/vehicle_exit_movement.gd` 覆盖左右座位及 ±1.93 rad 车身朝向，在下车同一帧即持续向车体疾跑，验证没有穿入、车体不跳位、恢复后能正常离车走开。已加入候选包检查。证据为 `artifacts/vehicle-exit-movement-guard.log`；座位与四种存档恢复回归为 `artifacts/{vehicle-seats,bot-driver-checkpoint}-guard.log`。30 FPS/单向 30 ms 的双真人及机器人转弯乘客网络回归记录于 `artifacts/vehicle-exit-guard-network-{human,turn}.log`。联网回归未专门注入持续向车体疾跑，该输入组合目前由实际单机物理检查覆盖。

@@ -42,13 +42,14 @@ def main():
         "ContentType": "application/vnd.android.package-archive", "CacheControl": "no-cache",
         "ContentDisposition": 'attachment; filename="' + archive.name + '"',
     })
-    for name, kind in [("index.html", "text/html; charset=utf-8"), ("style.css", "text/css")]:
+    for name, kind in [("index.html", "text/html; charset=utf-8"), ("style.css", "text/css"),
+                       ("android-download-qr.png", "image/png")]:
         s3.put_object(Bucket=state["download_bucket"], Key=name, Body=(site / name).read_bytes(),
                       ContentType=kind, CacheControl="no-cache")
     invalidation = cloudfront.create_invalidation(
         DistributionId=state["distribution"]["Id"], InvalidationBatch={
             "CallerReference": "android-" + uuid.uuid4().hex,
-            "Paths": {"Quantity": 4, "Items": ["/", "/index.html", "/style.css", "/" + key]},
+            "Paths": {"Quantity": 5, "Items": ["/", "/index.html", "/style.css", "/android-download-qr.png", "/" + key]},
         })["Invalidation"]["Id"]
     deadline = time.monotonic() + 900
     while time.monotonic() < deadline:

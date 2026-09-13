@@ -348,7 +348,7 @@ def main():
         {"Effect": "Deny", "Principal": "*", "Action": "s3:*",
          "Resource": [f"arn:aws:s3:::{download_bucket}", f"arn:aws:s3:::{download_bucket}/*"],
          "Condition": {"Bool": {"aws:SecureTransport": "false"}}}]}))
-    for file, content_type in [("index.html", "text/html; charset=utf-8"), ("style.css", "text/css"), ("site.js", "application/javascript")]:
+    for file, content_type in [("index.html", "text/html; charset=utf-8"), ("style.css", "text/css"), ("site.js", "application/javascript"), ("android-download-qr.png", "image/png")]:
         aws("s3").put_object(Bucket=download_bucket, Key=file, Body=(ROOT / "infra/aws/site" / file).read_bytes(),
                             ContentType=content_type, CacheControl="no-cache")
     aws("s3").put_object(Bucket=download_bucket, Key="config.json", Body=json.dumps({"api": domain + "/api"}).encode(),

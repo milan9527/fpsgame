@@ -1,5 +1,7 @@
 extends Node3D
 
+const Visuals = preload("res://scripts/world_visuals.gd")
+
 var loot_nodes: Dictionary = {}
 var highlighted_supply := -1
 var zone_mesh: MeshInstance3D
@@ -62,8 +64,9 @@ func mat(hex: String) -> StandardMaterial3D:
 	if materials.has(hex):
 		return materials[hex]
 	var m := StandardMaterial3D.new()
-	m.albedo_color = Color(hex)
+	m.albedo_color = Color(hex).srgb_to_linear()
 	m.roughness = 0.92
+	Visuals.material_surface(m, hex)
 	materials[hex] = m
 	return m
 
@@ -101,14 +104,16 @@ func _ready() -> void:
 	e.fog_enabled = true
 	e.fog_light_color = Color("8ca6b2")
 	e.fog_density = 0.0025
+	Visuals.environment(e)
 	env.environment = e
 	add_child(env)
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-48, -35, 0)
+	sun.rotation_degrees = Vector3(-32, -38, 0)
 	sun.light_color = Color("ffe5bd")
-	sun.light_energy = 0.75
+	sun.light_energy = 1.15
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 110
+	sun.directional_shadow_blend_splits = true
 	add_child(sun)
 	block(Vector3(0, -0.5, 0), Vector3(240, 1, 240), "737b68", true, "terrain")
 	block(Vector3(0, 0.012, 0), Vector3(16, 0.02, 225), "3b484c", false)
@@ -141,9 +146,9 @@ func _ready() -> void:
 		cone.bottom_radius = rng.randf_range(35, 65)
 		cone.height = rng.randf_range(35, 85)
 		cone.radial_segments = 5
-		mountain.mesh = cone
+		mountain.mesh = Visuals.mountain(cone.bottom_radius * 1.4, cone.height * 0.55, i)
 		mountain.material_override = mat("667b80")
-		mountain.position = Vector3(sin(angle) * 210, cone.height / 2 - 3, cos(angle) * 210)
+		mountain.position = Vector3(sin(angle) * 210, -3, cos(angle) * 210)
 		add_child(mountain)
 	zone_mesh = MeshInstance3D.new()
 	var cylinder := CylinderMesh.new()
@@ -161,6 +166,8 @@ func _ready() -> void:
 	zone_mesh.position.y = 8
 	add_child(zone_mesh)
 	set_zone(110)
+	Visuals.ground_detail(self)
+	Visuals.batch_details(self)
 
 func building(at: Vector3, style: int) -> void:
 	map_features.append({"rect": Rect2(Vector2(at.x - 8.5, at.z - 7), Vector2(17, 14)), "kind": "building"})
@@ -176,6 +183,7 @@ func building(at: Vector3, style: int) -> void:
 	block(at + Vector3(0, 4.15, 0), Vector3(17, 0.3, 14), "465a61")
 	block(at + Vector3(-4, 0.8, 0), Vector3(2, 1.4, 3), "576b62")
 	block(at + Vector3(8.3, 2.5, 0), Vector3(0.1, 0.9, 6), "dfb86b", false)
+	Visuals.building(self, at, style)
 
 func tree(at: Vector3) -> void:
 	block(at + Vector3(0, 2, 0), Vector3(0.6, 4, 0.6), "60564a")
@@ -189,6 +197,7 @@ func tree(at: Vector3) -> void:
 	foliage.material_override = mat("3d6258")
 	foliage.position = at + Vector3(0, 6, 0)
 	add_child(foliage)
+	Visuals.tree(self, at)
 
 func set_zone(radius: float, center := Vector2.ZERO) -> void:
 	zone_radius = radius

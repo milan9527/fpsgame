@@ -25,6 +25,14 @@ func run() -> void:
 		-1: {"user_id": "rescuer-fixture", "team_id": 1, "rank": 0, "kills": 0}}
 	# Preserve another session so normal last-client room cleanup does not run.
 	game.sessions = {1: {"uid": "patient-fixture"}, -1: {"uid": "rescuer-fixture"}}
+	assert(game.departure_reason(99) == "unauthenticated")
+	assert(game.departure_reason(-1) == "connection_lost")
+	game.sessions[-1].leaving = true
+	assert(game.departure_reason(-1) == "left")
+	game.sessions[-1].revoking = true
+	assert(game.departure_reason(-1) == "revoked", "Revocation must win over client departure acknowledgement")
+	game.sessions[-1].erase("leaving")
+	game.sessions[-1].erase("revoking")
 	game.damage(patient, 10000, enemy.actor_id, true)
 	assert(patient.downed and patient.alive)
 	await physics_frame

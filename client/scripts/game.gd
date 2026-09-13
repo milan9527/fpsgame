@@ -1698,12 +1698,24 @@ func leave_operation() -> void:
 	if dedicated:
 		var id := multiplayer.get_remote_sender_id()
 		if (sessions.has(id) or pending.has(id)) and peer_ready(id):
+			if sessions.has(id):
+				sessions[id].leaving = true
 			multiplayer.multiplayer_peer.disconnect_peer(id)
+
+func departure_reason(id: int) -> String:
+	if not sessions.has(id):
+		return "unauthenticated"
+	# Revocation wins if the client acknowledges it by sending leave_operation.
+	if sessions[id].get("revoking", false):
+		return "revoked"
+	if sessions[id].get("leaving", false):
+		return "left"
+	return "connection_lost"
 
 func peer_disconnected(id: int) -> void:
 	voice_relay.senders.erase(id)
 	if dedicated:
-		print("PEER_DISCONNECTED peer=" + str(id))
+		print("PEER_DISCONNECTED peer=" + str(id) + " reason=" + departure_reason(id))
 	pending.erase(id)
 	sessions.erase(id)
 	if dedicated and actors.has(id):

@@ -1,0 +1,14 @@
+[Unit]
+Description=Iron Meridian release database and result queue backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=ec2-user
+WorkingDirectory=/home/ec2-user/project/fpsgame
+UMask=0077
+ExecStart=/usr/bin/flock --nonblock /home/ec2-user/project/fpsgame/artifacts/scheduled-backup.lock /home/ec2-user/project/fpsgame/.venv/bin/python /home/ec2-user/project/fpsgame/tools/backup.py
+TimeoutStartSec=120
+NoNewPrivileges=true
+PrivateTmp=true

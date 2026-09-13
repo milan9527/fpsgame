@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Iron Meridian release backup
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+RandomizedDelaySec=5m
+Persistent=true
+Unit=iron-meridian-backup.service
+
+[Install]
+WantedBy=timers.target

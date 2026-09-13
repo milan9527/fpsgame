@@ -57,7 +57,27 @@ python3 tools/test_backup_integrity.py artifacts/backups/<备份目录名>
 
 演练先验证清单与文件完整性，再启动独立 PostgreSQL 16 容器：无网络、无宿主端口、使用临时内存文件系统，不挂载正式数据库卷。它以单事务恢复转储，检查迁移版本、行数、约束、孤立/重复结果及统计值范围，并实际探测外键拒绝非法写入。成功或失败都会清理已创建的临时容器；报告只有在成功清理后才发布至 `artifacts/restore-drill.json`。报告不含账号名称、密码哈希或令牌。当前演练限定 512MiB 容器内存、2GiB 临时数据空间；更大的数据库需要单独规划恢复资源，超限应视为演练失败。
 
-数据库转储使用一致性快照，两个战绩队列在转储后分别读取，**不是跨服务的一致时刻备份**。队列只检查哈希及 JSON 数组格式，演练不会重放队列；正式恢复需要核对队列涉及的用户与已结算 match_id，再通过原有幂等结算接口处理，不能直接认为队列与数据库必然匹配。Redis 中房间目录、占位与票据依赖短租约和进程实例，不应随旧备份恢复；恢复部署时使用干净缓存，由新专服重新注册。当前未实现跨主机恢复、自动备份调度或异地副本。
+数据库转储使用一致性快照，两个战绩队列在转储后分别读取，**不是跨服务的一致时刻备份**。队列只检查哈希及 JSON 数组格式，演练不会重放队列；正式恢复需要核对队列涉及的用户与已结算 match_id，再通过原有幂等结算接口处理，不能直接认为队列与数据库必然匹配。Redis 中房间目录、占位与票据依赖短租约和进程实例，不应随旧备份恢复；恢复部署时使用干净缓存，由新专服重新注册。跨主机恢复和异地副本尚未实现；本机定时备份已配置如下。
+
+### 本机定时备份
+
+`infra/systemd/iron-meridian-backup.{service,timer}` 已安装到本机 systemd 并启用。每天 UTC 03:00 加最多 5 分钟随机延迟执行发布环境备份；`Persistent=true` 使关机期间错过的计划在定时器重新激活时补跑。服务以 `ec2-user` 执行，UMask 0077，超时 2 分钟，使用非阻塞文件锁避免同一计划任务重叠。备份沿用现有完整性校验和原子发布，不删除历史备份。手动备份脚本不使用此锁，但每次使用独立目录。
+
+单元文件绑定当前部署路径 `/home/ec2-user/project/fpsgame` 和其中的 Python 虚拟环境；迁移主机或目录时应调整 `User`、`WorkingDirectory`、`ExecStart`。部署及检查命令：
+
+```bash
+sudo install -m 644 infra/systemd/iron-meridian-backup.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now iron-meridian-backup.timer
+systemctl list-timers iron-meridian-backup.timer
+sudo systemctl start iron-meridian-backup.service
+systemctl show iron-meridian-backup.service -p Result -p ExecMainStatus
+sudo journalctl -u iron-meridian-backup.service --since today
+```
+
+需要暂停计划时运行 `sudo systemctl disable --now iron-meridian-backup.timer`，不会删除备份或停止游戏。失败记录在 systemd journal，目前没有外部告警和自动清理策略，应监控磁盘空间；每日备份仍位于同一主机，不能抵御主机或磁盘丢失。
+
+本次通过 systemd 手动触发同一 service，生成 `artifacts/backups/20260913T003425Z-4b9f9384`，目录 0700、文件 0600，并在隔离 PostgreSQL 中恢复通过。`artifacts/scheduled-backup-verification.json` 记录服务退出成功、安装文件哈希及定时器启用/待执行状态；恢复报告为 `artifacts/scheduled-backup-restore.json`。尚未观察到首次自动日历触发，不能把手动触发等同于完整周期或重启补跑验收。
 
 正式恢复应先停止账号写入和游戏服务，保留原卷及配置，在替代数据库完成上述演练和应用验证后再切换，并重新启动空缓存与专服。此工具不会自动覆盖现有生产库；当前演练也不宣称已验证应用切换、非空队列重放或完整灾备流程。备份仍位于本机，需另外保存至独立存储。
 

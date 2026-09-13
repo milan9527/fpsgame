@@ -53,6 +53,14 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml -f artif
 
 四个打包客户端组成两支邀请队伍，通过正常输入触发倒地、两次救援中断和成功救援，完成队伍胜负、4 条结果落库、分模式统计与结果队列重载。四客户端赛后返回队伍、战术标点按队隔离、合成语音包转发和解码也通过。汇总 `artifacts/candidate-038-party-combat.log`；这些受控验证不等于物理麦克风验收或公网长期运行。
 
+### 0.38 网络异常和移动交火
+
+- 三个打包客户端、30 FPS 的载具观战通过固定测试网络的 50–100 ms 单向延迟、3% 丢包和 3 秒上行中断。服务端确认输入超时制动及输入恢复后重新行驶。汇总 `artifacts/candidate-038-impaired-spectator.log`；详细报告前缀 `artifacts/vehicle-login-duo-impaired-spectator-fps30-packed-484d98d9-`。
+- 两客户端分别通过驾驶员断线和账号撤销后的制动、驾驶位释放及乘客安全流程。撤销场景确认驾驶输入立即清理。汇总 `artifacts/candidate-038-{drop,revoke}.log`；详细报告前缀 `artifacts/vehicle-login-duo-{drop,revoke}-packed-484d98d9-`。
+- 三客户端、30 FPS、单向 30 ms 下，通过正常输入射击移动中的驾驶员。命中时车速约 13.33 m/s，驾驶员生命降至 77，车体仍为 600、副驾驶生命仍为 100，射手消耗一发弹药，服务端回溯命中检查通过。汇总 `artifacts/candidate-038-combat.log`；详细报告前缀 `artifacts/vehicle-login-duo-combat-fps30-delay30-packed-484d98d9-`。
+
+以上均使用相同候选包和真实账号准入；受控丢包恢复不等于断线后重新登录并重返原对局的重连功能，也不等于公网长时间测试。机器人作为乘客的专项联网验证仍待完成。
+
 ## 0.37 候选（已作为开发版本发布）
 
 - 版本：0.37.0-dev / 协议 17 / 资源 ash-valley-18；数据库无需迁移。

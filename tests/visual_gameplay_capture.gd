@@ -13,6 +13,10 @@ func run() -> void:
 	actor.position = Vector3(17, 0.05, 50)
 	actor.yaw = atan2(-18, 16)
 	actor.pitch = -0.03
+	if OS.get_environment("CAPTURE_INTERIOR") == "1":
+		actor.position = Vector3(36, 0.25, 31.5)
+		actor.yaw = atan2(5.0, -2.5)
+		actor.pitch = -0.12
 	actor.render_frame(0.02, false, true, false)
 	game.ui.update_hud(actor, 16, "live", 300, 110, [], "")
 	for frame in range(4): await process_frame

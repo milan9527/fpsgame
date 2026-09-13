@@ -486,5 +486,31 @@
       "md5": "5228a7253b40de720ad8247757d218f1"
     },
     "modification": "Normalized in Blender; static mesh triangle budget capped at 12000."
+  },
+  {
+    "asset": "concrete_floor_02",
+    "page": "https://polyhaven.com/a/concrete_floor_02",
+    "license": "CC0-1.0",
+    "authors": {
+      "Rob Tuytel": "All"
+    },
+    "files": {
+      "albedo": {
+        "size": 3310792,
+        "md5": "769c7bf30050cc57be848a67d5c20270",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_floor_02/concrete_floor_02_diff_2k.jpg"
+      },
+      "normal": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_floor_02/concrete_floor_02_nor_gl_2k.jpg",
+        "size": 935810,
+        "md5": "3cc9918473a0c3d5ecb10f0ddc7e218d"
+      },
+      "roughness": {
+        "size": 1417673,
+        "md5": "63b266940d40787b56822b7882819711",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_floor_02/concrete_floor_02_rough_2k.jpg"
+      }
+    },
+    "modification": "2K original maps; world-scaled interior floor material."
   }
 ]

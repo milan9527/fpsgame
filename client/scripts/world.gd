@@ -184,7 +184,12 @@ func building(at: Vector3, style: int) -> void:
 		block(at + Vector3(5, 2, z), Vector3(6, 4, 0.5), c)
 		block(at + Vector3(0, 3.7, z), Vector3(4, 0.6, 0.5), c)
 	block(at + Vector3(0, 4.15, 0), Vector3(17, 0.3, 14), "465a61")
-	block(at + Vector3(-4, 0.8, 0), Vector3(2, 1.4, 3), "576b62")
+	var interior_cover := block(at + Vector3(-4, 0.8, 0), Vector3(2, 1.4, 3), "576b62")
+	interior_cover.visible = false
+	var cargo: Node3D = load("res://assets/realism/supply_crate.glb").instantiate()
+	cargo.position = at + Vector3(-4, 0.2, 0)
+	cargo.scale = Vector3(0.8, 1.3 / 1.5, 1.5)
+	add_child(cargo)
 	block(at + Vector3(8.3, 2.5, 0), Vector3(0.1, 0.9, 6), "465a61", false)
 	if style != 0:
 		var roof_kind := "gable" if style == 1 else "shed"

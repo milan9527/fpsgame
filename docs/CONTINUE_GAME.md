@@ -29,6 +29,14 @@ Stages 6–8 are ready for a local checkpoint; see docs/VISUAL_REVIEW.md.
   Optic screenshots: artifacts/realism8-optic-forward/ and realism8-optic/.
 
 ## Next work
+Stage 11 adds scanned concrete interior floors, slab joints/skirting, a visible
+central ceiling lamp with a distance-faded shadowed OmniLight, and a real wooden
+cargo model over the existing interior cover collider. Offline smoke passes;
+world collision snapshot matches all 276 stage-8 entries. Latest indoor image:
+artifacts/realism11-lit/gameplay.png (Forward+). Use CAPTURE_INTERIOR=1 with
+tests/visual_gameplay_capture.gd to reproduce. More interior furnishing,
+characters and natural world layout remain important.
+
 Stage 10 replaces only the background grove billboard with fuller CC0 fir B,
 and adds a lower-contrast painted plaster derivative. Both new textures have
 explicit mipmaps (initial captures exposed aliasing without them).

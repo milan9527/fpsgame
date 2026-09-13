@@ -69,6 +69,9 @@ static func material_surface(material: StandardMaterial3D, color: String) -> voi
 	elif color == "465a61":
 		kind = "roof"
 		scale = 0.4
+	elif color == "a5a69a":
+		kind = "concrete"
+		scale = 0.25
 	elif color in ["bfc3a0", "dfb86b"]: return
 	material.albedo_color = Color(0.48, 0.48, 0.48)
 	if color == "829b9a": material.albedo_color = Color(0.29, 0.40, 0.34)
@@ -86,6 +89,12 @@ static func material_surface(material: StandardMaterial3D, color: String) -> voi
 	material.uv1_world_triplanar = true
 	material.uv1_scale = Vector3.ONE * scale
 	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	if color == "a5a69a":
+		material.uv1_triplanar = false
+		material.uv1_world_triplanar = false
+		material.uv1_scale = Vector3(4, 3.25, 1)
+		material.normal_scale = 0.2
+		material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	if color == "737b68":
 		# The arena is planar: avoid triplanar sampling and retain grazing-angle detail.
 		material.uv1_triplanar = false
@@ -122,6 +131,16 @@ static func environment(environment: Environment) -> void:
 
 static func building(world, at: Vector3, _style: int) -> void:
 	var first_detail: int = world.get_child_count()
+	# Thin surface details remain within the existing wall/floor surfaces.
+	for x in [-7.73, 7.73]:
+		world.block(at + Vector3(x, 0.34, 0), Vector3(0.035, 0.28, 12.5), "5b625d", false)
+	for z in [-6.23, 6.23]:
+		for x in [-4.9, 4.9]:
+			world.block(at + Vector3(x, 0.34, z), Vector3(5.6, 0.28, 0.035), "5b625d", false)
+	for x in [-4.0, 0.0, 4.0]:
+		world.block(at + Vector3(x, 0.201, 0), Vector3(0.012, 0.002, 12.4), "303835", false)
+	for z in [-3.0, 3.0]:
+		world.block(at + Vector3(0, 0.201, z), Vector3(15.4, 0.002, 0.012), "303835", false)
 	for x in [-8.27, 8.27]:
 		world.block(at + Vector3(x, 0.36, 0), Vector3(0.035, 0.34, 13), "5b625d", false)
 		world.block(at + Vector3(x, 3.9, 0), Vector3(0.065, 0.12, 13), "465a61", false)
@@ -147,9 +166,29 @@ static func building(world, at: Vector3, _style: int) -> void:
 		var lamps: Array = world.get_meta("lamp_placements", [])
 		lamps.append(Transform3D(facing, at + Vector3(2.8, 2.8, outside)))
 		world.set_meta("lamp_placements", lamps)
+	world.block(at + Vector3(0, 3.975, 0), Vector3(1.5, 0.05, 0.34), "303835", false)
+	var diffuser := StandardMaterial3D.new()
+	diffuser.albedo_color = Color("fff2da")
+	diffuser.emission_enabled = true
+	diffuser.emission = Color("ffe6c1")
+	diffuser.emission_energy_multiplier = 1.5
+	for z in [-0.085, 0.085]:
+		var panel = world.block(at + Vector3(0, 3.943, z), Vector3(1.35, 0.014, 0.075), "303835", false)
+		panel.material_override = diffuser
 	for index in range(first_detail, world.get_child_count()):
 		var node = world.get_child(index)
 		node.set_meta("visual_batch", "detail-" + str(node.material_override.get_instance_id()))
+	var light := OmniLight3D.new()
+	light.name = "InteriorLight"
+	light.position = at + Vector3(0, 3.72, 0)
+	light.light_color = Color("ffe6c1")
+	light.light_energy = 1.0
+	light.omni_range = 10.0
+	light.shadow_enabled = true
+	light.distance_fade_enabled = true
+	light.distance_fade_begin = 22.0
+	light.distance_fade_length = 10.0
+	world.add_child(light)
 
 static func tree(world, at: Vector3) -> void:
 	var model: Node3D = load("res://assets/realism/fir_near.glb").instantiate()

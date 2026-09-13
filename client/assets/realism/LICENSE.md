@@ -50,3 +50,7 @@ The high-resolution authoring scene can be regenerated with
 `plaster_painted.jpg` is a contrast/saturation/brightness-adjusted derivative
 of the existing CC0 `grey_plaster_02` albedo, prepared by
 `tools/prepare_wall_finish.py`. Its original source is listed in `SOURCES.json`.
+
+`concrete_albedo.jpg`, `concrete_normal.jpg`, and `concrete_roughness.jpg`:
+https://polyhaven.com/a/concrete_floor_02 — Rob Tuytel, CC0.
+Original 2K maps for interior floors; URLs/checksums are in `SOURCES.json`.

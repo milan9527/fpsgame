@@ -89,7 +89,7 @@ func run() -> void:
 					break
 			assert(not bot.is_seated() and absf(car.speed) < 0.1)
 			assert(bot.health == 100 and bot.navigator.driver.cooldown > 7)
-		print("BOT_PASSENGER_CASE_OK ", scenario)
+		print("BOT_RIDER_CASE_OK ", scenario)
 		game.local_recorded_id = game.match_id
 		game.leave()
 	# Both seats are acquired through normal AI in a server-assigned bot pair.

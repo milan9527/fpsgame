@@ -134,3 +134,5 @@ Blender 原创双坡/单坡金属屋顶及接缝，分别应用到两种建筑�
 原室内方块掩体隐藏显示，保留原碰撞，以实际木制货箱模型贴合可见尺寸。单机 smoke 通过，场景碰撞快照仍与第八轮 276 个形状/变换完全一致；没有改变门洞或导航障碍布局。`CAPTURE_INTERIOR=1` 可让现有游戏截图脚本进入室内，最终 Forward+ 截图为 `artifacts/realism11-lit/gameplay.png`。Compatibility 世界截图也完成。
 
 当前只是仓库内部的第一轮完整材质/照明处理，尚缺更多自然布置和人物细节。未将它当作整体画质达标，也没有部署或推送。
+
+第十一轮本地预览更新到 `artifacts/visual-preview/9648cb40b560/`，包含第九至十一轮改动。Windows/Linux 导出完成，打包后的 Linux 单机和屋顶碰撞检查通过，构建提交和归档 SHA-256 在该目录 `verification.json`。Windows 仍未进行实机运行测试；目录外旧 ZIP 不包含最新改动。

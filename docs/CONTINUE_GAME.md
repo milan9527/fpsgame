@@ -61,11 +61,11 @@ environment/material improvements, not just further small gun details.
    overall quality. Do not equate more small details or green tests with success.
 3. Improve material consistency and architectural variety; preserve server/client
    collision consistency. World.gd is shared by dedicated and offline modes.
-4. Current local previews are in artifacts/visual-preview/b3fdf590901d/:
-   Windows and Linux ZIPs include stages 6–8. verification.json records archive
+4. Current local previews are in artifacts/visual-preview/9648cb40b560/:
+   Windows and Linux ZIPs include stages 6–11. verification.json records archive
    hashes, exports and packaged Linux offline/roof test passes. Launch the EXE
    or Linux executable directly after extraction; no play.sh/Godot install.
-   Top-level older ZIPs remain stage 3: use the commit-specific directory.
+   Top-level older ZIPs remain stage 3; b3fdf590901d is stage 8. Use the newest directory.
    These previews default to localhost/offline. Windows export was not tested
    on Windows hardware. Do not deploy or publish as part of this graphics work.
    Rebuild using python3 tools/package_visual_preview.py from a clean commit.

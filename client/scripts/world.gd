@@ -197,7 +197,17 @@ func building(at: Vector3, style: int) -> void:
 		roof.position = at + Vector3(0, 4.3, 0)
 		add_child(roof)
 		for part in roof.find_children("*", "MeshInstance3D", true, false):
-			part.material_override = mat("465a61")
+			if str(part.name).begins_with("RoofEndWall"):
+				part.material_override = mat(c)
+			elif str(part.name).begins_with("RoofFlashing"):
+				part.material_override = mat("303835")
+			else:
+				var sheet: StandardMaterial3D = mat("465a61").duplicate()
+				sheet.uv1_triplanar = false
+				sheet.uv1_world_triplanar = false
+				sheet.uv1_scale = Vector3(0.5, 0.5, 1)
+				sheet.albedo_color = Color.WHITE
+				part.material_override = sheet
 		var body := StaticBody3D.new()
 		body.name = "RoofCollision"
 		roof.add_child(body)

@@ -38,7 +38,9 @@ Additional facade assets from Poly Haven, CC0:
 `supply_case.glb` is original project geometry authored by tools/build_supply_case.py.
 
 `roof_gable.glb` and `roof_shed.glb` are original project geometry authored by
-`tools/build_roofs.py`. They use the project's existing metal roof material at runtime.
+`tools/build_roofs.py`. They include original folded flashing and gutter geometry.
+At runtime the covers use the existing CC0 metal scan and the end walls use
+the existing CC0 plaster scan, with the building's wall tint.
 
 `fir_background.png` is a Blender-rendered derivative of Poly Haven
 `fir_tree_01`, variant B (Rob Tuytel / Rico Cilliers, CC0).

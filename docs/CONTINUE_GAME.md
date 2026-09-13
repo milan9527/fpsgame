@@ -10,6 +10,9 @@ still visibly procedural. Work autonomously. NEVER push without confirmation.
 No AWS changes or publication needed. Do not claim UI-independent execution.
 
 ## Current work
+Stage18 adds split roof cover/plaster ends/flashing and gutters with metre UVs.
+Images artifacts/realism18-roofs/ and realism18-forward/gameplay.png.
+Roof collision tests8 roofs passed; Forward+/Compatibility rendering passed.
 Stage17: Blender side-wall assemblies (concrete frames, closed louvers,
 folded steel infill). tools/build_facades.py; facade_0/1/2.glb and art/*.blend.
 Final main image artifacts/realism17-final/gameplay.png; final style1 material
@@ -18,7 +21,7 @@ Models9144/2448/9144 triangles; UV/bounds checks passed. Initial flat backlit
 panels fixed with scan UVs, wider louver gaps and disabling louver auto LOD.
 276 world collisions match stage13; offline smoke passed. Content19 unchanged.
 Stage16 grass remains:169031 tufts,388 cells; shrinks24–48m,culls58m.
-Current packages below predate stage17. Goal remains unfinished.
+Current packages below predate stages17–18 until refreshed. Goal remains unfinished.
 Full historical changes/evidence are in docs/VISUAL_REVIEW.md; read selectively.
 
 ## Next substantive work

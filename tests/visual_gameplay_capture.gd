@@ -4,6 +4,7 @@ func _initialize() -> void:
 func run() -> void:
 	var game = load("res://scripts/game.gd").new()
 	root.add_child(game)
+	game.local_profile = null
 	await process_frame
 	game.start_solo()
 	game.set_physics_process(false)
@@ -16,6 +17,9 @@ func run() -> void:
 	game.ui.update_hud(actor, 16, "live", 300, 110, [], "")
 	for frame in range(4): await process_frame
 	await RenderingServer.frame_post_draw
-	root.get_texture().get_image().save_png(OS.get_environment("CAPTURE_ARTIFACT_DIR").path_join("gameplay.png"))
+	var output := OS.get_environment("CAPTURE_ARTIFACT_DIR")
+	assert(not output.is_empty(), "Set CAPTURE_ARTIFACT_DIR to an output directory")
+	assert(DirAccess.make_dir_recursive_absolute(output) == OK)
+	assert(root.get_texture().get_image().save_png(output.path_join("gameplay.png")) == OK)
 	print("VISUAL_GAMEPLAY_CAPTURE_PASS")
 	quit()

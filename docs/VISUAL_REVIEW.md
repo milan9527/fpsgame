@@ -26,6 +26,27 @@ tools/godot --headless --path client -- --smoke
 
 ## 当前边界
 
-这是可运行的写实环境升级，尚未达到《和平精英》整体画面完成度。建筑主体仍是简化几何；人物和枪械几何与动作沿用原有资产，缺少精细服装模型、建筑室内陈设与完整场景美术。尚未测量真实 Android 或 Windows GPU 性能，也未重新测试 AWS 联网会话。
+这是可运行的写实环境升级，尚未达到《和平精英》整体画面完成度。建筑主体仍是简化几何；第三人称人物几何与动作仍沿用原有资产（第一人称模型后续更新见第二轮），缺少精细服装模型、建筑室内陈设与完整场景美术。尚未测量真实 Android 或 Windows GPU 性能，也未重新测试 AWS 联网会话。
 
 改动仅保存在本地，未推送 GitHub、未部署 AWS、未更新下载包。当前发行打包脚本使用固定基线及指定补丁，不会自动纳入这些视觉改动；发布前必须纳入发行源码，并完成手机与电脑实机检查。
+
+## 第二轮：第一人称模型与建筑细节
+
+步枪新增圆形枪管、枪管箍、机匣侧板、拉机柄、护木散热槽、护圈、瞄具调节旋钮与安装螺钉；金属和塑料采用更中性的深色与较高粗糙度。步枪为 7,944 个三角面，仍维持四个网格节点及原来的 SightAnchor / MuzzleAnchor。
+
+手臂由简单圆锥改为 25 圈、32 分段的带褶皱袖子，重新展开布料 UV 并平滑法线，手套增加圆角并降低亮度；整体 7,272 个三角面。保留五根骨骼和 Hold / Reload / Throw / Heal 四段动作。迷彩改为连续的不规则色块，避免原先交叉多边形造成的碎三角图案。Blender 手臂源文件已打包布料纹理。
+
+建筑增加门框、檐沟、排水管及固定卡箍，仍沿用现有门洞和碰撞布局。以上细节都是本项目制作，没有新增第三方素材。
+
+重建本轮模型：
+
+```sh
+python tools/generate_uniform_texture.py
+ASSET_ONLY=carbine tools/blender-4.3.2-linux-x64/blender --background --python tools/build_assets.py
+tools/blender-4.3.2-linux-x64/blender --background --python tools/build_viewmodel.py
+tools/godot --headless --path client --editor --import
+```
+
+本轮截图目录为 `artifacts/realism2-review/`，完整游戏画面为 `gameplay.png`；前后对比图为 `artifacts/realism2-comparison.png`。验证包括武器模型/锚点、108 组瞄准射线、手臂动作与单机 smoke；碰撞快照仍与原版 268 项一致。旧手臂测试对已停用的枪身准星点仍有显示断言，现改为检查 HUD 准星设计所要求的隐藏状态。截图工具也增加输出目录创建与保存结果检查，避免图片保存失败时错误报告通过。
+
+第三人称人物几何、其他枪械和环境总体密度仍需要后续美术工作；本轮没有 Android/Windows 真机性能结论。改动仅在本地，尚未推送或发布客户端。

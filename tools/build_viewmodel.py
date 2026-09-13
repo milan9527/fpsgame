@@ -21,7 +21,10 @@ def material(name, rgb):
     return mat
 
 cloth = material('Field sleeves', (0.19, 0.30, 0.27))
-glove = material('Reinforced gloves', (0.055, 0.075, 0.08))
+fabric = cloth.node_tree.nodes.new('ShaderNodeTexImage')
+fabric.image = bpy.data.images.load(str(ROOT / 'client/assets/realism/uniform.png'))
+cloth.node_tree.links.new(fabric.outputs['Color'], cloth.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
+glove = material('Reinforced gloves', (0.018, 0.022, 0.017))
 patch = material('Wrist straps', (0.40, 0.45, 0.32))
 rest = {'Root': v(0,0,0), 'Up': v(0,0.1,0),
         'Elbow.L': v(-0.48,-0.38,0.48), 'Wrist.L': v(-0.055,-0.065,-0.18), 'Tip.L': v(0.015,-0.05,-0.2),
@@ -54,9 +57,35 @@ def skin(obj, bone, mat):
 for side in ['L','R']:
     start, end = rest[f'Elbow.{side}'], rest[f'Wrist.{side}']
     direction = end-start
-    bpy.ops.mesh.primitive_cone_add(vertices=12, radius1=0.085, radius2=0.045, depth=direction.length*0.91, location=(start+end)/2)
-    sleeve = bpy.context.object
-    sleeve.name = f'Sleeve.{side}'
+    # Tailored sleeve: longitudinal rings carry irregular, shallow cloth folds.
+    vertices, faces = [], []
+    rings, segments = 25, 32
+    length = direction.length * 0.91
+    for ring in range(rings):
+        t = ring / (rings - 1)
+        radius = 0.082 * (1-t) + 0.046 * t
+        for j in range(segments):
+            angle = j * math.tau / segments
+            fold = math.sin(t * 39 + math.sin(angle * 3) * 1.4) * 0.006 * math.sin(math.pi*t)
+            radius_here = radius + fold + 0.002 * math.cos(angle * 5 + t * 8)
+            vertices.append((math.cos(angle)*radius_here, math.sin(angle)*radius_here*0.88, (t-0.5)*length))
+    for ring in range(rings-1):
+        for j in range(segments):
+            n = (j+1)%segments
+            faces.append((ring*segments+j,ring*segments+n,(ring+1)*segments+n,(ring+1)*segments+j))
+    mesh = bpy.data.meshes.new('Tailored sleeve folds')
+    mesh.from_pydata(vertices, [], faces);mesh.update()
+    uv = mesh.uv_layers.new(name='Fabric UV')
+    for polygon in mesh.polygons:
+        polygon.use_smooth = True
+        for loop_index in polygon.loop_indices:
+            index = mesh.loops[loop_index].vertex_index
+            u = (index % segments) / segments
+            if polygon.index % segments == segments-1 and u == 0: u = 1
+            uv.data[loop_index].uv = (u, (index//segments)/(rings-1)*1.8)
+    sleeve = bpy.data.objects.new(f'Sleeve.{side}',mesh)
+    bpy.context.collection.objects.link(sleeve)
+    sleeve.location = (start+end)/2
     sleeve.rotation_mode = 'QUATERNION'
     sleeve.rotation_quaternion = Vector((0,0,1)).rotation_difference(direction.normalized())
     skin(sleeve, f'Forearm.{side}', cloth)
@@ -73,7 +102,8 @@ for side in ['L','R']:
         bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
         bevel=obj.modifiers.new('Soft glove edges','BEVEL')
         bevel.width=0.006
-        bevel.segments=2
+        bevel.segments=4
+        obj.modifiers.new("Glove normals", "WEIGHTED_NORMAL")
         skin(obj, f'Hand.{side}', mat)
 
 bpy.ops.object.select_all(action='DESELECT')
@@ -129,6 +159,7 @@ for clip in ['Hold','Reload','Throw','Heal']:
 rig.animation_data.action=bpy.data.actions['Hold']
 bpy.context.scene.frame_set(0)
 bpy.ops.object.select_all(action='SELECT')
+bpy.ops.file.pack_all()
 bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'art/first_person.blend'))
 bpy.ops.export_scene.gltf(filepath=str(ROOT/'client/assets/first_person.glb'),export_format='GLB',use_selection=True,
                          export_animations=True,export_animation_mode='ACTIONS',export_skins=True)

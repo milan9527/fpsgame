@@ -15,6 +15,10 @@ static func military_materials(model: Node3D) -> void:
 			mesh.set_surface_override_material(index, material)
 
 static func material_surface(material: StandardMaterial3D, color: String) -> void:
+	if color == "303835":
+		material.roughness = 0.8
+		material.metallic = 0.35
+		return
 	var kind := "plaster"
 	var scale := 0.28
 	if color in ["737b68", "667b80"]:
@@ -65,6 +69,14 @@ static func building(world, at: Vector3, _style: int) -> void:
 		world.block(at + Vector3(x, 0.36, 0), Vector3(0.035, 0.34, 13), "5b625d", false)
 		world.block(at + Vector3(x, 3.9, 0), Vector3(0.065, 0.12, 13), "465a61", false)
 	for z in [-6.77, 6.77]:
+		# Surface details stay outside the original clear doorway.
+		for x in [-2.10, 2.10]:
+			world.block(at + Vector3(x, 1.8, z), Vector3(0.20, 3.2, 0.10), "303835", false)
+		world.block(at + Vector3(0, 3.5, z), Vector3(4.4, 0.20, 0.10), "303835", false)
+		world.block(at + Vector3(0, 4.0, z), Vector3(17, 0.15, 0.18), "303835", false)
+		world.block(at + Vector3(7.7, 2.05, z), Vector3(0.10, 3.9, 0.12), "303835", false)
+		for y in [0.7, 2.0, 3.3]:
+			world.block(at + Vector3(7.7, y, z), Vector3(0.20, 0.045, 0.15), "303835", false)
 		for x in [-5, 5]:
 			world.block(at + Vector3(x, 0.36, z), Vector3(6, 0.34, 0.035), "5b625d", false)
 		var placements: Array = world.get_meta("shutter_placements", [])

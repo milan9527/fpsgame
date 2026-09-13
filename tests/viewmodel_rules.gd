@@ -78,7 +78,8 @@ func run() -> void:
 	assert(actor.medkits == 2 and actor.health == 100)
 	actor.heal_left = 0
 	await pose("restored")
-	assert(arms.active_clip == "Hold" and actor.gun_model.visible and arms.sight_dot.visible)
+	assert(arms.active_clip == "Hold" and actor.gun_model.visible)
+	assert(not arms.sight_dot.visible, "HUD owns the ballistic reticle; the animated weapon dot stays hidden")
 	assert(arms.magazine.position.is_equal_approx(arms.magazine_rest))
 	assert(arms.skeleton.get_bone_global_pose(left).origin.distance_to(left_rest) < 0.001)
 	actor.apply_damage(10000)

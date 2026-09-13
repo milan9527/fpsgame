@@ -216,6 +216,8 @@ func building(at: Vector3, style: int) -> void:
 		shape.shape = hull
 		body.add_child(shape)
 	Visuals.building(self, at, style)
+	if style != 0:
+		Visuals.service_yard(self, at)
 
 func tree(at: Vector3) -> void:
 	var trunk := block(at + Vector3(0, 2, 0), Vector3(0.6, 4, 0.6), "60564a")

@@ -10,7 +10,7 @@ provide current runnable local previews. The goal is NOT complete. Work
 autonomously; NEVER push GitHub without confirmation. No AWS changes needed.
 
 ## Current checkpoint
-Detailed checkpoints are in docs/VISUAL_REVIEW.md; stage 12 is the latest work.
+Detailed checkpoints are in docs/VISUAL_REVIEW.md; stage 13 is the latest work.
 - Detailed shotgun/marksman geometry and wide smooth scope bore. Initial scope
   support/turret intrusion was fixed. Final dedicated optic capture passed in
   Compatibility and Forward+ (artifacts/realism8-optic*/).
@@ -29,6 +29,17 @@ Detailed checkpoints are in docs/VISUAL_REVIEW.md; stage 12 is the latest work.
   Optic screenshots: artifacts/realism8-optic-forward/ and realism8-optic/.
 
 ## Next work
+Stage 13 adds warehouse service yards, road connectors and tactical-map footprints,
+excluding grass from the paved surfaces. Latest image:
+artifacts/realism13-yard/gameplay.png. Collision snapshot still matches 276
+stage-11 shapes/transforms; offline smoke and tactical-map checks pass.
+IMPORTANT: content_revision is now ash-valley-19 (protocol still 17), correcting
+the missing version bump after roof collision additions. New compatibility test
+rejects ash-valley-18 peers/checkpoints and verifies old save files remain intact.
+No live service was changed. Existing 9648cb40b560 ZIPs are still version 18.
+World layout remains sparse and repetitive: pursue substantial architecture,
+terrain and furnishing improvements rather than declaring quality complete.
+
 Stage 12 revises operator proportions/helmet shell, smooths cloth joint weights
 and fixes lost limb camouflage UVs caused by differently named Blender UV layers.
 UV scale now follows a common 0.6m repeat. Latest image:

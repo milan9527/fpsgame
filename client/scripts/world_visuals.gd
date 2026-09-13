@@ -190,6 +190,35 @@ static func building(world, at: Vector3, _style: int) -> void:
 	light.distance_fade_length = 10.0
 	world.add_child(light)
 
+static func service_yard(world, at: Vector3) -> void:
+	var exclusions: Array = world.get_meta("hardscape_bounds", [])
+	var areas := [Rect2(Vector2(at.x - 11.5, at.z - 12.5), Vector2(23, 25))]
+	# Only the inner plots connect directly to the main road: a connector to an
+	# outer plot at the same Z would otherwise pass through its inner warehouse.
+	if absf(at.x) < 45:
+		var road_edge := signf(at.x) * 8.0
+		var yard_edge := at.x - signf(at.x) * 11.5
+		areas.append(Rect2(Vector2(minf(road_edge, yard_edge), at.z - 3),
+			Vector2(absf(yard_edge - road_edge), 6)))
+	for area in areas:
+		var center: Vector2 = area.get_center()
+		var slab = world.block(Vector3(center.x, 0.006, center.y),
+			Vector3(area.size.x, 0.012, area.size.y), "a5a69a", false)
+		var finish: StandardMaterial3D = slab.material_override.duplicate()
+		finish.uv1_scale = Vector3(area.size.x / 4, area.size.y / 4, 1)
+		slab.material_override = finish
+		slab.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		exclusions.append(area.grow(0.15))
+		# Paint yard surfaces before the building footprints on the tactical map.
+		world.map_features.insert(0, {"rect": area, "kind": "road"})
+	world.set_meta("hardscape_bounds", exclusions)
+	for z in [-9.5, 9.5]:
+		for x in [-8.8, -5.8, -2.8, 2.8, 5.8, 8.8]:
+			var stripe = world.block(at + Vector3(x, 0.015, z),
+				Vector3(0.065, 0.004, 4.4), "bfc3a0", false)
+			stripe.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			stripe.set_meta("visual_batch", "yard-markings")
+
 static func tree(world, at: Vector3) -> void:
 	var model: Node3D = load("res://assets/realism/fir_near.glb").instantiate()
 	model.position = at
@@ -293,12 +322,14 @@ static func ground_detail(world) -> void:
 	var density := FastNoiseLite.new()
 	density.seed = 673
 	density.frequency = 0.055
+	var exclusions: Array = world.ground_obstacles.duplicate()
+	exclusions.append_array(world.get_meta("hardscape_bounds", []))
 	for attempt in range(40000):
 		var point := Vector2(random.randf_range(-109, 109), random.randf_range(-109, 109))
 		if absf(point.x) < 10 or absf(point.y) < 9: continue
 		if random.randf() > 0.65 + density.get_noise_2d(point.x, point.y): continue
 		var blocked := false
-		for obstacle in world.ground_obstacles:
+		for obstacle in exclusions:
 			if obstacle.grow(0.5).has_point(point): blocked = true; break
 		if blocked: continue
 		var cell := Vector2i(floori(point.x / 24), floori(point.y / 24))

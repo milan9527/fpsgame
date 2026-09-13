@@ -67,7 +67,54 @@ func run() -> void:
 		if scenario == "last_session":
 			assert(game.phase == "waiting" and game.match_id != generation and game.result_outbox.size() == 1)
 			game.result_outbox.clear()
+	# Keep a moving driver's body in its seat while normal stale-input braking acts.
+	game.dedicated = false
+	game.start_solo("duo")
+	game.elapsed = 10
+	game.sessions = {1: {"uid": "driver-fixture", "session_version": 2}, -1: {"uid": "passenger-fixture", "session_version": 0}}
+	game.participants = {1: {"user_id": "driver-fixture", "team_id": 1, "rank": 0, "kills": 0}}
+	game.reconnect_grace_seconds = 30
+	for other in game.actors.values():
+		other.position = Vector3(90, 0.1, 90 + other.actor_id)
+	var driver = game.actors[1]
+	var passenger = game.actors[-1]
+	driver.position = Vector3(-1.65, 0.04, 0.1)
+	passenger.position = Vector3(1.65, 0.04, 0.1)
+	var car = game.vehicle_fleet.spawn(game, Vector3.ZERO)
+	await physics_frame
+	await physics_frame
+	for _step in range(5):
+		car.simulate(1.0 / 60)
+	assert(car.seats.enter(driver, 0) and car.seats.enter(passenger, 1))
+	for _step in range(90):
+		await physics_frame
+		car.command(driver.actor_id, car.input_sequence + 1, 1, 0, false, car.seats.epoch)
+		car.simulate(1.0 / 60)
+	assert(car.speed > 10)
+	var initial_speed: float = car.speed
+	var initial_position: Vector3 = car.position
+	game.dedicated = true
+	game.peer_disconnected(1)
+	assert(car.throttle == 0 and car.input_age >= car.INPUT_TIMEOUT)
+	for _step in range(120):
+		await physics_frame
+		car.simulate(1.0 / 60)
+		assert(driver.is_seated() and passenger.is_seated() and driver.alive)
+		assert(car.speed <= initial_speed)
+		if absf(car.speed) < 0.01:
+			break
+	assert(absf(car.speed) < 0.01)
+	assert(car.position.distance_to(initial_position) < initial_speed * initial_speed / (2 * car.BRAKING) + 0.5)
+	var durability: float = driver.health + driver.armor
+	game.damage(driver, 20, 0, true)
+	assert(driver.health + driver.armor == durability - 20 and driver.is_seated())
+	game.expire_retained_sessions(game.retained_sessions[1].until)
+	await physics_frame
+	await physics_frame
+	car.simulate(1.0 / 60)
+	assert(car.seats.occupant(0) == null and car.driver_id == 0 and not game.actors.has(1))
+	assert(passenger.is_seated() and passenger.health == 100 and car.health == car.MAX_HEALTH)
 	game.dedicated = false
 	game.local_recorded_id = game.match_id
-	print("RECONNECT_RETENTION_PASS default_disabled=ok input_cleared=ok vulnerable=ok expiry=ok explicit_leave=excluded revoked=excluded heartbeat_revocation=ok last_session_recycle=ok")
+	print("RECONNECT_RETENTION_PASS default_disabled=ok input_cleared=ok vulnerable=ok expiry=ok explicit_leave=excluded revoked=excluded heartbeat_revocation=ok last_session_recycle=ok driver_braking=ok driver_seat_cleanup=ok passenger_secured=ok")
 	game.request_quit()

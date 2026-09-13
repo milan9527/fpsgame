@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from .models import User, Match, Result
 from .database import engine
 from .protocol import BUILD, BuildInfo, require_compatible
-from .rooms import CancelRoomTicket, RoomDirectory, RoomHeartbeat, RoomJoin, RoomTicket
+from .rooms import CancelRoomTicket, RoomDirectory, RoomHeartbeat, RoomJoin, RoomTicket, RoomReconnect
 from .parties import AcceptInvitation, PartyDirectory, ReserveParty, PartyReady, ResetParty
 from .rooms import PartyMember
 
@@ -79,7 +79,7 @@ def user_token(request: Request, credentials: HTTPAuthorizationCredentials = Dep
 
 
 def validate_ticket_session(data, session):
-    user = session.get(User, data['uid'])
+    user = session.scalar(select(User).where(User.id == data['uid']).with_for_update(read=True))
     if user is None or user.session_version != int(data.get('session_version', 0)):
         raise HTTPException(401, 'Session expired; sign in again')
     return data
@@ -273,7 +273,10 @@ def room_heartbeat(body: RoomHeartbeat, session: Session = Depends(db)):
     require_compatible(body)
     versions = dict(session.execute(select(User.id, User.session_version).where(User.id.in_([str(uid) for uid in body.players]))).all()) if body.players else {}
     revoked = [uid for uid in body.players if versions.get(str(uid)) != body.session_versions.get(uid, 0)]
-    filtered = body.model_copy(update={'players': [uid for uid in body.players if uid not in revoked]})
+    filtered = body.model_copy(update={
+        'players': [uid for uid in body.players if uid not in revoked],
+        'session_versions': {uid: version for uid, version in body.session_versions.items() if uid not in revoked},
+        'reconnectable': {uid: seconds for uid, seconds in body.reconnectable.items() if uid not in revoked}})
     result = rooms.heartbeat(filtered)
     result['revoked'] = [str(uid) for uid in revoked]
     return result
@@ -293,6 +296,22 @@ def room_join(body: RoomJoin, request: Request, uid: str = Depends(user_token), 
 def room_consume(body: RoomTicket, session: Session = Depends(db)):
     require_compatible(body)
     return validate_ticket_session(rooms.consume(body), session)
+
+
+@app.post('/matchmaking/rooms/reconnect')
+def room_reconnect(body: RoomReconnect, request: Request, uid: str = Depends(user_token), session: Session = Depends(db)):
+    require_compatible(body)
+    limit('room-reconnect:' + uid, 10, 60)
+    user = session.get(User, uid)
+    result = rooms.allocate_reconnect(uid, user.username, request.state.session_version, body)
+    return JSONResponse(result, headers={'Cache-Control': 'no-store'})
+
+
+@app.post('/internal/rooms/reconnect/consume', dependencies=[Depends(server_auth)])
+def room_reconnect_consume(body: RoomTicket, session: Session = Depends(db)):
+    require_compatible(body)
+    result = validate_ticket_session(rooms.consume_reconnect(body), session)
+    return JSONResponse(result, headers={'Cache-Control': 'no-store'})
 
 
 @app.post('/matchmaking/rooms/cancel')

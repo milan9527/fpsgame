@@ -10,27 +10,30 @@ NEVER push without confirmation. No AWS changes or publishing needed.
 Do not claim execution survives UI exit. Keep tool outputs/images selective.
 
 ## Current source and evidence
-Source checkpoint3406be7: stages17 side-wall frames/louvers/steel and18 roof covers,
+Current source checkpointba78dee adds stage19 fir geometry (details below).
+Previous checkpoint3406be7: stages17 side-wall frames/louvers/steel and18 roof covers,
 plaster ends/flashing/gutters. Blender generators tools/build_facades.py and
 build_roofs.py; corresponding .blend and .glb committed. Material scans CC0.
 Main image artifacts/realism18-forward/gameplay.png; roof closeups realism18-roofs/.
 Forward+ and Compatibility captures passed. Roof tests8 slopes/shots/doorways pass.
 Stage17 collision snapshot matches all276 shapes from stage13. Content19 unchanged.
 Stage17 model UV/bounds checked; see docs/VISUAL_REVIEW.md for detailed evidence.
-Current Windows/Linux previews artifacts/visual-preview/3406be77d44d/ include18.
+Current Windows/Linux previews artifacts/visual-preview/ba78deec7a28/ include19.
 verification.json: exports, packaged Linux offline/roof checks, ZIP hashes.
-Packaged Forward+ actual game capture also passed from /tmp; image capture/gameplay.png.
+Packaged Forward+ forest capture passed from /tmp; image capture/gameplay.png,
+log artifacts/realism19-packaged-render.log.
 Windows exported, not Windows-hardware tested. No live deployment changed.
 Content19 cannot join old18 servers/checkpoints; old saves remain intact.
 
 ## Next substantial work
-Stage19 current worktree: tools/prepare_fir_needles.py (NumPy/SciPy) converts all
+Stage19 source: tools/prepare_fir_needles.py (NumPy/SciPy) converts all
 432704 needles into area-compensated two-triangle kites; tools/build_fir_lod.py
 reduces woody geometry and exports fir_full.glb (940024 triangles, ~72 MiB).
 Runtime near trees and their distant billboards now use variant B. Auto mesh LOD
 disabled for this asset to preserve needle coverage; distance cutoff still25m.
 Forward+ forest image artifacts/realism19-final/gameplay.png passes; baseline
 realism19-before/gameplay.png. Final smoke and roof tests pass; aim108samples pass.
+Compatibility world capture realism19-world/ passed,276 colliders match stage13.
 Tree crown improved but distant brightness/density/pop still need work.
 Initial aggressive reduction, transparent cutout and autoLOD experiments did
 not solve crown loss; do not use intermediate images/models as final evidence.

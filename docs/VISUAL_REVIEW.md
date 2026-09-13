@@ -229,3 +229,10 @@ near geometry, and the25m transition, repetitive slopes and empty ground remain
 visible. Future work should improve these substantial mismatches rather than
 counting this tree replacement as overall realism. Initial low-ratio, cutout,
 and intermediate kite captures are diagnostic only, not release evidence.
+
+Local previews for source `ba78deec7a28` are under
+`artifacts/visual-preview/ba78deec7a28/`. Both exports, packaged Linux offline
+and roof checks passed; `verification.json` records archive hashes. A packaged
+Forward+ forest capture launched from `/tmp` also passed and saved
+`capture/gameplay.png`. Windows was exported, not executed on Windows hardware.
+No GitHub push or live-service deployment occurred.

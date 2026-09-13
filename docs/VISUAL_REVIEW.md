@@ -104,3 +104,9 @@ Forward+ 游戏截图位于 `artifacts/realism5-lit/gameplay.png`，兼容路径
 Blender 原创双坡/单坡金属屋顶及接缝，分别应用到两种建筑样式，其余保留平顶。源文件 `art/roof_gable.blend`、`art/roof_shed.blend`，重建脚本 `tools/build_roofs.py`。共用世界构建代码同时为单机和专用服务器生成对应凸体碰撞，避免新增屋顶只是可穿透装饰。
 
 屋顶射线测试 `tests/roof_collision.gd` 通过，覆盖 8 栋屋顶各三个坡面位置、挡弹和贯通门洞。新碰撞快照共 276 个形状，其中原有 268 个与基线逐项一致，另外 8 个为屋顶；凸体快照现在记录顶点而非不稳定的资源 ID。单机 smoke 通过。实际场景截图位于 `artifacts/realism8-review/`，专用瞄准镜截图位于 `artifacts/realism8-optic/`。这次没有验证旧线上服务与新客户端的跨版本匹配；本地预览包仍需更新，整体画质目标继续进行。
+
+### 第八轮本地可运行预览
+
+已更新 Windows/Linux ZIP，位置为 `artifacts/visual-preview/b3fdf590901d/`，包含截至第八轮的游戏内容。`verification.json` 记录构建提交、各平台 SHA-256 与检查结果。Linux 打包版本从独立临时目录自动加载旁边 PCK，单机 smoke 和屋顶碰撞测试通过；Windows 完成原生 EXE 导出，未在 Windows 系统执行验证。解压后启动 EXE 或 Linux `IronMeridian` 即可，不需要 play.sh 或另装 Godot。
+
+构建脚本 `tools/package_visual_preview.py` 保留独立提交目录，附带许可/素材来源和运行说明，没有覆盖线上发布。原有顶层第三轮 ZIP 保留，不应作为新版链接使用。这些包供本地离线检查；新屋顶世界内容未部署到旧线上服务，不能据此声称与旧服务匹配。画质优化目标仍未完成。

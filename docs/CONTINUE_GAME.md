@@ -35,10 +35,15 @@ Stages 6–8 are ready for a local checkpoint; see docs/VISUAL_REVIEW.md.
    overall quality. Do not equate more small details or green tests with success.
 3. Improve material consistency and architectural variety; preserve server/client
    collision consistency. World.gd is shared by dedicated and offline modes.
-4. Refresh runnable local previews after coherent visual changes. Existing ZIPs
-   in artifacts/visual-preview are stage 3 and stale, NOT the latest assets.
-   Old packages default to localhost/offline. Windows export was not tested on
-   Windows hardware. Do not deploy or publish as part of this graphics work.
+4. Current local previews are in artifacts/visual-preview/b3fdf590901d/:
+   Windows and Linux ZIPs include stages 6–8. verification.json records archive
+   hashes, exports and packaged Linux offline/roof test passes. Launch the EXE
+   or Linux executable directly after extraction; no play.sh/Godot install.
+   Top-level older ZIPs remain stage 3: use the commit-specific directory.
+   These previews default to localhost/offline. Windows export was not tested
+   on Windows hardware. Do not deploy or publish as part of this graphics work.
+   Rebuild using python3 tools/package_visual_preview.py from a clean commit.
+   It copies official Godot notices retained in artifacts/visual-preview/.
 
 ## Environment and context
 Godot tools/godot 4.4.1; Blender tools/blender-4.3.2-linux-x64/blender 4.3.2.

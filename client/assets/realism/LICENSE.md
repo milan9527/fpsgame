@@ -54,3 +54,9 @@ of the existing CC0 `grey_plaster_02` albedo, prepared by
 `concrete_albedo.jpg`, `concrete_normal.jpg`, and `concrete_roughness.jpg`:
 https://polyhaven.com/a/concrete_floor_02 — Rob Tuytel, CC0.
 Original 2K maps for interior floors; URLs/checksums are in `SOURCES.json`.
+
+`terrain_rock_albedo.jpg`, `terrain_rock_normal.jpg`, and
+`terrain_rock_roughness.jpg`: https://polyhaven.com/a/rock_face_03 —
+Dario Barresi (Photography), Rico Cilliers (Processing), CC0.
+Original 2K maps blended by slope on background terrain; source URLs and
+checksums are recorded in `SOURCES.json`.

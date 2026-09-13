@@ -149,7 +149,7 @@ func _ready() -> void:
 		cone.height = rng.randf_range(35, 85)
 		cone.radial_segments = 5
 		mountain.mesh = Visuals.mountain(cone.bottom_radius * 1.4, cone.height * 0.55, i)
-		mountain.material_override = mat("667b80")
+		mountain.material_override = Visuals.terrain_material()
 		mountain.position = Vector3(sin(angle) * 210, -3, cos(angle) * 210)
 		mountain.set_meta("ridge", Vector3(cone.bottom_radius * 1.4, cone.height * 0.55, i))
 		add_child(mountain)

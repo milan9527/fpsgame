@@ -1,6 +1,17 @@
 extends RefCounted
 ## Presentation-only details. Uses its own random stream and creates no colliders.
 static var weapon_material_cache: Dictionary = {}
+static var terrain_material_cache: ShaderMaterial
+
+static func terrain_material() -> ShaderMaterial:
+	if terrain_material_cache == null:
+		terrain_material_cache = ShaderMaterial.new()
+		terrain_material_cache.shader = load("res://shaders/terrain_slopes.gdshader")
+		terrain_material_cache.set_shader_parameter("ground_map", load("res://assets/realism/ground_albedo.jpg"))
+		for kind in ["albedo", "normal", "roughness"]:
+			var key: String = "rock_map" if kind == "albedo" else "rock_" + kind
+			terrain_material_cache.set_shader_parameter(key, load("res://assets/realism/terrain_rock_" + kind + ".jpg"))
+	return terrain_material_cache
 
 static func weapon_finish(model: Node3D) -> void:
 	for mesh in model.find_children("*", "MeshInstance3D", true, false):

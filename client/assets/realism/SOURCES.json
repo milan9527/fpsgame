@@ -512,5 +512,32 @@
       }
     },
     "modification": "2K original maps; world-scaled interior floor material."
+  },
+  {
+    "asset": "rock_face_03",
+    "page": "https://polyhaven.com/a/rock_face_03",
+    "license": "CC0-1.0",
+    "authors": {
+      "Dario Barresi": "Photography",
+      "Rico Cilliers": "Processing"
+    },
+    "files": {
+      "albedo": {
+        "size": 3814362,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rock_face_03/rock_face_03_diff_2k.jpg",
+        "md5": "657add9e8a8dffaeed19bdfc58078b59"
+      },
+      "normal": {
+        "size": 4473242,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rock_face_03/rock_face_03_nor_gl_2k.jpg",
+        "md5": "279b33e71ae6275cafa24e6597024c98"
+      },
+      "roughness": {
+        "size": 2601552,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rock_face_03/rock_face_03_rough_2k.jpg",
+        "md5": "8895a8b199487fd6cfeed2fed1fb39b4"
+      }
+    },
+    "modification": "Original 2K seamless maps for slope-blended background terrain."
   }
 ]

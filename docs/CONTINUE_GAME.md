@@ -1,105 +1,49 @@
-# Game development handoff
+# Current game handoff
+Updated 2026-09-13. Repo /home/ec2-user/project/fpsgame; branch feature/vehicles.
 
-Updated 2026-09-13. Repo: /home/ec2-user/project/fpsgame, branch feature/vehicles.
+## Goal and constraints
+Continue realistic Godot + Blender visuals toward Peace Elite: characters,
+weapons/arms, architecture, terrain/vegetation and lighting. Inspect actual game
+images, verify offline play and aiming/collision, provide current local previews.
+Goal NOT complete: architecture/layout remain repetitive and character/equipment
+still visibly procedural. Work autonomously. NEVER push without confirmation.
+No AWS changes or publication needed. Do not claim UI-independent execution.
 
-## Active goal
-Improve the Godot + Blender shooter toward realistic visuals in the direction of
-Peace Elite: characters, weapons/arms, architecture, terrain, vegetation, lighting.
-Inspect gameplay screenshots, verify offline gameplay and aiming/collision, and
-provide current runnable local previews. The goal is NOT complete. Work
-autonomously; NEVER push GitHub without confirmation. No AWS changes needed.
+## Current work
+Committed checkpoint 6431dd7: stages 12 character UV/proportions and 13 yards.
+Stage 14 adds slope-blended scanned rock/soil on decorative mountains:
+client/shaders/terrain_slopes.gdshader, world_visuals terrain material cache,
+world.gd material assignment, terrain_rock maps and fetch_terrain_material.py.
+Forward+ capture passed: artifacts/realism14-forward/gameplay.png.
+Compatibility verification and review recorded in docs/VISUAL_REVIEW.md.
+No collision geometry changed in stage 14. Content ash-valley-19, protocol17.
+Stage13 tests rejected old18 peers/checkpoints and preserved old save files.
+276 collision shapes in artifacts/realism13-world/collision.json match stage11.
+Full historical changes/evidence are in docs/VISUAL_REVIEW.md; read selectively.
 
-## Current checkpoint
-Detailed checkpoints are in docs/VISUAL_REVIEW.md; stage 13 is the latest work.
-- Detailed shotgun/marksman geometry and wide smooth scope bore. Initial scope
-  support/turret intrusion was fixed. Final dedicated optic capture passed in
-  Compatibility and Forward+ (artifacts/realism8-optic*/).
-- Full six-view Compatibility capture timed out at 180 seconds; its partial
-  outputs are not a pass. The dedicated optic test settles animations numerically
-  before rendering a few frames. It verifies images, not gameplay correctness.
-- Background groves follow decorative mountain heights via a shared function.
-- Blender gable/shed roofs with matching convex collisions on 8 buildings.
-- Roof ray tests pass: three slope positions each, blocked shots, clear doors.
-- Collision snapshot artifacts/realism8-review/collision.json: original 268
-  entries unchanged plus 8 roof hulls. Convex snapshots record vertices.
-- Offline smoke passed after roof changes: artifacts/realism8-smoke.log.
-- Aim alignment passed 108 samples before the final support/turret adjustment;
-  anchors were not changed. Model rules passed before roof changes.
-- Actual scene screenshots: artifacts/realism8-review/ (Compatibility).
-  Optic screenshots: artifacts/realism8-optic-forward/ and realism8-optic/.
+## Next substantive work
+Improve architectural silhouettes and natural layout, dense ground vegetation,
+and realistic equipment. Current screenshot still falls well below reference.
+Stage14 Compatibility capture passed; license and review updated.
+Refresh runnable desktop packages after clean commit using
+python3 tools/package_visual_preview.py. Existing previews at
+artifacts/visual-preview/9648cb40b560/ contain stages6–11 and content18 ONLY.
+Linux packaged offline/roof checks passed; Windows exported, not hardware-tested.
+New source19 cannot join old18 servers. No live deployment has been changed.
 
-## Next work
-Stage 13 adds warehouse service yards, road connectors and tactical-map footprints,
-excluding grass from the paved surfaces. Latest image:
-artifacts/realism13-yard/gameplay.png. Collision snapshot still matches 276
-stage-11 shapes/transforms; offline smoke and tactical-map checks pass.
-IMPORTANT: content_revision is now ash-valley-19 (protocol still 17), correcting
-the missing version bump after roof collision additions. New compatibility test
-rejects ash-valley-18 peers/checkpoints and verifies old save files remain intact.
-No live service was changed. Existing 9648cb40b560 ZIPs are still version 18.
-World layout remains sparse and repetitive: pursue substantial architecture,
-terrain and furnishing improvements rather than declaring quality complete.
-
-Stage 12 revises operator proportions/helmet shell, smooths cloth joint weights
-and fixes lost limb camouflage UVs caused by differently named Blender UV layers.
-UV scale now follows a common 0.6m repeat. Latest image:
-artifacts/realism12-character-scaled.png. Animation/UV regression passes
-(12804/12876 non-degenerate cloth triangles); vehicle/downed graphical tests
-passed the revised geometry/weights before the final UV-only adjustment.
-17 bones / 15 clips remain. The 9648cb40b560 preview predates stage 12.
-Important remaining weaknesses include sparse/repetitive world layout and
-simple equipment/face/architecture; the goal is not complete.
-
-Stage 11 adds scanned concrete interior floors, slab joints/skirting, a visible
-central ceiling lamp with a distance-faded shadowed OmniLight, and a real wooden
-cargo model over the existing interior cover collider. Offline smoke passes;
-world collision snapshot matches all 276 stage-8 entries. Latest indoor image:
-artifacts/realism11-lit/gameplay.png (Forward+). Use CAPTURE_INTERIOR=1 with
-tests/visual_gameplay_capture.gd to reproduce. More interior furnishing,
-characters and natural world layout remain important.
-
-Stage 10 replaces only the background grove billboard with fuller CC0 fir B,
-and adds a lower-contrast painted plaster derivative. Both new textures have
-explicit mipmaps (initial captures exposed aliasing without them).
-Latest verified actual screenshot: artifacts/realism10-final/gameplay.png.
-Runtime does not instantiate the 2.3M-triangle source tree. Its 105 MiB Blender
-intermediate lives in artifacts/realism-sources/tree-b/background_fir.blend;
-rebuild with tools/fetch_tree_variant.py then FIR_VARIANT=B in Blender running
-tools/build_tree_impostor.py. Sources/range hashes are in SOURCES.json.
-The b3fdf590901d preview packages also predate stage 10.
-
-Stage 9 adds a profiled carbine receiver, boolean ejection recess, selector and
-continuous rail, plus cached procedural roughness on weapon steel/polymer.
-Actual Forward+ image: artifacts/realism9-gameplay/gameplay.png. Aim 108 samples,
-weapon model/anchor rules and first-person actions passed in realism9-*.log.
-Carbine is 10,240 triangles / 4 meshes; anchors unchanged. The b3fdf590901d ZIP
-predates this stage. Next focus should include fuller tree crowns and stronger
-environment/material improvements, not just further small gun details.
-
-1. Inspect current status/logs; no capture is expected to remain running.
-2. Continue substantial visual work: flat repetitive compound, sparse tree crowns,
-   simple wall/roof finish and uniform layout still fall well below the requested
-   overall quality. Do not equate more small details or green tests with success.
-3. Improve material consistency and architectural variety; preserve server/client
-   collision consistency. World.gd is shared by dedicated and offline modes.
-4. Current local previews are in artifacts/visual-preview/9648cb40b560/:
-   Windows and Linux ZIPs include stages 6–11. verification.json records archive
-   hashes, exports and packaged Linux offline/roof test passes. Launch the EXE
-   or Linux executable directly after extraction; no play.sh/Godot install.
-   Top-level older ZIPs remain stage 3; b3fdf590901d is stage 8. Use the newest directory.
-   These previews default to localhost/offline. Windows export was not tested
-   on Windows hardware. Do not deploy or publish as part of this graphics work.
-   Rebuild using python3 tools/package_visual_preview.py from a clean commit.
-   It copies official Godot notices retained in artifacts/visual-preview/.
-
-## Environment and context
+## Tools and validation
 Godot tools/godot 4.4.1; Blender tools/blender-4.3.2-linux-x64/blender 4.3.2.
-EC2 uses Mesa llvmpipe software rendering, no physical GPU. Forward+ commands use
-VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json LP_NUM_THREADS=8
-with xvfb-run. Compatibility: --rendering-method gl_compatibility.
-Avoid anisotropic triplanar textures (driver stall); planar anisotropic works.
-Read small relevant log tails and only necessary images. For input-too-long,
-Codex CLI /compact summarizes history. If unavailable, start a new chat in this
-repo, request continuation from this file and explicitly restore the original
-goal. Do not paste full conversation or delete history/secrets. A handoff file
-itself does not change the context limit.
+Software llvmpipe, no physical GPU. Use LP_NUM_THREADS=8 and
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json with xvfb-run.
+CAPTURE_ARTIFACT_DIR=<absolute> tools/godot --path client --audio-driver Dummy
+--script ../tests/visual_gameplay_capture.gd captures actual offline game.
+Add --rendering-method gl_compatibility for Compatibility; CAPTURE_INTERIOR=1
+for indoors. Headless tests use --headless --path client --script ../tests/NAME.gd.
+Do not use anisotropic triplanar filtering (software driver stalls).
+Enable mipmaps for new script-loaded 3D textures. Preserve genuine shader imports.
+
+## Context recovery
+Keep tool outputs short and images selective; do not reload full history.
+Codex CLI /compact summarizes history. A fresh chat can read this file and
+explicitly restore the goal if compaction is unavailable. This file alone does
+not alter service input limits. Never delete private session history or secrets.

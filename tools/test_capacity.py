@@ -14,6 +14,8 @@ from candidate_runtime import candidate_command
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--candidate-dir", type=Path)
+parser.add_argument("--seconds", type=int, choices=range(8, 46), default=8,
+                    help="Active input duration, 8–45 seconds (default: 8)")
 options = parser.parse_args()
 runtime = [str(ROOT / 'tools/godot'), '--headless', '--path', str(ROOT / 'client')]
 candidate = None
@@ -72,6 +74,7 @@ try:
     for i, identity in enumerate(credentials):
         env = dict(os.environ, TEST_USERNAME=identity['username'], TEST_PASSWORD=identity['password'],
                    TEST_ROOM_ID=ROOM, API_URL='http://127.0.0.1:8000', CAPACITY_BARRIER=str(BARRIER),
+                   CAPACITY_SECONDS=str(options.seconds),
                    XDG_DATA_HOME=str(OUT / ('profile-%02d' % i)))
         path = OUT / ('client-%02d.log' % i)
         log = path.open('w')
@@ -89,7 +92,7 @@ try:
                           headers={'Authorization': 'Bearer ' + outsider['token']})
     assert response.status_code == 503, 'A live full room admitted an extra player'
     BARRIER.touch()
-    texts = wait_for('CAPACITY_CLIENT_PASS', 30)
+    texts = wait_for('CAPACITY_CLIENT_PASS', options.seconds + 25)
     Path(str(BARRIER) + '.exit').touch()
     for proc, log, path in processes:
         assert proc.wait(timeout=15) == 0, str(path)
@@ -111,8 +114,9 @@ try:
     report = {'status': 'passed', 'build': BUILD, 'clients': 16, 'independent_peers': len(set(peers)), 'matches': list(matches),
               'candidate': {'commit': candidate['commit'], 'sha256': candidate['sha256']} if candidate else None,
               'overflow_status': response.status_code, 'room_recycled': True,
+              'active_input_seconds': options.seconds,
               'results': [re.search(r'CAPACITY_CLIENT_PASS[^\n]+', text).group(0) for text in texts],
-              'limits': 'Single host, headless, eight seconds of active input; not 16 people, rendered FPS, WAN, or endurance.'}
+              'limits': 'Single host, headless, bounded active input; not 16 people, rendered FPS, WAN, or long-term endurance.'}
     (OUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print('CAPACITY_16_PASS ' + str(OUT), flush=True)
 finally:

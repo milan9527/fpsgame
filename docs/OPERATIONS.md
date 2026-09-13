@@ -95,6 +95,8 @@ sudo journalctl -u iron-meridian-backup.service --since today
 
 报告 `artifacts/capacity-1789259737404766483/report.json` 绑定归档哈希，各客户端与服务端日志保留在同目录；汇总 `artifacts/capacity-038-packed.log`。客户端为 headless、最大帧率 30，测试不测 GPU 渲染帧率，不等于 16 名真人、公网延迟、长时间对局或生产峰值压力。候选参数会验证 API 版本和归档完整性，每个客户端使用独立用户数据目录。
 
+后续支持 `--seconds 8..45`，默认仍为 8 秒。长于 30 秒时要求客户端通过正常换弹输入消耗备用弹药；服务端时间推进须超过操作时间的 85%。45 秒场景已通过，报告 `artifacts/capacity-1789259825910728571/report.json`，汇总 `artifacts/capacity-038-45s.log`。全部客户端观察到 16 个角色移动，记录 1049–1280 次位置校正计数，服务端时间推进 45.00–45.05 秒；每人消耗 120 发备用弹药。弹药耗尽后继续移动并发送开火输入，不能称为全程持续实弹射击。第 17 个请求被拒绝，退出后房间正常回收。此测试仍不是完整对局或长期耐久性验证。
+
 Linux 客户端以 OpenGL Compatibility 渲染。开发主机通过软件 OpenGL 做实际渲染验证，所得性能不代表玩家 GPU 性能。Windows、macOS、移动端目前未打包验证。
 
 ## AI 任务

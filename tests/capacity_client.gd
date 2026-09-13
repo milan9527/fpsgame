@@ -29,7 +29,17 @@ func run() -> void:
 	var initial_time: float = game.phase_time
 	var observed_movement := {}
 	var start := Time.get_ticks_msec()
-	while Time.get_ticks_msec() - start < 8000:
+	var duration := int(OS.get_environment("CAPACITY_SECONDS")) if OS.has_environment("CAPACITY_SECONDS") else 8
+	assert(duration >= 8 and duration <= 45)
+	var initial_reserve: int = player.reserve
+	var reload_press := false
+	while Time.get_ticks_msec() - start < duration * 1000:
+		if reload_press:
+			Input.action_release("reload")
+			reload_press = false
+		elif player.ammo == 0 and player.reload_left <= 0 and player.reserve > 0:
+			Input.action_press("reload")
+			reload_press = true
 		var second := (Time.get_ticks_msec() - start) / 1000
 		Input.action_press("forward" if second % 4 < 2 else "back")
 		Input.action_release("back" if second % 4 < 2 else "forward")
@@ -42,13 +52,16 @@ func run() -> void:
 	Input.action_release("forward")
 	Input.action_release("back")
 	Input.action_release("fire")
+	Input.action_release("reload")
 	var moved := observed_movement.size()
 	assert(player.ammo < 30 and player.prediction_corrections > 30)
-	assert(initial_time - game.phase_time > 5, "Server simulation fell too far behind wall time")
+	assert(initial_time - game.phase_time > duration * 0.85, "Server simulation fell too far behind wall time")
+	if duration >= 30:
+		assert(player.reserve < initial_reserve, "Sustained clients must reload using normal input")
 	assert(moved >= 8, "Remote movement did not replicate")
-	print("CAPACITY_CLIENT_PASS peer=%d match=%s moved=%d corrections=%d simulated=%.2f" % [game.local_id, game.network_round_id, moved, player.prediction_corrections, initial_time - game.phase_time])
+	print("CAPACITY_CLIENT_PASS peer=%d match=%s moved=%d corrections=%d simulated=%.2f reserve_used=%d" % [game.local_id, game.network_round_id, moved, player.prediction_corrections, initial_time - game.phase_time, initial_reserve - player.reserve])
 	# Keep all clients connected until the orchestrator has checked every result.
 	while not FileAccess.file_exists(OS.get_environment("CAPACITY_BARRIER") + ".exit"):
-		assert(Time.get_ticks_msec() < deadline + 20000, "Capacity exit barrier timeout")
+		assert(Time.get_ticks_msec() < start + duration * 1000 + 25000, "Capacity exit barrier timeout")
 		await process_frame
 	game.request_quit()

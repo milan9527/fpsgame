@@ -12,9 +12,9 @@
 
 构建失败会保留日志和失败状态，不将失败目录当作通过的候选包。成功报告中的 `scope` 仅说明包内离线规则验证，不代替网络、渲染或物理音频设备验收。后续发布仍需相应回归与服务版本切换。
 
-## 0.38 候选（未部署）
+## 0.38 候选（已部署独立开发环境，未发布）
 
-源码版本为 0.38.0-dev，协议 17、资源 ash-valley-18、数据库 0004 不变；在线仍要求完整版本清单匹配。新增安全路线可用时提前转移、驾驶员等待队友与危险中断、机器人主动搭乘及安全下车。运行服务及默认归档仍为 0.37。
+源码版本为 0.38.0-dev，协议 17、资源 ash-valley-18、数据库 0004 不变；在线仍要求完整版本清单匹配。新增安全路线可用时提前转移、驾驶员等待队友与危险中断、机器人主动搭乘及安全下车。独立开发服务为 0.38；发布服务及默认归档仍为 0.37。
 
 - 源提交：`484d98d958a0973d5dc630ce6474dcdcba950035`。
 - 目录：`artifacts/candidates/0.38.0-dev-484d98d9-ssm8gza_/`。
@@ -25,9 +25,25 @@
 - 后端在隔离 Docker 内网、临时 PostgreSQL/Redis 中通过 95 项测试，无跳过；一项第三方 Starlette 弃用警告。`backend-verification.json`、`logs/backend-tests.log`。
 - 专服镜像以非 root 用户运行，执行文件/PCK/build.json 与候选逐字节一致，禁用网络启动检查通过；`server-image.json`。
 
-后端镜像 `iron-meridian-api:0.38-484d98d9` 固定 ID 为 `sha256:62e6c5e6813bc83f52f89a1932ad0b92cc4e94bab0081eb581f819a94b7e1ed2`；专服 `iron-meridian-candidate:484d98d958a0` 固定 ID 为 `sha256:00e5f2831d82dafc5069794766f5c54df16f27986a55f2f1acd8dd438129db31`。两者尚未替换运行服务。
+后端镜像 `iron-meridian-api:0.38-484d98d9` 固定 ID 为 `sha256:62e6c5e6813bc83f52f89a1932ad0b92cc4e94bab0081eb581f819a94b7e1ed2`；专服 `iron-meridian-candidate:484d98d958a0` 固定 ID 为 `sha256:00e5f2831d82dafc5069794766f5c54df16f27986a55f2f1acd8dd438129db31`。两者已用于独立开发服务。
 
-首次候选 `0.38.0-dev-37471e67-1sovf4g8` 在 37 项检查后因乘客测试中间日志被识别为额外成功标记而失败，未生成合格归档。修正日志命名并提交后完整重建通过，失败目录保留。存量数据库恢复演练、打包客户端联网、自然对局和部署仍待完成；本候选不等于完整商业游戏，也不替代这些验收。
+首次候选 `0.38.0-dev-37471e67-1sovf4g8` 在 37 项检查后因乘客测试中间日志被识别为额外成功标记而失败，未生成合格归档。修正日志命名并提交后完整重建通过，失败目录保留。打包客户端联网验收、自然对局及发布仍需继续；本候选不等于完整商业游戏。
+
+### 0.38 存量数据与开发环境
+
+发布环境备份 `artifacts/backups/20260913T001854Z-0aa0cf81` 在隔离 PostgreSQL 中恢复，通过新后端的 0004 幂等启动。55 个账号、112 场对局、169 条玩家结果的全字段指纹不变，约束、队伍和账号统计一致；未回灌线上数据库。报告 `artifacts/candidate-038-startup-restore.json`。初次编排命令因 Python 模块搜索路径错误在任何备份动作前退出，调整导入路径后执行成功。
+
+`deploy_candidate_dev.py --with-api` 在开发房间无人、无预约、结果队列为空时备份开发数据库并升级 API/专服。前后 users、matches、results 全字段指纹一致，保留现有 PostgreSQL/Redis 数据卷和旧镜像 ID，容器自动重启策略为 `unless-stopped`。备份在候选目录 `dev-backup/database.pgdump`，权限 0600；报告 `dev-deployment.json`，日志 `artifacts/candidate-038-dev-deploy.log`。本次没有触发失败回退。
+
+开发 API 8001、双人专服 UDP 27031 已为 0.38；发布 API 8000 及专服仍为 0.37。重启开发固定镜像使用：
+
+```sh
+docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml -f artifacts/duo-candidate.override.json up -d --no-build
+```
+
+打包客户端在 30 FPS、固定单向 150 ms 下通过机器人驾驶员等待上车、行驶、制动和双方下车回归，服务器等待 82 个物理帧后乘客正常入座。汇总 `artifacts/candidate-038-bot-boarding.log`，报告前缀 `artifacts/vehicle-login-duo-bot-driver-boarding-wait-fps30-delay150-packed-484d98d9-`。这是自动化真人账号乘客验证，不是机器人作为乘客的专项联网验证，也不代表公网体验。
+
+两个打包客户端通过开发服务正常邀请、接受、准备、准入和同队快照，保持同一队伍连续进入两局。汇总 `artifacts/candidate-038-dev-requeue.log`，客户端日志 `artifacts/candidate-484d98d9-party-requeue-{0,1}-{0,1}.log`；测试绑定上述候选归档哈希，不是自然完整对局结算验证。
 
 ## 0.37 候选（已作为开发版本发布）
 

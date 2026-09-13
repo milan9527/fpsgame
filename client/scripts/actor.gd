@@ -177,6 +177,7 @@ func update_weapon_visuals(force := false) -> void:
 		third_person_gun.queue_free()
 	if character_animation.available:
 		third_person_gun = load(WEAPON_MODELS[weapon]).instantiate()
+		load("res://scripts/world_visuals.gd").weapon_finish(third_person_gun)
 		character_animation.skeleton.add_child(third_person_gun)
 		add_grip_visual(third_person_gun)
 		update_weapon_attachment()
@@ -185,6 +186,7 @@ func update_weapon_visuals(force := false) -> void:
 			gun.remove_child(gun_model)
 			gun_model.queue_free()
 		gun_model = load(WEAPON_MODELS[weapon]).instantiate()
+		load("res://scripts/world_visuals.gd").weapon_finish(gun_model)
 		gun_model.scale = Vector3.ONE * 0.75
 		gun.add_child(gun_model)
 		add_grip_visual(gun_model)

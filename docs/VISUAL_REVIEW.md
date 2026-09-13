@@ -110,3 +110,11 @@ Blender 原创双坡/单坡金属屋顶及接缝，分别应用到两种建筑�
 已更新 Windows/Linux ZIP，位置为 `artifacts/visual-preview/b3fdf590901d/`，包含截至第八轮的游戏内容。`verification.json` 记录构建提交、各平台 SHA-256 与检查结果。Linux 打包版本从独立临时目录自动加载旁边 PCK，单机 smoke 和屋顶碰撞测试通过；Windows 完成原生 EXE 导出，未在 Windows 系统执行验证。解压后启动 EXE 或 Linux `IronMeridian` 即可，不需要 play.sh 或另装 Godot。
 
 构建脚本 `tools/package_visual_preview.py` 保留独立提交目录，附带许可/素材来源和运行说明，没有覆盖线上发布。原有顶层第三轮 ZIP 保留，不应作为新版链接使用。这些包供本地离线检查；新屋顶世界内容未部署到旧线上服务，不能据此声称与旧服务匹配。画质优化目标仍未完成。
+
+## 第九轮：卡宾枪近景结构
+
+机匣由单块倒角方盒改为有斜面过渡的截面挤出体，用布尔切割形成真实抛壳口凹槽及可见枪机；增加保险拨杆、加强筋和完整连续导轨。保持四个网格、原有枪口/瞄准锚点与独立弹匣，共 10,240 三角形。生成源仍为 `tools/build_assets.py`，可用 `ASSET_ONLY=carbine` 单独构建。
+
+武器钢材与聚合物使用共享的细颗粒粗糙度贴图，按材质区分范围；缓存材质避免为每个远程玩家复制纹理。该效果只是细微的表面处理，并未将它描述成完整的写实武器贴图制作。没有使用曾导致软件驱动卡顿的各向异性三平面组合。
+
+`artifacts/realism9-gameplay/gameplay.png` 为实际 Forward+ 游戏截图，已检查机匣和导轨轮廓。108 组瞄准、三武器模型/锚点、第一人称动作测试均通过（`realism9-aim.log`、`realism9-weapons.log`、`realism9-viewmodel.log`）。第八轮 `b3fdf590901d` ZIP 不包含本轮近景改动。整体场景、树冠和材质仍需继续改进，目标没有完成。

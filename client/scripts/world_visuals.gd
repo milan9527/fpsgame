@@ -1,5 +1,39 @@
 extends RefCounted
 ## Presentation-only details. Uses its own random stream and creates no colliders.
+static var weapon_material_cache: Dictionary = {}
+
+static func weapon_finish(model: Node3D) -> void:
+	for mesh in model.find_children("*", "MeshInstance3D", true, false):
+		for index in range(mesh.mesh.get_surface_count()):
+			var source = mesh.mesh.surface_get_material(index)
+			if not source is StandardMaterial3D: continue
+			if not (source.resource_name.begins_with("Graphite /") or source.resource_name.begins_with("Slate /") or source.resource_name.begins_with("Bolt /")): continue
+			var key: String = source.resource_name
+			if not weapon_material_cache.has(key):
+				var finish: StandardMaterial3D = source.duplicate()
+				var polymer := key.begins_with("Slate /")
+				var noise := FastNoiseLite.new()
+				noise.seed = 729
+				noise.frequency = 0.32
+				noise.fractal_octaves = 2
+				var grain := NoiseTexture2D.new()
+				grain.width = 128
+				grain.height = 128
+				grain.noise = noise
+				grain.seamless = true
+				var ramp := Gradient.new()
+				ramp.set_color(0, Color(0.66, 0.66, 0.66) if polymer else Color(0.43, 0.43, 0.43))
+				ramp.set_color(1, Color(0.88, 0.88, 0.88) if polymer else Color(0.65, 0.65, 0.65))
+				grain.color_ramp = ramp
+				finish.roughness = 1.0
+				finish.roughness_texture = grain
+				finish.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+				finish.uv1_triplanar = true
+				finish.uv1_scale = Vector3.ONE * 18.0
+				finish.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+				weapon_material_cache[key] = finish
+			mesh.set_surface_override_material(index, weapon_material_cache[key])
+
 static func military_materials(model: Node3D) -> void:
 	for mesh in model.find_children("*", "MeshInstance3D", true, false):
 		for index in range(mesh.mesh.get_surface_count()):

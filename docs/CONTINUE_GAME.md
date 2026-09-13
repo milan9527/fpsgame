@@ -29,6 +29,14 @@ Stages 6–8 are ready for a local checkpoint; see docs/VISUAL_REVIEW.md.
   Optic screenshots: artifacts/realism8-optic-forward/ and realism8-optic/.
 
 ## Next work
+Stage 9 adds a profiled carbine receiver, boolean ejection recess, selector and
+continuous rail, plus cached procedural roughness on weapon steel/polymer.
+Actual Forward+ image: artifacts/realism9-gameplay/gameplay.png. Aim 108 samples,
+weapon model/anchor rules and first-person actions passed in realism9-*.log.
+Carbine is 10,240 triangles / 4 meshes; anchors unchanged. The b3fdf590901d ZIP
+predates this stage. Next focus should include fuller tree crowns and stronger
+environment/material improvements, not just further small gun details.
+
 1. Inspect current status/logs; no capture is expected to remain running.
 2. Continue substantial visual work: flat repetitive compound, sparse tree crowns,
    simple wall/roof finish and uniform layout still fall well below the requested

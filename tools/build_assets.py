@@ -53,7 +53,40 @@ if os.environ.get('ASSET_ONLY') == 'operator':
     raise SystemExit(0)
 
 # Blender Z up, +Y forward exports to Godot -Z forward.
-box('Upper receiver', (0, 0.015, 0), (0.10, 0.34, 0.11), steel)
+section = [(-0.05, -0.04), (-0.035, -0.055), (0.035, -0.055),
+           (0.05, -0.04), (0.05, 0.025), (0.028, 0.055),
+           (-0.028, 0.055), (-0.05, 0.025)]
+vertices = [(x, y, z) for y in [-0.155, 0.185] for x, z in section]
+faces = [(i, (i + 1) % 8, (i + 1) % 8 + 8, i + 8) for i in range(8)]
+faces += [tuple(reversed(range(8))), tuple(range(8, 16))]
+receiver_mesh = bpy.data.meshes.new('Forged receiver profile')
+receiver_mesh.from_pydata(vertices, [], faces)
+receiver = bpy.data.objects.new('Upper receiver', receiver_mesh)
+bpy.context.collection.objects.link(receiver)
+receiver.data.materials.append(steel)
+bpy.context.view_layer.objects.active = receiver
+receiver.select_set(True)
+bpy.ops.object.mode_set(mode='EDIT')
+bpy.ops.mesh.select_all(action='SELECT')
+bpy.ops.mesh.normals_make_consistent(inside=False)
+bpy.ops.object.mode_set(mode='OBJECT')
+# Recess the right-hand ejection port instead of painting a rectangle on a cube.
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0.049, 0.015, 0.008))
+cutter = bpy.context.object
+cutter.dimensions = (0.022, 0.10, 0.036)
+bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+bpy.context.view_layer.objects.active = receiver
+cut = receiver.modifiers.new('Ejection recess', 'BOOLEAN')
+cut.operation = 'DIFFERENCE'
+cut.object = cutter
+bpy.ops.object.modifier_apply(modifier=cut.name)
+bpy.data.objects.remove(cutter, do_unlink=True)
+edge = receiver.modifiers.new('Forged edges', 'BEVEL')
+edge.width = 0.0015
+edge.segments = 3
+receiver.modifiers.new('Receiver normals', 'WEIGHTED_NORMAL')
+bolt_metal = material('Bolt / brushed steel', (0.085, 0.09, 0.095), 0.85)
+box('Visible bolt', (0.041, 0.015, 0.008), (0.004, 0.085, 0.027), bolt_metal, 0.002)
 box('Lower receiver', (0, -0.015, -0.065), (0.08, 0.23, 0.07), polymer)
 def cylinder(name, at, radius, depth, mat, axis='Y'):
     bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=radius, depth=depth, location=at)
@@ -69,11 +102,17 @@ cylinder('Barrel', (0, 0.36, 0.015), 0.018, 0.38, steel)
 for y in [0.32, 0.44, 0.51]: cylinder('Barrel collar',(0,y,0.015),0.022,0.015,steel)
 # Recessed-looking side plates, charging handle and fasteners stay clear of the sight line.
 for side in [-1,1]:
-    box('Receiver inset',(side*0.051,-0.035,0.012),(0.004,0.15,0.046),polymer,0.002)
+    if side < 0:
+        box('Receiver inset',(side*0.051,-0.035,0.001),(0.004,0.15,0.029),polymer,0.002)
     for y in [-0.10,0.03]: cylinder('Receiver pin',(side*0.055,y,-0.008),0.006,0.004,steel,'X')
     for i in range(5):
         box('Handguard vent',(side*0.046,0.16+i*0.026,0.02),(0.003,0.016,0.021),steel,0.002)
 box('Charging handle',(0,-0.13,0.044),(0.125,0.018,0.017),steel,0.003)
+cylinder('Selector spindle', (-0.045, -0.081, -0.065), 0.009, 0.012, bolt_metal, 'X')
+box('Selector lever', (-0.053, -0.063, -0.067), (0.01, 0.039, 0.009), steel, 0.002)
+for side in [-1, 1]:
+    box('Receiver reinforcement', (side * 0.034, 0.007, 0.046),
+        (0.007, 0.29, 0.013), steel, 0.002)
 box('Trigger guard lower',(0,-0.055,-0.125),(0.022,0.074,0.013),steel,0.003)
 box('Trigger guard front',(0,-0.016,-0.10),(0.022,0.013,0.055),steel,0.003)
 box('Hand guard', (0, 0.225, 0), (0.09, 0.19, 0.10), polymer)
@@ -90,9 +129,9 @@ cylinder('Optic windage turret', (0.044, -0.015, 0.128), 0.013, 0.017, polymer, 
 cylinder('Optic battery cap', (-0.044, -0.015, 0.128), 0.016, 0.014, steel, 'X')
 for y in [-0.045, 0.015]:
     cylinder('Optic mount screw', (0.033, y, 0.085), 0.006, 0.012, steel, 'X')
-for i in range(6):
-    box('Rail_%02d' % i, (0, 0.10 + i * 0.032, 0.065), (0.09, 0.016, 0.012), steel, 0.003)
-box('Identification plate', (0.052, -0.025, 0.015), (0.005, 0.07, 0.025), brass, 0.001)
+for i in range(16):
+    box('Rail_%02d' % i, (0, -0.14 + i * 0.029, 0.064), (0.063, 0.014, 0.012), steel, 0.002)
+box('Identification plate', (-0.054, 0.019, -0.012), (0.002, 0.042, 0.010), bolt_metal, 0.001)
 def anchor(name, location):
     obj = bpy.data.objects.new(name, None)
     bpy.context.collection.objects.link(obj)

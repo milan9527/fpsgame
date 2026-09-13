@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, model_validator
 from .protocol import BuildInfo, BUILD
+from . import reconnect
 
 
 class RoomHeartbeat(BuildInfo):
@@ -46,12 +47,15 @@ class RoomJoin(BuildInfo):
     mode: Literal['solo', 'duo'] = 'solo'
 
 
-class RoomTicket(BuildInfo):
+class RoomReconnect(BuildInfo):
     room_id: str = Field(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
     instance_id: uuid.UUID
     generation: uuid.UUID
-    ticket: str = Field(min_length=20, max_length=128)
     mode: Literal['solo', 'duo'] = 'solo'
+
+
+class RoomTicket(RoomReconnect):
+    ticket: str = Field(min_length=20, max_length=128)
 
 
 class CancelRoomTicket(BaseModel):
@@ -124,15 +128,19 @@ if previous_reconnect and old and old.generation==room.generation then
     if previous.instance_id~=room.instance_id or previous.generation~=room.generation then previous=nil end
 end
 local deadlines={}
+local epochs={}
 for uid,seconds in pairs(room.reconnectable or {}) do
     local deadline=now+seconds*1000
+    local epoch=room.revision
     if previous and previous.deadlines[uid] and (old.session_versions or {})[uid]==room.session_versions[uid] then
         deadline=math.min(deadline,previous.deadlines[uid])
+        epoch=(previous.epochs or {})[uid] or room.revision
     end
     deadlines[uid]=deadline
+    epochs[uid]=epoch
 end
 redis.call('SET',reconnect_key,cjson.encode({instance_id=room.instance_id,generation=room.generation,
-    deadlines=deadlines}),'EX',12)
+    deadlines=deadlines,epochs=epochs}),'EX',12)
 for _,uid in ipairs(room.players) do
     redis.call('SET',p..'user:'..uid,owner,'EX',15)
     redis.call('SET',p..'user_version:'..uid,tostring((room.session_versions or {})[uid] or 0),'EX',15)
@@ -341,6 +349,32 @@ class RoomDirectory:
         ticket = json.loads(result[1])
         ticket.setdefault('mode', 'solo')
         return ticket
+
+    def allocate_reconnect(self, uid: str, username: str, version: int, body: RoomReconnect):
+        ticket = secrets.token_urlsafe(32)
+        digest = hashlib.sha256(ticket.encode()).hexdigest()
+        result = self.cache.eval(
+            reconnect.ISSUE, 0, self.prefix, uid, str(version), body.room_id,
+            str(body.instance_id), str(body.generation), body.mode,
+            str(BUILD['protocol']), BUILD['content_revision'], username, digest)
+        if result[0] != 'ok':
+            raise HTTPException(409, 'Reconnect seat unavailable or already claimed')
+        room = json.loads(result[1])
+        return dict(ticket=ticket, room_id=room['room_id'], instance_id=room['instance_id'],
+                    generation=room['generation'], host=room['host'], port=room['port'],
+                    mode=room['mode'], build=BUILD, kind='reconnect',
+                    expires_in_ms=int(result[2]))
+
+    def consume_reconnect(self, body: RoomTicket):
+        digest = hashlib.sha256(body.ticket.encode()).hexdigest()
+        result = self.cache.eval(
+            reconnect.CONSUME, 0, self.prefix, digest, body.room_id,
+            str(body.instance_id), str(body.generation), body.mode,
+            str(BUILD['protocol']), BUILD['content_revision'])
+        if result[0] != 'ok':
+            raise HTTPException(401 if result[0] == 'expired' else 409,
+                                'Reconnect ticket expired, unavailable or already claimed')
+        return json.loads(result[1])
 
     def cancel(self, uid: str, ticket: str):
         digest = hashlib.sha256(ticket.encode()).hexdigest()

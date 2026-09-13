@@ -60,3 +60,9 @@ Original 2K maps for interior floors; URLs/checksums are in `SOURCES.json`.
 Dario Barresi (Photography), Rico Cilliers (Processing), CC0.
 Original 2K maps blended by slope on background terrain; source URLs and
 checksums are recorded in `SOURCES.json`.
+
+`facade_0.glb`, `facade_1.glb`, and `facade_2.glb` are original project
+warehouse facade assemblies authored with `tools/build_facades.py`.
+Their concrete members use the existing CC0 `concrete_floor_02` scan at runtime,
+and the steel infill uses the existing CC0 `corrugated_iron_02` scan.
+Folded sheet steel, closed louvers, frames and backing are original geometry.

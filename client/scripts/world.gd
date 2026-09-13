@@ -190,7 +190,6 @@ func building(at: Vector3, style: int) -> void:
 	cargo.position = at + Vector3(-4, 0.2, 0)
 	cargo.scale = Vector3(0.8, 1.3 / 1.5, 1.5)
 	add_child(cargo)
-	block(at + Vector3(8.3, 2.5, 0), Vector3(0.1, 0.9, 6), "465a61", false)
 	if style != 0:
 		var roof_kind := "gable" if style == 1 else "shed"
 		var roof: Node3D = load("res://assets/realism/roof_" + roof_kind + ".glb").instantiate()

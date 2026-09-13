@@ -140,7 +140,25 @@ static func environment(environment: Environment) -> void:
 		environment.ssao_intensity = 1.2
 		environment.ssao_power = 1.3
 
-static func building(world, at: Vector3, _style: int) -> void:
+static func building(world, at: Vector3, style: int) -> void:
+	var facade: Node3D = load("res://assets/realism/facade_" + str(style) + ".glb").instantiate()
+	facade.name = "WarehouseFacade"
+	facade.position = at
+	world.add_child(facade)
+	var concrete: StandardMaterial3D = world.mat("a5a69a").duplicate()
+	# Blender authored metre-based UVs, so the scan repeats every four metres.
+	concrete.uv1_scale = Vector3(0.25, 0.25, 1)
+	for part in facade.find_children("*", "MeshInstance3D", true, false):
+		if str(part.name).begins_with("FacadeConcrete"):
+			part.material_override = concrete
+		elif style == 1 and str(part.name).begins_with("FacadeSteel"):
+			var sheet: StandardMaterial3D = world.mat("465a61").duplicate()
+			sheet.albedo_color = Color.WHITE
+			sheet.uv1_triplanar = false
+			sheet.uv1_world_triplanar = false
+			sheet.uv1_scale = Vector3(0.5, 0.5, 1)
+			sheet.normal_scale = 0.25
+			part.material_override = sheet
 	var first_detail: int = world.get_child_count()
 	# Thin surface details remain within the existing wall/floor surfaces.
 	for x in [-7.73, 7.73]:

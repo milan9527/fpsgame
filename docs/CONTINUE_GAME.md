@@ -10,20 +10,19 @@ still visibly procedural. Work autonomously. NEVER push without confirmation.
 No AWS changes or publication needed. Do not claim UI-independent execution.
 
 ## Current work
-Stage16: grass shader shrinks blades24–48m, culls12m cells at58m.
-169031 tufts,388 cells; same positions as stage15.
-Latest actual Forward+ image artifacts/realism16-forward/gameplay.png.
-Compatibility gameplay capture passed too. Same-camera render primitives fell
-2778070→1748314; draws516→523. Evidence artifacts/realism16-profile.log.
-Compatibility instance checks avoid roads/yards; all276 serialized collisions
-match stage13. Offline smoke passed. See realism15-dense-check.log and smoke.log.
-Headless renderer does not give valid MultiMesh transform readback; use graphics.
-Grass hardware performance still unverified; stage15 construction+checks ~6.6s
-in software environment. Geometry has84 triangles per tuft. Content19 unchanged.
+Stage17: Blender side-wall assemblies (concrete frames, closed louvers,
+folded steel infill). tools/build_facades.py; facade_0/1/2.glb and art/*.blend.
+Final main image artifacts/realism17-final/gameplay.png; final style1 material
+close-up realism17-steel/facade_1.png; style0/2 realism17-facades-final/.
+Models9144/2448/9144 triangles; UV/bounds checks passed. Initial flat backlit
+panels fixed with scan UVs, wider louver gaps and disabling louver auto LOD.
+276 world collisions match stage13; offline smoke passed. Content19 unchanged.
+Stage16 grass remains:169031 tufts,388 cells; shrinks24–48m,culls58m.
+Current packages below predate stage17. Goal remains unfinished.
 Full historical changes/evidence are in docs/VISUAL_REVIEW.md; read selectively.
 
 ## Next substantive work
-Improve architectural silhouettes (long side walls are blank), natural layout,
+Improve architectural silhouettes/fronts/roofs and natural layout,
 and realistic equipment. Current screenshot still falls well below reference.
 Current packages include stages15–16; packaged Linux render also passed.
 Current desktop packages: artifacts/visual-preview/8de4240141a5/, stages6–16,

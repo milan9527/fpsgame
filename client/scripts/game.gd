@@ -217,6 +217,13 @@ func _ready() -> void:
 		ui.quit_requested.connect(request_quit)
 		ui.quit_without_save_requested.connect(func(): request_quit(0, true))
 		ui.local_history_requested.connect(show_local_history)
+		if OS.has_feature("android") or "--mobile-test" in args:
+			var mobile_layer := CanvasLayer.new()
+			mobile_layer.layer = 20
+			add_child(mobile_layer)
+			var mobile := preload("res://scripts/mobile_controls.gd").new()
+			mobile_layer.add_child(mobile)
+			mobile.bind(self)
 		if smoke:
 			call_deferred("start_solo")
 		elif "--capture-game" in args:

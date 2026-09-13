@@ -156,6 +156,11 @@ def main():
     windows_tests = json.loads((ROOT / "artifacts/windows-verification/verification.json").read_text())
     assert windows_tests["status"] == "passed"
     assert hashlib.sha256(windows_archive.read_bytes()).hexdigest() == windows_build["sha256"] == windows_tests["archive_sha256"]
+    from publish_android import verify_build
+    android_build = json.loads((ROOT / "artifacts/android-build/build.json").read_text())
+    verify_build(android_build)
+    android_apk = Path(android_build["apk"])
+    assert hashlib.sha256(android_apk.read_bytes()).hexdigest() == android_build["sha256"]
     account = aws("sts").get_caller_identity()["Account"]
     prefix = "im-" + state["run"]
     ec2 = aws("ec2")
@@ -354,6 +359,8 @@ def main():
                          ExtraArgs={"ContentType": "application/gzip", "CacheControl": "public,max-age=31536000,immutable"})
     aws("s3").upload_file(str(windows_archive), download_bucket, "downloads/" + windows_archive.name,
                          ExtraArgs={"ContentType": "application/zip", "CacheControl": "no-cache"})
+    aws("s3").upload_file(str(android_apk), download_bucket, "downloads/" + android_apk.name,
+                         ExtraArgs={"ContentType": "application/vnd.android.package-archive", "CacheControl": "no-cache"})
     db = wait("PostgreSQL", lambda: rds.describe_db_instances(DBInstanceIdentifier=db_id)["DBInstances"][0],
               lambda x: x["DBInstanceStatus"] == "available")
     redis = wait("Redis", lambda: elasticache.describe_replication_groups(ReplicationGroupId=cache_id)["ReplicationGroups"][0],

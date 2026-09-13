@@ -83,3 +83,7 @@ CloudWatch 日志保留 30 天，日志组见部署输出。API、单人、双�
 不承诺商业级容量或无中断升级。NAT、负载均衡器、数据库等会持续计费。
 删除部署需要按检查点逐项处理资源及依赖，数据库需明确解除删除保护；
 不要删除账户里其他应用的共享资源。
+
+### Android 下载发布
+
+Android 签名 APK 通过同一个私有下载桶和 CloudFront OAC 分发，见 [Android 客户端](ANDROID_CLIENT.md)。运行 `tools/publish_android.py` 只更新 APK 和下载页，不改变 ECS 服务；网页不提供登录表单，账号操作在安装后的游戏内完成。

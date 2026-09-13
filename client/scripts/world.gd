@@ -151,6 +151,7 @@ func _ready() -> void:
 		mountain.mesh = Visuals.mountain(cone.bottom_radius * 1.4, cone.height * 0.55, i)
 		mountain.material_override = mat("667b80")
 		mountain.position = Vector3(sin(angle) * 210, -3, cos(angle) * 210)
+		mountain.set_meta("ridge", Vector3(cone.bottom_radius * 1.4, cone.height * 0.55, i))
 		add_child(mountain)
 	zone_mesh = MeshInstance3D.new()
 	var cylinder := CylinderMesh.new()
@@ -185,6 +186,30 @@ func building(at: Vector3, style: int) -> void:
 	block(at + Vector3(0, 4.15, 0), Vector3(17, 0.3, 14), "465a61")
 	block(at + Vector3(-4, 0.8, 0), Vector3(2, 1.4, 3), "576b62")
 	block(at + Vector3(8.3, 2.5, 0), Vector3(0.1, 0.9, 6), "465a61", false)
+	if style != 0:
+		var roof_kind := "gable" if style == 1 else "shed"
+		var roof: Node3D = load("res://assets/realism/roof_" + roof_kind + ".glb").instantiate()
+		roof.name = "RoofShell"
+		roof.position = at + Vector3(0, 4.3, 0)
+		add_child(roof)
+		for part in roof.find_children("*", "MeshInstance3D", true, false):
+			part.material_override = mat("465a61")
+		var body := StaticBody3D.new()
+		body.name = "RoofCollision"
+		roof.add_child(body)
+		var shape := CollisionShape3D.new()
+		var hull := ConvexPolygonShape3D.new()
+		var points := PackedVector3Array()
+		for z in [-7.0, 7.0]:
+			points.append(Vector3(-8.5, 0, z))
+			points.append(Vector3(8.5, 0, z))
+			if style == 1:
+				points.append(Vector3(0, 1.7, z))
+			else:
+				points.append(Vector3(8.5, 1.2, z))
+		hull.points = points
+		shape.shape = hull
+		body.add_child(shape)
 	Visuals.building(self, at, style)
 
 func tree(at: Vector3) -> void:

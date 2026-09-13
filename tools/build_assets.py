@@ -122,6 +122,8 @@ bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / 'carbine.blend'))
 if os.environ.get('ASSET_ONLY') == 'carbine':
     raise SystemExit(0)
 exec(compile((ROOT / 'tools' / 'build_weapon_variants.py').read_text(), 'build_weapon_variants.py', 'exec'))
+if os.environ.get('ASSET_ONLY') == 'weapons':
+    raise SystemExit(0)
 
 # The humanoid authoring script shares the material palette and mesh helpers.
 exec(compile((ROOT / 'tools' / 'build_operator.py').read_text(), 'build_operator.py', 'exec'))

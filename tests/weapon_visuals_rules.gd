@@ -5,6 +5,12 @@ func _initialize() -> void:
 
 func run() -> void:
 	var capture := "--capture-weapons" in OS.get_cmdline_user_args()
+	var capture_dir := OS.get_environment("CAPTURE_ARTIFACT_DIR")
+	if capture_dir.is_empty():
+		capture_dir = ProjectSettings.globalize_path("res://../artifacts")
+	if capture:
+		var mkdir_error := DirAccess.make_dir_recursive_absolute(capture_dir)
+		assert(mkdir_error == OK, "Cannot create weapon capture directory")
 	var game = load("res://scripts/game.gd").new()
 	root.add_child(game)
 	game.local_profile = null
@@ -56,7 +62,9 @@ func run() -> void:
 				muzzle_positions.append(actor.muzzle.position.z)
 			if capture:
 				await RenderingServer.frame_post_draw
-				root.get_texture().get_image().save_png("res://../artifacts/weapon-%d-%s.png" % [weapon, "aim" if ads else "hip"])
+				var capture_path := capture_dir.path_join("weapon-%d-%s.png" % [weapon, "aim" if ads else "hip"])
+				var save_error := root.get_texture().get_image().save_png(capture_path)
+				assert(save_error == OK, "Cannot save weapon capture: " + capture_path)
 		var standing: Vector3 = remote.third_person_gun.global_position
 		remote.crouch = true
 		remote.update_stance()

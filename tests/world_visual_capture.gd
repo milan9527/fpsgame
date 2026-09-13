@@ -13,7 +13,10 @@ func run() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
 	var collision := []
 	for node in world.find_children("*", "CollisionShape3D", true, false):
-		collision.append({"transform": str(node.global_transform), "shape": str(node.shape.size) if node.shape is BoxShape3D else str(node.shape), "layer": node.get_parent().collision_layer})
+		var shape_description := str(node.shape.size) if node.shape is BoxShape3D else str(node.shape)
+		if node.shape is ConvexPolygonShape3D:
+			shape_description = "convex:" + str(node.shape.points)
+		collision.append({"transform": str(node.global_transform), "shape": shape_description, "layer": node.get_parent().collision_layer})
 	var file := FileAccess.open(out.path_join("collision.json"), FileAccess.WRITE)
 	file.store_string(JSON.stringify(collision))
 	file.close()

@@ -36,3 +36,6 @@ Additional facade assets from Poly Haven, CC0:
 - https://polyhaven.com/a/rollershutter_window_01 — MP. First variant selected and normalized for wall mounting.
 
 `supply_case.glb` is original project geometry authored by tools/build_supply_case.py.
+
+`roof_gable.glb` and `roof_shed.glb` are original project geometry authored by
+`tools/build_roofs.py`. They use the project's existing metal roof material at runtime.

@@ -162,6 +162,12 @@ static func supply_case(proxy: MeshInstance3D) -> void:
 				part.set_surface_override_material(surface, proxy.material_override)
 	shell.set_meta("category_material", proxy.material_override.get_instance_id())
 
+static func ridge_height(px: float, pz: float, radius: float, height: float, index: int, noise: FastNoiseLite) -> float:
+	var distance := Vector2(px, pz).length() / radius
+	var elevation := pow(maxf(0, 1.0 - distance * distance), 2) * height
+	elevation *= 0.70 + 0.65 * (1.0 - absf(noise.get_noise_2d(px, pz)))
+	return elevation * (0.88 + 0.12 * sin(px * 0.09 + pz * 0.045 + index))
+
 static func mountain(radius: float, height: float, index: int) -> ArrayMesh:
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -175,10 +181,7 @@ static func mountain(radius: float, height: float, index: int) -> ArrayMesh:
 		for x in range(65):
 			var px := (x / 32.0 - 1.0) * radius
 			var pz := (z / 32.0 - 1.0) * radius
-			var distance := Vector2(px, pz).length() / radius
-			var elevation := pow(maxf(0, 1.0 - distance * distance), 2) * height
-			elevation *= 0.70 + 0.65 * (1.0 - absf(noise.get_noise_2d(px, pz)))
-			elevation *= 0.88 + 0.12 * sin(px * 0.09 + pz * 0.045 + index)
+			var elevation := ridge_height(px, pz, radius, height, index, noise)
 			row.append(Vector3(px, elevation, pz))
 		points.append(row)
 	for z in range(64):
@@ -193,6 +196,7 @@ static func ground_detail(world) -> void:
 	world.block(Vector3(0, -0.25, 0), Vector3(650, 0.1, 650), "737b68", false)
 	var random := RandomNumberGenerator.new()
 	random.seed = 55191
+	background_forest(world)
 	# Scenery beyond the playable ground, so it creates no invisible cover.
 	for i in range(30):
 		var rock: Node3D = load("res://assets/realism/boulder.glb").instantiate()
@@ -241,6 +245,67 @@ static func ground_detail(world) -> void:
 		grass.visibility_range_end = 75
 		world.add_child(grass)
 	template.free()
+
+static func background_forest(world) -> void:
+	# Background groves remain outside the playable square. They need no
+	# invisible collision and do not allocate the high-detail near-tree mesh.
+	var random := RandomNumberGenerator.new()
+	random.seed = 8127
+	var density := FastNoiseLite.new()
+	density.seed = 522
+	density.frequency = 0.035
+	var quad := QuadMesh.new()
+	quad.size = Vector2(9.5, 9.5)
+	var material := StandardMaterial3D.new()
+	material.albedo_texture = load("res://assets/realism/fir_impostor.png")
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	material.alpha_scissor_threshold = 0.28
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+	material.billboard_keep_scale = true
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	material.vertex_color_use_as_albedo = true
+	var placements := []
+	var ridges := []
+	for node in world.get_children():
+		if not node.has_meta("ridge"): continue
+		var profile: Vector3 = node.get_meta("ridge")
+		var noise := FastNoiseLite.new()
+		noise.seed = 941 + int(profile.z)
+		noise.frequency = 0.018
+		noise.fractal_octaves = 2
+		ridges.append({"origin": node.position, "profile": profile, "noise": noise})
+	for attempt in range(850):
+		var angle := random.randf() * TAU
+		var radius := random.randf_range(142, 195)
+		var point := Vector2(cos(angle), sin(angle)) * radius
+		if maxf(absf(point.x), absf(point.y)) < 126: continue
+		if density.get_noise_2d(point.x, point.y) < -0.15: continue
+		var scale := random.randf_range(0.75, 1.45)
+		var ground_height := -0.2
+		for ridge in ridges:
+			var profile: Vector3 = ridge.profile
+			var origin: Vector3 = ridge.origin
+			ground_height = maxf(ground_height, origin.y + ridge_height(
+				point.x - origin.x, point.y - origin.z, profile.x, profile.y,
+				int(profile.z), ridge.noise))
+		placements.append(Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * scale),
+			Vector3(point.x, ground_height + 4.5 * scale - 0.15, point.y)))
+	var instances := MultiMesh.new()
+	instances.transform_format = MultiMesh.TRANSFORM_3D
+	instances.use_colors = true
+	instances.mesh = quad
+	instances.instance_count = placements.size()
+	for index in range(placements.size()):
+		instances.set_instance_transform(index, placements[index])
+		var tint := random.randf_range(0.72, 1.0)
+		instances.set_instance_color(index, Color(tint, tint, tint, 1))
+	var grove := MultiMeshInstance3D.new()
+	grove.name = "BackgroundGroves"
+	grove.multimesh = instances
+	grove.material_override = material
+	grove.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(grove)
 
 static func batch_facade(world, asset: String, placement_key: String) -> void:
 	var panel: Node3D = load("res://assets/realism/" + asset + ".glb").instantiate()

@@ -261,3 +261,10 @@ characters and first-person assets still fall short of the overall visual goal.
 The street capture makes the remaining repeated single-storey warehouse forms
 particularly clear; future work should address those major assets rather than
 continuously polishing only distant scenery.
+
+Source `f3d332eeb3f9` was packaged locally in
+`artifacts/visual-preview/f3d332eeb3f9/`. Linux/Windows exports and packaged Linux
+offline/roof checks passed; archive hashes are in verification.json. Packaged
+Forward+ street gameplay was launched from `/tmp`, captured and inspected at
+`capture/gameplay.png`. Windows execution and physical GPU performance remain
+unverified. No GitHub push or AWS publication occurred.

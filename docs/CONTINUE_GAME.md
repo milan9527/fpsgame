@@ -10,7 +10,8 @@ NEVER push without confirmation. No AWS changes or publishing needed.
 Do not claim execution survives UI exit. Keep tool outputs/images selective.
 
 ## Current source and evidence
-Current source checkpointba78dee adds stage19 fir geometry (details below).
+Current source checkpointf3d332e adds stage20 ridges and grounded forest groves.
+Stage19 source ba78dee adds fuller fir geometry (details below).
 Previous checkpoint3406be7: stages17 side-wall frames/louvers/steel and18 roof covers,
 plaster ends/flashing/gutters. Blender generators tools/build_facades.py and
 build_roofs.py; corresponding .blend and .glb committed. Material scans CC0.
@@ -18,14 +19,26 @@ Main image artifacts/realism18-forward/gameplay.png; roof closeups realism18-roo
 Forward+ and Compatibility captures passed. Roof tests8 slopes/shots/doorways pass.
 Stage17 collision snapshot matches all276 shapes from stage13. Content19 unchanged.
 Stage17 model UV/bounds checked; see docs/VISUAL_REVIEW.md for detailed evidence.
-Current Windows/Linux previews artifacts/visual-preview/ba78deec7a28/ include19.
+Current Windows/Linux previews artifacts/visual-preview/f3d332eeb3f9/ include20.
 verification.json: exports, packaged Linux offline/roof checks, ZIP hashes.
-Packaged Forward+ forest capture passed from /tmp; image capture/gameplay.png,
-log artifacts/realism19-packaged-render.log.
+Packaged Forward+ street gameplay also passed from /tmp; capture/gameplay.png,
+log artifacts/realism20-packaged-render.log.
 Windows exported, not Windows-hardware tested. No live deployment changed.
 Content19 cannot join old18 servers/checkpoints; old saves remain intact.
 
 ## Next substantial work
+Stage20 complete locally: winding offset ridges within existing footprints,
+slope-filtered groves,2314 trees including494 seedlings. Actual Forward+ forest
+capture artifacts/realism20-final/gameplay.png; Compatibility realism20-world/
+includes street/overview/forest.276 colliders match stage19; offline smoke passed.
+tests/background_scenery.gd checks roots against temporary rendered-mesh triangle
+colliders via raycasts; final pass2314trees,max error0.000101m. Run graphically
+with xvfb and Compatibility, not headless. See realism20-scenery-final.log.
+Next priority: major character/weapon/architecture assets rather than endless
+distant-scenery polishing. Street capture shows repeated single-storey boxes.
+tools/build_operator.py still builds separate sphere torso/joints and tubular
+limbs, oval gloves; consider continuous garment topology and anatomical hands,
+preserving the17-bone rig/15clips and validating crouch/reload/downed/vehicle poses.
 Stage19 source: tools/prepare_fir_needles.py (NumPy/SciPy) converts all
 432704 needles into area-compensated two-triangle kites; tools/build_fir_lod.py
 reduces woody geometry and exports fir_full.glb (940024 triangles, ~72 MiB).

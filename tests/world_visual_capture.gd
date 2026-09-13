@@ -18,6 +18,10 @@ func run() -> void:
 	file.store_string(JSON.stringify(collision))
 	file.close()
 	var views := {"overview": [Vector3(112, 72, 124), Vector3(0, 0, 0)], "street": [Vector3(17, 1.7, 50), Vector3(35, 1.9, 34)], "building": [Vector3(25, 2, 17), Vector3(35, 2, 34)]}
+	for node in world.get_children():
+		if node.name.begins_with("fir_near"):
+			views["forest"] = [node.position + Vector3(7, 2, 12), node.position + Vector3(0, 4, 0)]
+			break
 	for name in views:
 		camera.position = views[name][0]
 		camera.look_at(views[name][1])

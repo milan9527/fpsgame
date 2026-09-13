@@ -108,8 +108,8 @@ func _ready() -> void:
 	env.environment = e
 	add_child(env)
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-32, -38, 0)
-	sun.light_color = Color("ffe5bd")
+	sun.rotation_degrees = Vector3(-48, -38, 0)
+	sun.light_color = Color("fff1dc")
 	sun.light_energy = 1.15
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 110
@@ -182,21 +182,12 @@ func building(at: Vector3, style: int) -> void:
 		block(at + Vector3(0, 3.7, z), Vector3(4, 0.6, 0.5), c)
 	block(at + Vector3(0, 4.15, 0), Vector3(17, 0.3, 14), "465a61")
 	block(at + Vector3(-4, 0.8, 0), Vector3(2, 1.4, 3), "576b62")
-	block(at + Vector3(8.3, 2.5, 0), Vector3(0.1, 0.9, 6), "dfb86b", false)
+	block(at + Vector3(8.3, 2.5, 0), Vector3(0.1, 0.9, 6), "465a61", false)
 	Visuals.building(self, at, style)
 
 func tree(at: Vector3) -> void:
-	block(at + Vector3(0, 2, 0), Vector3(0.6, 4, 0.6), "60564a")
-	var foliage := MeshInstance3D.new()
-	var cone := CylinderMesh.new()
-	cone.top_radius = 0
-	cone.bottom_radius = 3
-	cone.height = 7
-	cone.radial_segments = 7
-	foliage.mesh = cone
-	foliage.material_override = mat("3d6258")
-	foliage.position = at + Vector3(0, 6, 0)
-	add_child(foliage)
+	var trunk := block(at + Vector3(0, 2, 0), Vector3(0.6, 4, 0.6), "60564a")
+	trunk.visible = false
 	Visuals.tree(self, at)
 
 func set_zone(radius: float, center := Vector2.ZERO) -> void:

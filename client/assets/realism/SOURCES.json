@@ -1,0 +1,108 @@
+[
+  {
+    "asset": "aerial_grass_rock",
+    "page": "https://polyhaven.com/a/aerial_grass_rock",
+    "license": "CC0-1.0",
+    "files": {
+      "albedo": {
+        "size": 666655,
+        "md5": "e920ce36afd0abff000b8366d3d768d3",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/aerial_grass_rock/aerial_grass_rock_diff_1k.jpg"
+      },
+      "normal": {
+        "size": 904956,
+        "md5": "c8aa4c4f09b113cc7edef89ddeaccad9",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/aerial_grass_rock/aerial_grass_rock_nor_gl_1k.jpg"
+      },
+      "roughness": {
+        "size": 362214,
+        "md5": "f78c5cdc565f990299ae7c5a81f68cf7",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/aerial_grass_rock/aerial_grass_rock_rough_1k.jpg"
+      }
+    }
+  },
+  {
+    "asset": "grey_plaster_02",
+    "page": "https://polyhaven.com/a/grey_plaster_02",
+    "license": "CC0-1.0",
+    "files": {
+      "albedo": {
+        "size": 772312,
+        "md5": "fe17ee482114c15690c2bc853c572bbc",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/grey_plaster_02/grey_plaster_02_diff_1k.jpg"
+      },
+      "normal": {
+        "size": 636432,
+        "md5": "48636f9e7c651f6370b2549e0d3eaa4b",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/grey_plaster_02/grey_plaster_02_nor_gl_1k.jpg"
+      },
+      "roughness": {
+        "size": 626062,
+        "md5": "960bdf615f72635752f0d45f48429a33",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/grey_plaster_02/grey_plaster_02_rough_1k.jpg"
+      }
+    }
+  },
+  {
+    "asset": "asphalt_02",
+    "page": "https://polyhaven.com/a/asphalt_02",
+    "license": "CC0-1.0",
+    "files": {
+      "albedo": {
+        "size": 731707,
+        "md5": "fa19772d4817754c3efab708c651f5a8",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_02/asphalt_02_diff_1k.jpg"
+      },
+      "normal": {
+        "size": 1240122,
+        "md5": "338da8de636ea36133170578cac82e8e",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_02/asphalt_02_nor_gl_1k.jpg"
+      },
+      "roughness": {
+        "size": 544032,
+        "md5": "ec80a2929797c1b3ffc121c4f665585a",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_02/asphalt_02_rough_1k.jpg"
+      }
+    }
+  },
+  {
+    "asset": "corrugated_iron_02",
+    "page": "https://polyhaven.com/a/corrugated_iron_02",
+    "license": "CC0-1.0",
+    "files": {
+      "albedo": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/corrugated_iron_02/corrugated_iron_02_diff_1k.jpg",
+        "md5": "0437ba7acc3a60e9a00245580ae7e10b",
+        "size": 568492
+      },
+      "normal": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/corrugated_iron_02/corrugated_iron_02_nor_gl_1k.jpg",
+        "md5": "e3a9b41f29a5dee9f0835bddb440efbd",
+        "size": 489773
+      },
+      "roughness": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/corrugated_iron_02/corrugated_iron_02_rough_1k.jpg",
+        "md5": "b9805d0c5bb683b03ba14c0b4217e2a4",
+        "size": 793854
+      }
+    }
+  },
+  {
+    "asset": "fir_tree_01",
+    "page": "https://polyhaven.com/a/fir_tree_01",
+    "license": "CC0-1.0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/fir_tree_01/fir_tree_01_1k.gltf",
+    "modification": "Variant C extracted and normalized in Blender; full geometry near, rendered billboard at distance."
+  },
+  {
+    "asset": "kloofendal_48d_partly_cloudy_puresky",
+    "page": "https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky",
+    "license": "CC0-1.0",
+    "source": {
+      "size": 22162150,
+      "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/kloofendal_48d_partly_cloudy_puresky.jpg",
+      "md5": "3f2b19fa9c14943b34e5d4f480ba13ba"
+    },
+    "modification": "Tonemapped panorama resized to 2048x1024."
+  }
+]

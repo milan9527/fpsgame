@@ -23,6 +23,7 @@ func setup(gun: Node3D, weapon: Node3D) -> void:
 		return
 	weapon_model = weapon
 	model = load("res://assets/first_person.glb").instantiate()
+	load("res://scripts/world_visuals.gd").military_materials(model)
 	gun.add_child(model)
 	var players := model.find_children("*", "AnimationPlayer", true, false)
 	var skeletons := model.find_children("*", "Skeleton3D", true, false)

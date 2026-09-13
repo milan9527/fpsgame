@@ -127,6 +127,7 @@ func _ready() -> void:
 	material.albedo_color = Color("cb7852") if is_bot else Color("65bfb9")
 	if ResourceLoader.exists("res://assets/operator.glb"):
 		body_mesh = load("res://assets/operator.glb").instantiate()
+		load("res://scripts/world_visuals.gd").military_materials(body_mesh)
 	else:
 		var fallback := MeshInstance3D.new()
 		var mesh := CapsuleMesh.new()

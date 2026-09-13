@@ -44,6 +44,9 @@ def main():
             raise ValueError("Review endpoint configuration for source revision " + revision)
         path.write_text(content.replace('"http://127.0.0.1:8000"', json.dumps(args.api)))
         patches.append(relative + ": default API URL")
+    from client_login_patch import apply
+    apply(source / "client")
+    patches.append("remembered login: encrypted local storage")
     shutil.copy2(ROOT / "client/export_presets.cfg", source / "client/export_presets.cfg")
     for name, arguments in [
         ("import", ["--editor", "--import"]),

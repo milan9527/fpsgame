@@ -36,6 +36,16 @@ def main():
                 text = log.read_text()
                 if code or "ONLINE_CLIENT_PASS" not in text or "SCRIPT ERROR" in text or "ERROR:" in text:
                     raise RuntimeError("Android source network failed: " + log.name)
+            for i in range(2):
+                account = accounts["network-" + str(i)]
+                env = dict(os.environ, TEST_USERNAME=account["username"], TEST_PASSWORD=account["password"],
+                           TEST_API_URL=build["default_api"],
+                           XDG_DATA_HOME=str(OUT / ("profile-" + mode + str(i))))
+                result = subprocess.run([str(ROOT / "tools/godot"), "--headless", "--path", str(OUT / "source/client"),
+                    "--script", str(ROOT / "tests/remembered_login_authenticated.gd")],
+                    env=env, capture_output=True, text=True, timeout=30)
+                if result.returncode or "AUTHENTICATED_LOGIN_RESTART_PASS" not in result.stdout:
+                    raise RuntimeError("Authenticated login persistence failed")
             report["checks"].append(mode)
             print("ANDROID_SOURCE_NETWORK_PASS " + mode, flush=True)
         finally:
@@ -44,6 +54,8 @@ def main():
                     process.kill()
                     process.wait()
                 stream.close()
+    (OUT / "login-memory-auth.json").write_text(json.dumps({"status": "passed",
+        "apk_sha256": build["sha256"], "profiles": 4}, indent=2) + "\n")
     report["status"] = "passed"
     (OUT / "source-network.json").write_text(json.dumps(report, indent=2) + "\n")
 

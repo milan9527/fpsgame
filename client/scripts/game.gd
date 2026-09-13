@@ -375,6 +375,7 @@ func revoke_account_peer(id: int) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func account_revoked() -> void:
+	ui.forget_login()
 	token = ""
 	token_origin = ""
 	ui.logout_button.disabled = true
@@ -399,6 +400,7 @@ func sign_out_all() -> bool:
 		return false
 	ui.busy = false
 	if code == 200 or code == 401:
+		ui.forget_login()
 		token = ""
 		token_origin = ""
 		ui.password.text = ""
@@ -2015,6 +2017,7 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 		if bot_client:
 			request_quit(1)
 		return
+	ui.remember_login(endpoint, username, password)
 	token = response.body.token
 	token_origin = api_url
 	ui.logout_button.disabled = false

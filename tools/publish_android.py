@@ -16,6 +16,12 @@ ROOT = Path(__file__).resolve().parents[1]
 def verify_build(build):
     network = json.loads((ROOT / "artifacts/android-build/source-network.json").read_text())
     native = json.loads((ROOT / "artifacts/android-build/devicefarm-result.json").read_text())
+    memory = json.loads((ROOT / "artifacts/android-build/login-memory-auth.json").read_text())
+    assert memory["status"] == "passed" and memory["apk_sha256"] == build["sha256"]
+    assert network["apk_sha256"] == build["sha256"]
+    for evidence, marker in [("login-memory-test.log", "REMEMBERED_LOGIN_PASS"),
+                             ("login-memory-ui.log", "LOGIN_MEMORY_UI_PASS")]:
+        assert marker in (ROOT / "artifacts/android-build" / evidence).read_text()
     assert network["status"] == "passed" and set(network["checks"]) == {"solo", "duo"}
     native_build = json.loads((ROOT / "artifacts/android-build/devicefarm.json").read_text())
     assert native_build["apk_sha256"] == build["sha256"] and native_build["run"] == native["arn"]

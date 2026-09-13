@@ -17,6 +17,7 @@ var status: Label
 var login_buttons: Array[Button] = []
 var last_size := Vector2.ZERO
 var last_playing := false
+var menu_was_visible := false
 var save_button: Button
 var previous_mouse_emulation := true
 var last_alive := true
@@ -108,6 +109,8 @@ func build_menu() -> void:
 	password.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_PASSWORD
 	endpoint = field(right, "HTTPS server address")
 	endpoint.text = game.ui.endpoint.text
+	endpoint.text_changed.connect(func(_value): restore_login())
+	restore_login()
 	endpoint.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_URL
 	mode = OptionButton.new()
 	mode.custom_minimum_size.y = 72
@@ -118,10 +121,21 @@ func build_menu() -> void:
 	right.add_child(actions)
 	login_buttons.append(button(actions, "SIGN IN", func(): sign_in(false)))
 	login_buttons.append(button(actions, "REGISTER", func(): sign_in(true)))
-	button(right, "CANCEL CONNECTION", func(): game.leave("Connection cancelled."))
+	var account_tools := HBoxContainer.new()
+	right.add_child(account_tools)
+	button(account_tools, "CANCEL", func(): game.leave("Connection cancelled."))
+	button(account_tools, "FORGET LOGIN", func():
+		game.ui.endpoint.text = endpoint.text
+		game.ui.forget_login()
+		restore_login())
 	status = label(right, "", 22)
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.custom_minimum_size.y = 100
+
+func restore_login() -> void:
+	var saved := preload("res://scripts/remembered_login.gd").read(endpoint.text)
+	username.text = saved.username
+	password.text = saved.password
 
 func sign_in(register: bool) -> void:
 	if game.ui.busy:
@@ -171,6 +185,9 @@ func _process(_delta: float) -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	game.ui.voice_microphone = voice_requested and (not OS.has_feature("android") or "android.permission.RECORD_AUDIO" in OS.get_granted_permissions())
 	menu_panel.visible = game.ui.menu.visible and not game.ui.party_lobby.visible
+	if menu_panel.visible and not menu_was_visible:
+		restore_login()
+	menu_was_visible = menu_panel.visible
 	if not menu_panel.visible:
 		password.text = ""
 	pause_panel.visible = game.ui.pause_panel.visible

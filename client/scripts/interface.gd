@@ -174,6 +174,10 @@ func _ready() -> void:
 	logout_button.disabled = true
 	logout_button.pressed.connect(func(): logout_requested.emit())
 	account_row.add_child(logout_button)
+	var forget_button := Button.new()
+	forget_button.text = "FORGET LOGIN"
+	forget_button.pressed.connect(forget_login)
+	account_row.add_child(forget_button)
 	username = field(right, "Username (3–24 letters / digits / _)", "")
 	password = field(right, "Password (at least 10 characters)", "")
 	password.secret = true
@@ -181,6 +185,8 @@ func _ready() -> void:
 	username.text_submitted.connect(func(_value): password.grab_focus())
 	password.text_submitted.connect(func(_value): online(false))
 	endpoint = field(right, "API URL", settings.get_value("network", "endpoint", "http://127.0.0.1:8000"))
+	endpoint.text_changed.connect(func(_value): restore_login())
+	restore_login()
 	endpoint.keep_editing_on_text_submit = true
 	endpoint.tooltip_text = "127.0.0.1 connects to this computer. For a remote server, enter its HTTPS address."
 	endpoint.text_submitted.connect(func(_value): online(false))
@@ -506,7 +512,7 @@ func show_menu(message := "") -> void:
 	pause_panel.visible = false
 	busy = false
 	connection_cancel.disabled = true
-	password.text = ""
+	restore_login()
 	if not message.is_empty():
 		status.text = message
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -809,3 +815,18 @@ func combat_feedback(kind: int, amount: float, headshot: bool, killed: bool, ori
 		damage_until = Time.get_ticks_msec() + 600
 		damage_indicators.record(origin, local_position, Time.get_ticks_msec())
 	hud.queue_redraw()
+
+func restore_login() -> void:
+	var saved := preload("res://scripts/remembered_login.gd").read(endpoint.text)
+	username.text = saved.username
+	password.text = saved.password
+
+func remember_login(server: String, name: String, secret: String) -> void:
+	if preload("res://scripts/remembered_login.gd").remember(server, name, secret) != OK:
+		status.text = "Signed in, but this device could not save the login."
+
+func forget_login() -> void:
+	var result := preload("res://scripts/remembered_login.gd").forget(endpoint.text)
+	username.text = ""
+	password.text = ""
+	status.text = "Saved login cleared on this device." if result == OK else "Could not clear the saved login."

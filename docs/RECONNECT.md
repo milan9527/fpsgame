@@ -16,7 +16,13 @@
 
 未发布源码的心跳增加 `reconnectable`，将保留账号 UUID 映射到剩余秒数（向上取整，1–30）。只有 live、同一 generation、尚未到期的保留状态才上报；正常连接的账号不在此表。后端要求这些账号同时存在于 players 与 session_versions，拒绝非整数、超范围时间及非 live 声明。旧心跳缺少此字段时默认空表，不自动授予重连资格。
 
-`backend/tests/test_reconnect_contract.py` 的 16 项模型检查通过，覆盖序列化、时间类型与边界、对局阶段和账号绑定；源码在现有 API 镜像的隔离、无网络容器中执行，并未替换线上后端。`artifacts/reconnect-heartbeat-contract.log` 验证游戏侧声明、到期/旧 generation 排除及原有保留角色物理规则。这里还没有基于后端接收时间计算的授权截止时间或 Redis 原子重连票据；后续实现必须处理传输延迟与旧心跳，不能直接把剩余秒数当作永久有效的准入凭据。
+`backend/tests/test_reconnect_contract.py` 的 16 项模型检查通过，覆盖序列化、时间类型与边界、对局阶段和账号绑定；源码在现有 API 镜像的隔离、无网络容器中执行，并未替换线上后端。`artifacts/reconnect-heartbeat-contract.log` 验证游戏侧声明、到期/旧 generation 排除及原有保留角色物理规则。
+
+后端心跳 Lua 使用 Redis `TIME` 计算截止毫秒，独立存入 `reconnect:<room_id>`，与房间目录一样保留 12 秒。记录绑定 instance/generation；同一连续声明且 session_version 不变时，后续心跳只能保持或缩短截止时间，不能延长。即使旧期限已过，重复声明也不能续期；清除声明或换回合时移除旧资格。独立保存是为了避免 Lua JSON 编码把空 players 数组改成对象。
+
+`backend/tests/test_reconnect_deadlines.py` 使用独立真实 Redis，覆盖截止时间、缩短/禁止延长、真实等待到期、撤回声明、旧 revision、换回合、玩家冲突无副作用及普通大厅票据消费。和模型检查共 23 项通过，日志 `artifacts/reconnect-redis-deadlines.log`。测试使用源码挂载，不代表线上 0.38 已更新。
+
+尚未实现原子重连票据及消费。Redis 截止时间是接收心跳时根据上报剩余时间计算的外层限制，包含传输与向上取整误差；未来游戏服务器在恢复 actor 时必须再次核对自己的精确本地期限、generation 和会话版本。目录租约过期后不可凭旧凭据恢复，也不能仅依赖此记录授予准入。
 
 ### 保留驾驶员的物理验证
 

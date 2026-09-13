@@ -112,6 +112,27 @@ if old then
         redis.call('DEL',held)
     end
 end
+-- Admission must use Redis time, never a client's clock or a fresh TTL per poll.
+-- Keep this separate from room JSON to preserve empty-array serialization.
+local clock=redis.call('TIME')
+local now=tonumber(clock[1])*1000+math.floor(tonumber(clock[2])/1000)
+local reconnect_key=p..'reconnect:'..room.room_id
+local previous_reconnect=redis.call('GET',reconnect_key)
+local previous=nil
+if previous_reconnect and old and old.generation==room.generation then
+    previous=cjson.decode(previous_reconnect)
+    if previous.instance_id~=room.instance_id or previous.generation~=room.generation then previous=nil end
+end
+local deadlines={}
+for uid,seconds in pairs(room.reconnectable or {}) do
+    local deadline=now+seconds*1000
+    if previous and previous.deadlines[uid] and (old.session_versions or {})[uid]==room.session_versions[uid] then
+        deadline=math.min(deadline,previous.deadlines[uid])
+    end
+    deadlines[uid]=deadline
+end
+redis.call('SET',reconnect_key,cjson.encode({instance_id=room.instance_id,generation=room.generation,
+    deadlines=deadlines}),'EX',12)
 for _,uid in ipairs(room.players) do
     redis.call('SET',p..'user:'..uid,owner,'EX',15)
     redis.call('SET',p..'user_version:'..uid,tostring((room.session_versions or {})[uid] or 0),'EX',15)

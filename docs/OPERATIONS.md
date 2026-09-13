@@ -85,6 +85,16 @@ sudo journalctl -u iron-meridian-backup.service --since today
 
 当前一个房间最多 16 名参战者，空缺用机器人补足。API 运行两个 worker；Godot 固定两个专用实例，使用房间目录匹配。已做有限的延迟和随机丢包验证；尚未完成 16 真人压力测试、长时间稳定性测试或自动扩容验证，不能据此宣称支持大规模生产运营。
 
+0.38 已通过 16 个独立打包客户端的本机满员回合检查：
+
+```bash
+.venv/bin/python tools/test_capacity.py --candidate-dir artifacts/candidates/0.38.0-dev-484d98d9-ssm8gza_
+```
+
+测试要求发布单人房间处于空闲状态，并使用测试账号实际登录，不绕过登录限流。16 个独立 ENet peer 同时进入同一回合，确认没有机器人占位；随后持续 8 秒正常移动/开火，16 个客户端均观察到全部 16 个角色移动、弹药消耗与位置校正，服务端时间推进约 8.00–8.05 秒。第 17 个请求返回 503；这是已满且已开始的房间拒绝入场，不单独证明候场阶段的名额竞争行为。所有客户端退出后房间回收成功。
+
+报告 `artifacts/capacity-1789259737404766483/report.json` 绑定归档哈希，各客户端与服务端日志保留在同目录；汇总 `artifacts/capacity-038-packed.log`。客户端为 headless、最大帧率 30，测试不测 GPU 渲染帧率，不等于 16 名真人、公网延迟、长时间对局或生产峰值压力。候选参数会验证 API 版本和归档完整性，每个客户端使用独立用户数据目录。
+
 Linux 客户端以 OpenGL Compatibility 渲染。开发主机通过软件 OpenGL 做实际渲染验证，所得性能不代表玩家 GPU 性能。Windows、macOS、移动端目前未打包验证。
 
 ## AI 任务

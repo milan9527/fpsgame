@@ -1,5 +1,6 @@
 """Real sixteen-process ENet capacity gate; localhost/headless, not a WAN benchmark."""
 import datetime
+import argparse
 import json
 import os
 from pathlib import Path
@@ -8,12 +9,25 @@ import subprocess
 import time
 import httpx
 from test_accounts import account, FILE
+from candidate_runtime import candidate_command
 
 ROOT = Path(__file__).resolve().parents[1]
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--candidate-dir", type=Path)
+options = parser.parse_args()
+runtime = [str(ROOT / 'tools/godot'), '--headless', '--path', str(ROOT / 'client')]
+candidate = None
+if options.candidate_dir:
+    runtime, candidate = candidate_command(options.candidate_dir)
 OUT = ROOT / 'artifacts' / ('capacity-' + str(time.time_ns()))
 OUT.mkdir()
 BARRIER = OUT / 'start'
 BUILD = json.loads((ROOT / 'client/protocol.json').read_text())
+if candidate:
+    BUILD = candidate["manifest"]
+response = httpx.get('http://127.0.0.1:8000/protocol')
+response.raise_for_status()
+assert response.json() == BUILD, "Capacity clients must match the published API"
 ROOM = 'room-27015'
 STARTED = datetime.datetime.now(datetime.timezone.utc).isoformat()
 BAD = ('ERROR:', 'SCRIPT ERROR', 'Assertion failed', 'ObjectDB instances leaked', 'above the MTU', 'Unable to send packet')
@@ -57,11 +71,12 @@ try:
     outsider = account('capacity-outsider')
     for i, identity in enumerate(credentials):
         env = dict(os.environ, TEST_USERNAME=identity['username'], TEST_PASSWORD=identity['password'],
-                   TEST_ROOM_ID=ROOM, API_URL='http://127.0.0.1:8000', CAPACITY_BARRIER=str(BARRIER))
+                   TEST_ROOM_ID=ROOM, API_URL='http://127.0.0.1:8000', CAPACITY_BARRIER=str(BARRIER),
+                   XDG_DATA_HOME=str(OUT / ('profile-%02d' % i)))
         path = OUT / ('client-%02d.log' % i)
         log = path.open('w')
-        proc = subprocess.Popen([str(ROOT / 'tools/godot'), '--headless', '--max-fps', '30', '--path', 'client',
-                                 '--script', '../tests/capacity_client.gd', '--', '--bot-client'],
+        proc = subprocess.Popen(runtime + ['--max-fps', '30',
+                                 '--script', str(ROOT / 'tests/capacity_client.gd'), '--', '--bot-client'],
                                 cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
         processes.append((proc, log, path))
     ready = wait_for('CAPACITY_READY', 65)
@@ -91,7 +106,10 @@ try:
     (OUT / 'server.log').write_text(logs)
     assert not any(error in logs for error in BAD)
     assert all('PEER_DISCONNECTED peer=' + peer in logs for peer in peers)
-    report = {'build': BUILD, 'clients': 16, 'independent_peers': len(set(peers)), 'matches': list(matches),
+    if candidate:
+        candidate_command(options.candidate_dir)
+    report = {'status': 'passed', 'build': BUILD, 'clients': 16, 'independent_peers': len(set(peers)), 'matches': list(matches),
+              'candidate': {'commit': candidate['commit'], 'sha256': candidate['sha256']} if candidate else None,
               'overflow_status': response.status_code, 'room_recycled': True,
               'results': [re.search(r'CAPACITY_CLIENT_PASS[^\n]+', text).group(0) for text in texts],
               'limits': 'Single host, headless, eight seconds of active input; not 16 people, rendered FPS, WAN, or endurance.'}

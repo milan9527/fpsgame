@@ -5,3 +5,5 @@ artifacts
 client/.godot
 **/__pycache__
 tools/blender*
+**/node_modules
+**/cdk.out

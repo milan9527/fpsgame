@@ -91,7 +91,10 @@ def main():
                     if path.is_file():
                         zipped.write(path, Path(f"IronMeridian-{platform}") / path.relative_to(output / platform))
             with archive.open("rb") as stream:
-                report["archives"][platform] = {"file": archive.name, "sha256": hashlib.file_digest(stream, "sha256").hexdigest()}
+                checksum = hashlib.sha256()
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    checksum.update(chunk)
+                report["archives"][platform] = {"file": archive.name, "sha256": checksum.hexdigest()}
         report["status"] = "packaged-and-linux-verified"
         save()
         print(f"VISUAL_PREVIEW_PASS {output}", flush=True)

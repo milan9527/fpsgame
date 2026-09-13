@@ -325,10 +325,8 @@ static func ground_detail(world) -> void:
 	var template: Node3D = load("res://assets/realism/grass.glb").instantiate()
 	var source: MeshInstance3D = template.find_children("*", "MeshInstance3D", true, false)[0]
 	var mesh: Mesh = source.mesh
-	var material := StandardMaterial3D.new()
-	material.vertex_color_use_as_albedo = true
-	material.roughness = 1.0
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var material := ShaderMaterial.new()
+	material.shader = load("res://shaders/grass.gdshader")
 	var cells := {}
 	var density := FastNoiseLite.new()
 	density.seed = 673
@@ -346,10 +344,10 @@ static func ground_detail(world) -> void:
 		for obstacle in exclusions:
 			if obstacle.grow(0.5).has_point(point): blocked = true; break
 		if blocked: continue
-		var cell := Vector2i(floori(point.x / 24), floori(point.y / 24))
+		var cell := Vector2i(floori(point.x / 12), floori(point.y / 12))
 		if not cells.has(cell): cells[cell] = []
 		var scale := random.randf_range(0.65, 1.3)
-		var local := Vector3(point.x - cell.x * 24 - 12, 0.01, point.y - cell.y * 24 - 12)
+		var local := Vector3(point.x - cell.x * 12 - 6, 0.01, point.y - cell.y * 12 - 6)
 		var proportions := Vector3(scale, scale * random.randf_range(0.7, 1.2), scale)
 		cells[cell].append(Transform3D(Basis(Vector3.UP, random.randf() * TAU).scaled(proportions), local))
 	for cell in cells:
@@ -362,9 +360,11 @@ static func ground_detail(world) -> void:
 		grass.name = "GrassCell"
 		grass.multimesh = instances
 		grass.material_override = material
-		grass.position = Vector3(cell.x * 24 + 12, 0, cell.y * 24 + 12)
+		grass.position = Vector3(cell.x * 12 + 6, 0, cell.y * 12 + 6)
 		grass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		grass.visibility_range_end = 75
+		# Half-cell diagonal is 8.5m: all blades finish shrinking before the
+		# cell disappears at 58m, avoiding the former visible 24m-wide pop.
+		grass.visibility_range_end = 58
 		world.add_child(grass)
 	template.free()
 

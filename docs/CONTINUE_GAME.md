@@ -10,19 +10,22 @@ still visibly procedural. Work autonomously. NEVER push without confirmation.
 No AWS changes or publication needed. Do not claim UI-independent execution.
 
 ## Current work
-Stage15: low fine Blender grass, patch distribution; 169031 tufts in100 cells.
-Latest actual Forward+ image artifacts/realism15-dense/gameplay.png.
+Stage16: grass shader shrinks blades24–48m, culls12m cells at58m.
+169031 tufts,388 cells; same positions as stage15.
+Latest actual Forward+ image artifacts/realism16-forward/gameplay.png.
+Compatibility gameplay capture passed too. Same-camera render primitives fell
+2778070→1748314; draws516→523. Evidence artifacts/realism16-profile.log.
 Compatibility instance checks avoid roads/yards; all276 serialized collisions
 match stage13. Offline smoke passed. See realism15-dense-check.log and smoke.log.
 Headless renderer does not give valid MultiMesh transform readback; use graphics.
-Grass draw cost and distant aliasing need LOD work; construction+checks ~6.6s
+Grass hardware performance still unverified; stage15 construction+checks ~6.6s
 in software environment. Geometry has84 triangles per tuft. Content19 unchanged.
 Full historical changes/evidence are in docs/VISUAL_REVIEW.md; read selectively.
 
 ## Next substantive work
 Improve architectural silhouettes and natural layout, vegetation LOD/aliasing,
 and realistic equipment. Current screenshot still falls well below reference.
-Stage15 is not yet in desktop ZIPs; refresh after further coherent visual work.
+Stages15–16 are not yet in desktop ZIPs; refresh after a clean commit.
 Current desktop packages: artifacts/visual-preview/0f2b9d5f721b/, stages6–14,
 content19. verification.json records both exports, packaged Linux offline/roof
 checks and archive hashes. Rebuild via python3 tools/package_visual_preview.py

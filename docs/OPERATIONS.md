@@ -24,6 +24,8 @@ docker compose up -d
 
 ## 远程玩家接入
 
+如果通过已有 SSH 登录远程玩，使用 [SSH API + UDP 转发工具](SSH_PLAY.md)。普通 `ssh -L` 无法转发 Godot/ENet 对战的 UDP；配套工具可复用 SSH 通道，此方式无需以下公网 HTTPS 部署。
+
 提供 `compose.public.yaml` 与 `infra/Caddyfile`，使用 Caddy 自动申请和续期公共 HTTPS 证书。部署需要已有域名，DNS 指向游戏主机；有 AAAA 记录时 IPv6 也须可达。先在现有 `.env` 增加 `PUBLIC_HOST`（仅 API 域名，不含协议/路径），并将 `GAME_PUBLIC_HOST` 设为玩家可达的游戏主机域名或 IP。不要覆盖现有凭据。
 
 允许 TCP 80/443 用于证书签发及 HTTPS，UDP 27015/27022 用于游戏连接。API 与游戏主机可用同一域名；HTTP 反向代理不会转发 ENet UDP。房间公布的主机地址必须可被外部玩家访问。调整游戏环境变量会重建专服，应在房间无人且结果队列已排空时执行。

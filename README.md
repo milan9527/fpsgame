@@ -24,6 +24,8 @@ Godot 4.4.1 + Blender 4.3.2 原创战术生存射击项目，包含单机、专�
 
 已打包的桌面版本位于 `artifacts/IronMeridian-Linux-x86_64.tar.gz`，解压执行 `play.sh`。图形服务器环境没有物理显示器；此处通过 Xvfb + Mesa 实际渲染截图验证。
 
+通过 SSH 远程连接时，普通 `ssh -L` 只能转发 API，游戏 UDP 还需配套隧道；使用 [SSH 远程游玩工具](docs/SSH_PLAY.md) 同时转发两者。
+
 ## 目录
 
 | 路径 | 内容 |

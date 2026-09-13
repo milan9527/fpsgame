@@ -23,10 +23,10 @@ in software environment. Geometry has84 triangles per tuft. Content19 unchanged.
 Full historical changes/evidence are in docs/VISUAL_REVIEW.md; read selectively.
 
 ## Next substantive work
-Improve architectural silhouettes and natural layout, vegetation LOD/aliasing,
+Improve architectural silhouettes (long side walls are blank), natural layout,
 and realistic equipment. Current screenshot still falls well below reference.
-Stages15–16 are not yet in desktop ZIPs; refresh after a clean commit.
-Current desktop packages: artifacts/visual-preview/0f2b9d5f721b/, stages6–14,
+Current packages include stages15–16; packaged Linux render also passed.
+Current desktop packages: artifacts/visual-preview/8de4240141a5/, stages6–16,
 content19. verification.json records both exports, packaged Linux offline/roof
 checks and archive hashes. Rebuild via python3 tools/package_visual_preview.py
 from a clean commit. Previous 9648cb40b560 packages are obsolete content18.

@@ -180,3 +180,5 @@ Compatibility 图形环境检查所有实例均避开道路和装卸场地，日
 Forward+ 实际截图 `artifacts/realism16-forward/gameplay.png` 和 Compatibility 截图 `realism16-compat/gameplay.png` 均通过。相同视角重建上轮的 24 米格/75 米裁剪/StandardMaterial 草地进行比较，`realism16-profile.log` 记录场景图元从 2,778,070 降至 1,748,314（约 37%），绘制调用从 516 增至 523；新旧实例总数相同。测量脚本在 `artifacts/realism16-grass-profile.gd`。这些是固定视角提交量，不是硬件帧率，也不能证明所有视角的性能。
 
 截图中远处细草颗粒减少，但远地表仍简单，近处叶片还有锯齿；建筑体块、人物和整体环境仍有明显不足。后续重点应转向建筑轮廓、材质尺度和自然布局，不能只靠继续微调草地宣称写实目标完成。
+
+第十六轮本地 Windows/Linux 预览位于 `artifacts/visual-preview/8de4240141a5/`，包含第十五、十六轮草地改动。导出、打包后 Linux 单机与屋顶碰撞检查通过。从 `/tmp` 启动打包程序的实际 Forward+ 截图也通过，图片位于该目录 `capture/gameplay.png`；归档哈希见 `verification.json`。Windows 尚未实机测试，未推送或部署。

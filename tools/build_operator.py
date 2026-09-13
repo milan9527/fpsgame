@@ -1,4 +1,4 @@
-"""Original rigid-panel humanoid skin and keyed locomotion clips, authored in Blender.
+"""Original tactical operator skin and keyed locomotion clips, authored in Blender.
 Executed by build_assets.py, which supplies materials, box(), OUT and SOURCE.
 """
 import bpy
@@ -131,7 +131,16 @@ def skin(obj, bone):
 
 
 def panel(name, center, dimensions, mat, bone, bevel=0.02):
-    return skin(box(name, center, dimensions, mat, bevel), bone)
+    obj = skin(box(name, center, dimensions, mat, bevel), bone)
+    if mat == cloth:
+        uv = obj.data.uv_layers.active
+        for polygon in obj.data.polygons:
+            axis = max(range(3), key=lambda i: abs(polygon.normal[i]))
+            axes = [i for i in range(3) if i != axis]
+            for loop in polygon.loop_indices:
+                point = obj.data.vertices[obj.data.loops[loop].vertex_index].co
+                uv.data[loop].uv = (point[axes[0]] / 0.6, point[axes[1]] / 0.6)
+    return obj
 
 
 def organic(name, center, dimensions, mat, bone):
@@ -141,6 +150,11 @@ def organic(name, center, dimensions, mat, bone):
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     for polygon in obj.data.polygons: polygon.use_smooth = True
     obj.data.materials.append(mat)
+    if mat == cloth:
+        circumference = math.pi * (dimensions[0] + dimensions[1]) / 2
+        for uv in obj.data.uv_layers.active.data:
+            uv.uv.x *= circumference / 0.6
+            uv.uv.y *= dimensions[2] / 0.6
     return skin(obj, bone)
 
 
@@ -153,7 +167,8 @@ def limb(name, start, end, width, depth, mat, bone):
         taper = 0.76 + 0.24*math.sin(math.pi*t)
         for segment in range(segments):
             angle = segment*math.tau/segments
-            fold = 1 + 0.055*math.sin(t*31 + math.sin(angle*3))*math.sin(math.pi*t)
+            joint_fold = math.exp(-((t-0.18)/0.14)**2) + 0.65*math.exp(-((t-0.84)/0.10)**2)
+            fold = 1 + 0.018*math.sin(t*11 + angle*2) + 0.035*math.sin(t*39 + math.sin(angle*2))*joint_fold
             vertices.append((math.cos(angle)*width*0.5*taper*fold,
                              math.sin(angle)*depth*0.5*taper*fold, (t-0.5)*direction.length))
     for ring in range(rings-1):
@@ -161,37 +176,92 @@ def limb(name, start, end, width, depth, mat, bone):
             n=(segment+1)%segments
             faces.append((ring*segments+segment,ring*segments+n,(ring+1)*segments+n,(ring+1)*segments+segment))
     mesh=bpy.data.meshes.new(name);mesh.from_pydata(vertices,[],faces);mesh.update()
-    uv=mesh.uv_layers.new(name='Uniform UV')
+    # Match the UV layer on spheres/boxes so joining does not move cloth UVs
+    # into TEXCOORD_1 while the material still samples TEXCOORD_0.
+    uv=mesh.uv_layers.new(name='UVMap')
     for polygon in mesh.polygons:
         polygon.use_smooth=True
         for loop in polygon.loop_indices:
             index=mesh.loops[loop].vertex_index;u=(index%segments)/segments
             if polygon.index%segments==segments-1 and u==0:u=1
-            uv.data[loop].uv=(u,index//segments/(rings-1)*1.5)
+            circumference = math.pi * (width + depth) / 2
+            uv.data[loop].uv=(u*circumference/0.6,index//segments/(rings-1)*direction.length/0.6)
     obj=bpy.data.objects.new(name,mesh);bpy.context.collection.objects.link(obj)
     obj.location=(start+end)/2;obj.rotation_mode='QUATERNION'
     obj.rotation_quaternion=vec(0,0,1).rotation_difference(direction.normalized())
     obj.data.materials.append(mat)
-    return skin(obj,bone)
+    skin(obj,bone)
+    # Fabric near joints shares adjacent bones; armor and pouches stay rigid.
+    parent = next(parent for name, _, _, parent in bones if name == bone)
+    child = next((name for name, _, _, parent_name in bones if parent_name == bone), None)
+    for adjacent, at_end in [(parent, False), (child, True)]:
+        if adjacent is None:
+            continue
+        group = obj.vertex_groups.new(name=adjacent)
+        for ring in range(rings):
+            t = ring / (rings - 1)
+            distance = 1 - t if at_end else t
+            weight = max(0.0, 0.5 * (1 - distance / 0.16))
+            if weight > 0:
+                indices = list(range(ring * segments, (ring + 1) * segments))
+                obj.vertex_groups[bone].add(indices, 1 - weight, 'REPLACE')
+                group.add(indices, weight, 'REPLACE')
+    return obj
+
+def helmet_shell():
+    vertices, faces = [], []
+    rings, segments = 12, 40
+    for ring in range(rings + 1):
+        theta = 0.025 + (math.pi / 2 - 0.025) * ring / rings
+        for segment in range(segments):
+            phi = segment * math.tau / segments
+            vertices.append((0.135 * math.sin(theta) * math.cos(phi),
+                             -0.012 + 0.150 * math.sin(theta) * math.sin(phi),
+                             1.65 + 0.14 * math.cos(theta) +
+                             0.022 * max(0, math.sin(phi)) * math.sin(theta) ** 4))
+    for ring in range(rings):
+        for segment in range(segments):
+            n = (segment + 1) % segments
+            faces.append((ring*segments+segment, (ring+1)*segments+segment,
+                          (ring+1)*segments+n, ring*segments+n))
+    faces.append(tuple(range(segments)))
+    mesh = bpy.data.meshes.new('Protective helmet shell')
+    mesh.from_pydata(vertices, [], faces)
+    obj = bpy.data.objects.new('Helmet shell', mesh)
+    bpy.context.collection.objects.link(obj)
+    mesh.materials.append(webbing)
+    for polygon in mesh.polygons:
+        polygon.use_smooth = True
+    solid = obj.modifiers.new('Shell thickness', 'SOLIDIFY')
+    solid.thickness = 0.004
+    edge = obj.modifiers.new('Rounded shell edge', 'BEVEL')
+    edge.width = 0.0015
+    edge.segments = 2
+    return skin(obj, 'Head')
 
 
 # Fabric folds and rounded anatomy replace the original rigid block silhouette.
 fabric=cloth.node_tree.nodes.new('ShaderNodeTexImage')
 fabric.image=bpy.data.images.load(str(ROOT/'client/assets/realism/uniform.png'))
 cloth.node_tree.links.new(fabric.outputs['Color'],cloth.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
-webbing=material('Olive nylon webbing',(0.075,0.088,0.044))
+webbing=material('Olive nylon webbing',(0.11,0.105,0.068))
 rubber=material('Boot rubber and balaclava',(0.014,0.018,0.012))
 organic('Uniform torso',(0,0,1.18),(0.49,0.29,0.49),cloth,'Hips')
 panel('Front carrier',(0,0.145,1.21),(0.37,0.07,0.34),webbing,'Hips',0.035)
 panel('Rear carrier',(0,-0.145,1.21),(0.38,0.06,0.35),webbing,'Hips',0.035)
 organic('Trouser hips',(0,0,0.93),(0.39,0.27,0.24),cloth,'Hips')
-organic('Covered head',(0,0.01,1.58),(0.27,0.28,0.35),rubber,'Head')
-organic('Helmet shell',(0,-0.012,1.70),(0.35,0.36,0.21),webbing,'Head')
+organic('Covered neck',(0,0,1.46),(0.12,0.13,0.12),rubber,'Head')
+organic('Covered head',(0,0.008,1.60),(0.205,0.225,0.27),rubber,'Head')
+organic('Mask nose bridge',(0,0.118,1.60),(0.035,0.035,0.055),rubber,'Head')
+organic('Mask chin',(0,0.075,1.505),(0.10,0.045,0.055),rubber,'Head')
+helmet_shell()
 for sign in [-1,1]:
-    organic('Goggle rim',(sign*0.065,0.145,1.642),(0.143,0.055,0.082),rubber,'Head')
-    organic('Goggle lens',(sign*0.065,0.168,1.644),(0.116,0.020,0.055),visor,'Head')
+    organic('Goggle rim',(sign*0.049,0.123,1.642),(0.110,0.043,0.068),rubber,'Head')
+    organic('Goggle lens',(sign*0.049,0.143,1.644),(0.086,0.015,0.046),visor,'Head')
+    panel('Goggle strap',(sign*0.102,-0.005,1.642),(0.012,0.19,0.026),rubber,'Head',0.004)
+    panel('Chin strap',(sign*0.083,0.020,1.55),(0.013,0.022,0.14),webbing,'Head',0.004)
     panel('Carrier shoulder strap',(sign*0.15,0.03,1.395),(0.065,0.30,0.045),webbing,'Hips',0.012)
-    panel('Helmet rail',(sign*0.172,-0.015,1.69),(0.025,0.17,0.035),rubber,'Head',0.008)
+    panel('Helmet rail',(sign*0.133,-0.015,1.685),(0.018,0.13,0.028),rubber,'Head',0.006)
 for row in range(4):
     panel('Carrier stitching',(0,0.187,1.12+row*0.061),(0.35,0.009,0.014),cloth,'Hips',0.003)
 for x in [-0.11,0,0.11]:
@@ -201,8 +271,8 @@ panel('Field pack',(0,-0.24,1.20),(0.32,0.19,0.37),webbing,'Hips',0.05)
 for side, sign in [('L',-1),('R',1)]:
     limb('Trouser thigh '+side,rest['Hip.'+side],rest['Knee.'+side],0.22,0.23,cloth,'Thigh.'+side)
     limb('Trouser shin '+side,rest['Knee.'+side],rest['Ankle.'+side],0.17,0.18,cloth,'Shin.'+side)
-    organic('Boot '+side,(sign*0.14,0.057,0.09),(0.17,0.32,0.18),rubber,'Foot.'+side)
-    panel('Boot sole '+side,(sign*0.14,0.065,0.025),(0.17,0.33,0.035),rubber,'Foot.'+side,0.012)
+    organic('Boot '+side,(sign*0.14,0.057,0.09),(0.145,0.30,0.18),rubber,'Foot.'+side)
+    panel('Boot sole '+side,(sign*0.14,0.065,0.025),(0.15,0.31,0.035),rubber,'Foot.'+side,0.012)
     limb('Sleeve '+side,rest['Shoulder.'+side],rest['Elbow.'+side],0.18,0.18,cloth,'UpperArm.'+side)
     limb('Forearm '+side,rest['Elbow.'+side],rest['Hand.'+side],0.13,0.14,cloth,'Forearm.'+side)
     organic('Glove '+side,rest['Hand.'+side],(0.105,0.13,0.085),rubber,'Hand.'+side)

@@ -35,6 +35,24 @@ func run() -> void:
 	assert(meshes.size() == 1, "Character mesh is merged for bounded draw submissions")
 	var skin: MeshInstance3D = meshes[0]
 	assert(skin.skin != null and skin.mesh.get_surface_count() == 4)
+	# Joining differently named Blender UV layers previously left sleeves and
+	# trousers sampling one camouflage texel despite the texture being present.
+	var cloth_triangles := 0
+	var mapped_triangles := 0
+	for surface in range(skin.mesh.get_surface_count()):
+		var material = skin.mesh.surface_get_material(surface)
+		if material.resource_name != "Ranger / field uniform": continue
+		var arrays: Array = skin.mesh.surface_get_arrays(surface)
+		var uv: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		assert(not uv.is_empty() and not indices.is_empty(), "Clothing requires primary UVs")
+		for index in range(0, indices.size(), 3):
+			var edge_a := uv[indices[index + 1]] - uv[indices[index]]
+			var edge_b := uv[indices[index + 2]] - uv[indices[index]]
+			cloth_triangles += 1
+			if absf(edge_a.cross(edge_b)) > 0.0000001: mapped_triangles += 1
+	print("CLOTH_UV_COVERAGE ", mapped_triangles, "/", cloth_triangles)
+	assert(cloth_triangles > 0 and mapped_triangles > cloth_triangles * 0.9, "Camouflage UVs must cover the actual cloth triangles")
 	skeleton.force_update_all_bone_transforms()
 	await RenderingServer.frame_post_draw
 	var standing_bounds := skin.bake_mesh_from_current_skeleton_pose().get_aabb()

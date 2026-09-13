@@ -10,7 +10,7 @@ provide current runnable local previews. The goal is NOT complete. Work
 autonomously; NEVER push GitHub without confirmation. No AWS changes needed.
 
 ## Current checkpoint
-Stages 6–8 are ready for a local checkpoint; see docs/VISUAL_REVIEW.md.
+Detailed checkpoints are in docs/VISUAL_REVIEW.md; stage 12 is the latest work.
 - Detailed shotgun/marksman geometry and wide smooth scope bore. Initial scope
   support/turret intrusion was fixed. Final dedicated optic capture passed in
   Compatibility and Forward+ (artifacts/realism8-optic*/).
@@ -29,6 +29,16 @@ Stages 6–8 are ready for a local checkpoint; see docs/VISUAL_REVIEW.md.
   Optic screenshots: artifacts/realism8-optic-forward/ and realism8-optic/.
 
 ## Next work
+Stage 12 revises operator proportions/helmet shell, smooths cloth joint weights
+and fixes lost limb camouflage UVs caused by differently named Blender UV layers.
+UV scale now follows a common 0.6m repeat. Latest image:
+artifacts/realism12-character-scaled.png. Animation/UV regression passes
+(12804/12876 non-degenerate cloth triangles); vehicle/downed graphical tests
+passed the revised geometry/weights before the final UV-only adjustment.
+17 bones / 15 clips remain. The 9648cb40b560 preview predates stage 12.
+Important remaining weaknesses include sparse/repetitive world layout and
+simple equipment/face/architecture; the goal is not complete.
+
 Stage 11 adds scanned concrete interior floors, slab joints/skirting, a visible
 central ceiling lamp with a distance-faded shadowed OmniLight, and a real wooden
 cargo model over the existing interior cover collider. Offline smoke passes;

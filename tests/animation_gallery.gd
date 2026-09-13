@@ -13,6 +13,9 @@ func run() -> void:
 	camera.position = Vector3(0, 2.0, -21)
 	camera.look_at(Vector3(0, 0.95, -15))
 	camera.fov = 56
+	if OS.get_environment("GALLERY_CLOSEUP") == "1":
+		camera.position = Vector3(-3.1, 1.7, -17.3)
+		camera.look_at(Vector3(-2, 1.1, -15))
 	camera.current = true
 	for i in range(3):
 		var actor = load("res://scripts/actor.gd").new()
@@ -36,6 +39,9 @@ func run() -> void:
 		scene.add_child(label)
 	await create_timer(0.1).timeout
 	await RenderingServer.frame_post_draw
-	root.get_texture().get_image().save_png(OS.get_environment("CAPTURE_PATH"))
+	var output := OS.get_environment("CAPTURE_PATH")
+	assert(not output.is_empty())
+	assert(DirAccess.make_dir_recursive_absolute(output.get_base_dir()) == OK)
+	assert(root.get_texture().get_image().save_png(output) == OK)
 	print("ANIMATION_GALLERY_RENDERED")
 	quit()

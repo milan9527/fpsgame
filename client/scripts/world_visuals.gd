@@ -41,7 +41,7 @@ static func military_materials(model: Node3D) -> void:
 			if not source is StandardMaterial3D: continue
 			if source.resource_name not in ["Field sleeves", "Ranger / field uniform", "Ranger / armor", "Wrist straps"]: continue
 			var material: StandardMaterial3D = source.duplicate()
-			material.albedo_color = Color(0.5, 0.5, 0.5) if source.resource_name == "Ranger / field uniform" else Color(0.3, 0.3, 0.3)
+			material.albedo_color = Color(0.7, 0.7, 0.7) if source.resource_name == "Ranger / field uniform" else Color(0.3, 0.3, 0.3)
 			material.albedo_texture = load("res://assets/realism/uniform.png")
 			material.roughness = 1.0
 			material.metallic_specular = 0.15

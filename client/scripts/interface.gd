@@ -177,8 +177,13 @@ func _ready() -> void:
 	username = field(right, "Username (3–24 letters / digits / _)", "")
 	password = field(right, "Password (at least 10 characters)", "")
 	password.secret = true
+	password.keep_editing_on_text_submit = true
+	username.text_submitted.connect(func(_value): password.grab_focus())
+	password.text_submitted.connect(func(_value): online(false))
 	endpoint = field(right, "API URL", settings.get_value("network", "endpoint", "http://127.0.0.1:8000"))
+	endpoint.keep_editing_on_text_submit = true
 	endpoint.tooltip_text = "127.0.0.1 connects to this computer. For a remote server, enter its HTTPS address."
+	endpoint.text_submitted.connect(func(_value): online(false))
 	var connection_row := HBoxContainer.new()
 	right.add_child(connection_row)
 	online_mode = OptionButton.new()
@@ -192,7 +197,7 @@ func _ready() -> void:
 	connection_cancel.pressed.connect(func(): connection_cancel_requested.emit())
 	connection_row.add_child(connection_cancel)
 	button(right, "CREATE ACCOUNT", func(): online(true))
-	status = label(right, "Offline operations need no account or connection.", 15, Color("9aafb4"))
+	status = label(right, "New online player? Choose a username and password, then CREATE ACCOUNT. Offline needs no account.", 15, Color("9aafb4"))
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.custom_minimum_size.y = 65
 	label(right, "FIELD SETTINGS", 16, ACCENT)

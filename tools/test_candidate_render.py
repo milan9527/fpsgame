@@ -25,6 +25,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix="iron-render-profile-") as profile:
             env = dict(os.environ, XDG_DATA_HOME=profile, CAPTURE_ARTIFACT_DIR=str(output))
             for name, marker in [
+                ("login_form_render", "LOGIN_FORM_RENDER_PASS"),
                 ("animation_rules", "ANIMATION_RULES_PASS"),
                 ("downed_animation", "DOWNED_ANIMATION_PASS"),
                 ("team_voice_ui", "TEAM_VOICE_UI_PASS"),
@@ -42,7 +43,7 @@ def main():
                     "SCRIPT ERROR", "Assertion failed", "ObjectDB instances leaked", "ERROR:"]), str(log)
                 report["checks"].append(name)
                 print(f"CANDIDATE_RENDER_CHECK_PASS {name}", flush=True)
-        for image in ("downed-animation.png", "team-voice-settings.png", "microphone-setup.png"):
+        for image in ("login-1280x800.png", "login-960x600.png", "downed-animation.png", "team-voice-settings.png", "microphone-setup.png"):
             assert (output / image).stat().st_size > 1000, image
         report["status"] = "passed"
         print("CANDIDATE_RENDER_PASS commit=" + candidate["commit"] + " archive_sha256=" + candidate["sha256"])

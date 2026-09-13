@@ -13,6 +13,16 @@ func run() -> void:
 	actor.position = Vector3(17, 0.05, 50)
 	actor.yaw = atan2(-18, 16)
 	actor.pitch = -0.03
+	if OS.get_environment("CAPTURE_FOREST") == "1":
+		var tree: Node3D
+		for node in game.world.get_children():
+			if str(node.name).begins_with("fir_near"):
+				tree = node
+				break
+		assert(tree != null, "Forest capture requires a near tree")
+		actor.position = tree.position + Vector3(9, 0.05, 9)
+		actor.yaw = PI / 4
+		actor.pitch = 0.20
 	if OS.get_environment("CAPTURE_INTERIOR") == "1":
 		actor.position = Vector3(36, 0.25, 31.5)
 		actor.yaw = atan2(5.0, -2.5)

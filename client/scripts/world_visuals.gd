@@ -249,7 +249,8 @@ static func service_yard(world, at: Vector3) -> void:
 			stripe.set_meta("visual_batch", "yard-markings")
 
 static func tree(world, at: Vector3) -> void:
-	var model: Node3D = load("res://assets/realism/fir_near.glb").instantiate()
+	var model: Node3D = load("res://assets/realism/fir_full.glb").instantiate()
+	model.name = "fir_near"
 	model.position = at
 	model.rotation.y = sin(at.x * 1.31 + at.z * 0.71) * PI
 	world.add_child(model)
@@ -261,7 +262,7 @@ static func tree(world, at: Vector3) -> void:
 	distant.mesh = quad
 	distant.position = at + Vector3(0, 4.5, 0)
 	var material := StandardMaterial3D.new()
-	material.albedo_texture = load("res://assets/realism/fir_impostor.png")
+	material.albedo_texture = load("res://assets/realism/fir_background.png")
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 	material.alpha_scissor_threshold = 0.35
 	material.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y

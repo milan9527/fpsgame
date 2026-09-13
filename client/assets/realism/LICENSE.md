@@ -44,6 +44,12 @@ the existing CC0 plaster scan, with the building's wall tint.
 
 `fir_background.png` is a Blender-rendered derivative of Poly Haven
 `fir_tree_01`, variant B (Rob Tuytel / Rico Cilliers, CC0).
+`fir_full.glb` is a reduced variant B derivative from the same source, normalized
+to nine metres. `tools/prepare_fir_needles.py` (Python, NumPy and SciPy) retains
+all 432704 disconnected needles as two-triangle kites, compensating their middle
+width for the surface area lost by tapering the endpoints. Then
+`tools/build_fir_lod.py` (Blender) reduces woody branches and the trunk and
+removes unused vertex colors. These generators do not modify the source Blend.
 The high-resolution authoring scene can be regenerated with
 `tools/fetch_tree_variant.py` and `FIR_VARIANT=B tools/build_tree_impostor.py`
 (the latter runs inside Blender). Download ranges and hashes are recorded in

@@ -202,3 +202,30 @@ Forward+ 实际截图 `artifacts/realism16-forward/gameplay.png` 和 Compatibili
 本轮修复材质分区并增加真实构造，未完成整体环境美术目标。稀疏重复的布局、远景树形和地表层次仍有明显差距，下一步应推进更大尺度的环境改进。
 
 第十八轮本地 Windows/Linux 预览已更新到 `artifacts/visual-preview/3406be77d44d/`，包含第十七轮侧墙及第十八轮屋顶。导出、打包后 Linux 单机/屋顶检查通过，从 `/tmp` 运行的 Forward+ 实际游戏截图也通过，图片位于该目录 `capture/gameplay.png`；哈希和构建提交见 `verification.json`。Windows 仍未实机运行，未推送或部署。
+
+## Stage19 — fuller fir geometry, 2026-09-13
+
+Near trees now use CC0 fir variant B, matching the source of their distant
+billboard. Blanket Blender decimation removed whole disconnected needles:
+source analysis found 432704 six-vertex/four-triangle ribbons. The new
+`prepare_fir_needles.py` preserves every ribbon as a two-triangle kite, widening
+its middle to compensate for tapered endpoint area; `build_fir_lod.py` reduces
+woody branches/trunk and removes unused vertex colors. Final GLB: 940024
+triangles, approximately72 MiB. Automatic Godot mesh reduction is disabled for
+this asset; the existing25m distant-billboard switch remains.
+
+Evidence: `artifacts/realism19-final/gameplay.png` is an actual Forward+ solo
+forest capture; `realism19-before/gameplay.png` is the original C-tree baseline.
+`CAPTURE_FOREST=1` now reproduces this camera in visual_gameplay_capture.gd.
+Compatibility world capture passed in `realism19-world/`; its276 collision
+shapes exactly match stage13. Final offline smoke and8-roof collision tests
+passed; aim alignment passed108samples/3weapons. Runtime bounds and colliders
+were not changed. Generator counts: `realism19-reduction.json`.
+
+The fuller crown is an improvement, not achievement of the visual target.
+Near foliage still costs more geometry than the old C model; no physical GPU
+performance claim is made. Distant baked trees remain brighter/denser than the
+near geometry, and the25m transition, repetitive slopes and empty ground remain
+visible. Future work should improve these substantial mismatches rather than
+counting this tree replacement as overall realism. Initial low-ratio, cutout,
+and intermediate kite captures are diagnostic only, not release evidence.

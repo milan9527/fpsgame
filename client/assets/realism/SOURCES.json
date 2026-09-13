@@ -224,6 +224,18 @@
           "sha256": "cd8c90c5933a5a89380dc5c2c954e50a05b43421b43500f470d32c1c09c7aae1"
         }
       ]
+    },
+    "near_variant": {
+      "variant": "B",
+      "output": "fir_full.glb",
+      "height_metres": 9,
+      "triangles": 940024,
+      "needle_count": 432704,
+      "generators": [
+        "tools/prepare_fir_needles.py",
+        "tools/build_fir_lod.py"
+      ],
+      "modification": "Two triangles per needle with surface-area compensation; reduced woody branches/trunk; unused vertex colors removed. Near and distant trees now use variant B."
     }
   },
   {

@@ -1929,7 +1929,7 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 	if attempt_id != connection_attempt:
 		return
 	if preflight.code != 200:
-		ui.show_menu("Server update required: build information unavailable." if preflight.code == 404 else "Operations service unavailable. Check the API address and retry.")
+		ui.show_login_error("Server update required: build information unavailable." if preflight.code == 404 else "Operations service unavailable. Check the API address and retry.")
 		if bot_client:
 			request_quit(1)
 		return
@@ -1945,7 +1945,7 @@ func sign_in(username: String, password: String, register: bool, endpoint: Strin
 	if attempt_id != connection_attempt:
 		return
 	if response.code != 200 and response.code != 201:
-		ui.show_menu("Account request failed: " + error_message(response))
+		ui.show_login_error("Account request failed: " + error_message(response), "username" if response.code == 409 else "password")
 		if bot_client:
 			request_quit(1)
 		return

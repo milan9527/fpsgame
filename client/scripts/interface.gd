@@ -482,6 +482,15 @@ func save_settings() -> void:
 		settings.set_value("network", "endpoint", endpoint.text)
 	settings.save("user://settings.cfg")
 
+func show_login_error(message: String, field_name := "endpoint") -> void:
+	show_menu(message)
+	if field_name == "username":
+		username.grab_focus()
+	elif field_name == "password":
+		password.grab_focus()
+	else:
+		endpoint.grab_focus()
+
 func show_menu(message := "") -> void:
 	voice_setup.close()
 	party_lobby.dismiss()

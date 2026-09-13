@@ -32,6 +32,9 @@ var world_frame_sequence := 0
 var vehicle_input_key := ""
 var vehicle_input_sequence := -1
 var sessions: Dictionary = {}
+var retained_sessions: Dictionary = {}
+# Remains disabled until reconnect ticket authorization and client recovery exist.
+var reconnect_grace_seconds := 0.0
 var pending: Dictionary = {}
 var participants: Dictionary = {}
 var loot: Dictionary = {}
@@ -312,7 +315,7 @@ func start_server() -> void:
 	print("SERVER_READY udp=" + str(listen_port) + " relay=" + str(multiplayer.server_relay) + " room=" + room_id)
 
 func room_signature() -> String:
-	return match_id + "/" + match_mode + "/" + phase + "/" + str(sessions.keys())
+	return match_id + "/" + match_mode + "/" + phase + "/" + str(sessions.keys()) + "/" + str(retained_sessions.keys())
 
 func report_room() -> bool:
 	if room_heartbeat_busy:
@@ -326,6 +329,9 @@ func report_room() -> bool:
 	for session in sessions.values():
 		players.append(session.uid)
 		versions[session.uid] = int(session.get("session_version", 0))
+	for retained in retained_sessions.values():
+		players.append(retained.session.uid)
+		versions[retained.session.uid] = int(retained.session.get("session_version", 0))
 	var payload := build_info.duplicate()
 	payload.mode = match_mode
 	payload.merge({"room_id": room_id, "instance_id": room_instance, "generation": match_id, "revision": room_revision, "host": OS.get_environment("GAME_PUBLIC_HOST") if OS.has_environment("GAME_PUBLIC_HOST") else "127.0.0.1", "port": room_port, "capacity": MAX_PLAYERS, "phase": phase, "players": players, "session_versions": versions})
@@ -339,6 +345,9 @@ func report_room() -> bool:
 	for id in sessions.keys():
 		if sessions[id].uid in response.body.get("revoked", []) and not sessions[id].get("revoking", false):
 			revoke_account_peer(id)
+	for id in retained_sessions.keys():
+		if retained_sessions[id].session.uid in response.body.get("revoked", []):
+			expire_retained_actor(id)
 	return true
 
 func revoke_account_peer(id: int) -> void:
@@ -427,6 +436,7 @@ func start_solo(mode := "solo") -> void:
 	ui.show_game()
 
 func clear_actors() -> void:
+	retained_sessions.clear()
 	vehicle_frames.reset(network_round_id)
 	vehicle_replica.reset(self, network_round_id)
 	world_frame_sequence = 0
@@ -829,6 +839,7 @@ func _physics_process(dt: float) -> void:
 		if Time.get_ticks_msec() - pending[id].at > 8000:
 			multiplayer.multiplayer_peer.disconnect_peer(id)
 	if dedicated:
+		expire_retained_sessions(Time.get_ticks_msec())
 		var now := Time.get_ticks_msec()
 		if not room_id.is_empty() and not room_heartbeat_busy and (now >= room_heartbeat_due or (room_heartbeat_success >= room_heartbeat_attempt and room_signature() != room_heartbeat_signature and now - room_heartbeat_attempt >= 250)):
 			report_room()
@@ -1713,11 +1724,43 @@ func departure_reason(id: int) -> String:
 	return "connection_lost"
 
 func peer_disconnected(id: int) -> void:
+	if retained_sessions.has(id) and not sessions.has(id):
+		pending.erase(id)
+		return
 	voice_relay.senders.erase(id)
+	var reason := departure_reason(id)
 	if dedicated:
-		print("PEER_DISCONNECTED peer=" + str(id) + " reason=" + departure_reason(id))
+		print("PEER_DISCONNECTED peer=" + str(id) + " reason=" + reason)
+	if dedicated and phase == "live" and reconnect_grace_seconds > 0 and reason == "connection_lost" and actors.has(id) and actors[id].alive:
+		retained_sessions[id] = {"session": sessions[id].duplicate(true), "generation": match_id,
+			"until": Time.get_ticks_msec() + int(minf(reconnect_grace_seconds, 30) * 1000)}
+		pending.erase(id)
+		sessions.erase(id)
+		var actor = actors[id]
+		actor.last_command_msec = -1000
+		expire_held_input(actor, Time.get_ticks_msec())
+		actor.jump_requested = false
+		actor.cancel_heal()
+		rescue.cancel(actor)
+		if actor.is_seated() and actor.vehicle_seat == 0:
+			actor.vehicle_ref.get_ref().reset_controls()
+		return
 	pending.erase(id)
 	sessions.erase(id)
+	remove_disconnected_actor(id)
+
+func expire_retained_actor(id: int) -> void:
+	if not retained_sessions.has(id):
+		return
+	retained_sessions.erase(id)
+	remove_disconnected_actor(id)
+
+func expire_retained_sessions(now: int) -> void:
+	for id in retained_sessions.keys():
+		if retained_sessions.has(id) and (phase != "live" or retained_sessions[id].generation != match_id or now >= retained_sessions[id].until):
+			expire_retained_actor(id)
+
+func remove_disconnected_actor(id: int) -> void:
 	if dedicated and actors.has(id):
 		if phase == "live":
 			damage(actors[id], 10000, 0, true, false, "DISCONNECTED", null, true, true)
@@ -1728,7 +1771,7 @@ func peer_disconnected(id: int) -> void:
 			release_empty_room()
 
 func release_empty_room() -> void:
-	if not dedicated or not sessions.is_empty():
+	if not dedicated or not sessions.is_empty() or not retained_sessions.is_empty():
 		return
 	if phase == "live":
 		finish_round()

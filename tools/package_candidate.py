@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CASES = [
     "candidate_manifest", "login_form", "login_retry",
     "team_rules", "rescue_rules", "party_team_rules", "party_lobby_rules",
-    "duo_disconnect_rules", "duo_spectator", "team_hud", "team_pings",
+    "duo_disconnect_rules", "reconnect_retention", "duo_spectator", "team_hud", "team_pings",
     "local_duo_profile", "duo_checkpoint", "checkpoint_rules", "bindings_rules",
     "heal_cancel_rules", "bot_hazards_rules", "bot_utilities_rules",
     "foregrip_rules", "input_timeout_rules", "damage_indicators_rules",

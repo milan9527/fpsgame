@@ -236,3 +236,28 @@ and roof checks passed; `verification.json` records archive hashes. A packaged
 Forward+ forest capture launched from `/tmp` also passed and saved
 `capture/gameplay.png`. Windows was exported, not executed on Windows hardware.
 No GitHub push or live-service deployment occurred.
+
+## Stage20 — ridge shapes and wooded foothills, 2026-09-13
+
+The background terrain now uses rotated, offset winding crests, side shoulders,
+and gullies within the original mountain footprints instead of radial mounds.
+Groves extend through the surrounding hills, reject slopes above approximately
+48 degrees, and include clustered seedlings. The final world contains2314
+background trees including494 seedlings. Gameplay random state is unaffected.
+
+Tree roots sample the same65x65 terrain grid and diagonal triangles as the
+rendered meshes. `tests/background_scenery.gd` uses temporary triangle collision
+copies and independent vertical raycasts to check every tree's root height and
+keep all scenery trees outside the126m square boundary. Run this test graphically
+with xvfb and Compatibility; headless MultiMesh transform readback is invalid.
+The final root test reported a maximum0.000101m error. These temporary colliders
+exist only in the test; production still has276 colliders matching stage19.
+
+Evidence: actual Forward+ solo `artifacts/realism20-final/gameplay.png`;
+Compatibility world views in `realism20-world/`; offline smoke passed.
+The new silhouettes and foothill groves improve depth, but bare cliffs remain
+prominent, billboard lighting differs from near foliage, and the architecture,
+characters and first-person assets still fall short of the overall visual goal.
+The street capture makes the remaining repeated single-storey warehouse forms
+particularly clear; future work should address those major assets rather than
+continuously polishing only distant scenery.

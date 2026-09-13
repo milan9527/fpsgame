@@ -299,9 +299,18 @@ static func supply_case(proxy: MeshInstance3D) -> void:
 
 static func ridge_height(px: float, pz: float, radius: float, height: float, index: int, noise: FastNoiseLite) -> float:
 	var distance := Vector2(px, pz).length() / radius
-	var elevation := pow(maxf(0, 1.0 - distance * distance), 2) * height
-	elevation *= 0.70 + 0.65 * (1.0 - absf(noise.get_noise_2d(px, pz)))
-	return elevation * (0.88 + 0.12 * sin(px * 0.09 + pz * 0.045 + index))
+	if distance >= 1.0: return 0.0
+	# Offset, winding crests create a ridge with side spurs instead of repeated
+	# radial mounds. The footprint stays fixed so scenery cannot enter the arena.
+	var local := Vector2(px, pz).rotated(index * 1.73) / radius
+	var across := local.y + 0.16 * sin(local.x * 4.7 + index * 0.8)
+	var crest := exp(-pow(across / 0.31, 2))
+	var shoulder := 0.42 * exp(-pow((across + 0.36) / 0.40, 2))
+	var along := pow(maxf(0.0, 1.0 - local.x * local.x), 0.65)
+	var variation := 0.77 + 0.20 * sin(local.x * 5.1 + index * 2.1)
+	var gullies := 1.0 - 0.20 * absf(noise.get_noise_2d(px * 2.3, pz * 2.3))
+	var edge := 1.0 - smoothstep(0.58, 1.0, distance)
+	return height * 1.2 * (crest + shoulder) * along * variation * gullies * edge
 
 static func mountain(radius: float, height: float, index: int) -> ArrayMesh:
 	var surface := SurfaceTool.new()
@@ -387,6 +396,31 @@ static func ground_detail(world) -> void:
 		world.add_child(grass)
 	template.free()
 
+static func background_height(point: Vector2, ridges: Array) -> float:
+	var result := -0.2
+	for ridge in ridges:
+		var profile: Vector3 = ridge.profile
+		var origin: Vector3 = ridge.origin
+		var grid := (point - Vector2(origin.x, origin.z)) / profile.x * 32.0 + Vector2(32, 32)
+		if grid.x < 0 or grid.y < 0 or grid.x >= 64 or grid.y >= 64: continue
+		var x := floori(grid.x)
+		var z := floori(grid.y)
+		var fraction := grid - Vector2(x, z)
+		var heights: Array = ridge.heights
+		var h00: float = heights[z][x]
+		var h10: float = heights[z][x + 1]
+		var h01: float = heights[z + 1][x]
+		var h11: float = heights[z + 1][x + 1]
+		# Match the two actual triangles in mountain(), not the curved function
+		# between vertices, so roots do not float on a steep or narrow spur.
+		var elevation: float
+		if fraction.x + fraction.y <= 1:
+			elevation = h00 + (h10 - h00) * fraction.x + (h01 - h00) * fraction.y
+		else:
+			elevation = h11 + (h01 - h11) * (1 - fraction.x) + (h10 - h11) * (1 - fraction.y)
+		result = maxf(result, origin.y + elevation)
+	return result
+
 static func background_forest(world) -> void:
 	# Background groves remain outside the playable square. They need no
 	# invisible collision and do not allocate the high-detail near-tree mesh.
@@ -415,23 +449,38 @@ static func background_forest(world) -> void:
 		noise.seed = 941 + int(profile.z)
 		noise.frequency = 0.018
 		noise.fractal_octaves = 2
-		ridges.append({"origin": node.position, "profile": profile, "noise": noise})
-	for attempt in range(850):
+		var heights := []
+		for z in range(65):
+			var row := PackedFloat32Array()
+			for x in range(65):
+				row.append(ridge_height((x / 32.0 - 1.0) * profile.x,
+					(z / 32.0 - 1.0) * profile.x, profile.x, profile.y, int(profile.z), noise))
+			heights.append(row)
+		ridges.append({"origin": node.position, "profile": profile, "heights": heights})
+	for attempt in range(3600):
 		var angle := random.randf() * TAU
-		var radius := random.randf_range(142, 195)
+		var radius := random.randf_range(138, 270)
 		var point := Vector2(cos(angle), sin(angle)) * radius
 		if maxf(absf(point.x), absf(point.y)) < 126: continue
 		if density.get_noise_2d(point.x, point.y) < -0.15: continue
+		var ground_height := background_height(point, ridges)
+		var gradient := Vector2(
+			background_height(point + Vector2(1, 0), ridges) - background_height(point - Vector2(1, 0), ridges),
+			background_height(point + Vector2(0, 1), ridges) - background_height(point - Vector2(0, 1), ridges)) * 0.5
+		if gradient.length() > 1.1: continue
 		var scale := random.randf_range(0.75, 1.45)
-		var ground_height := -0.2
-		for ridge in ridges:
-			var profile: Vector3 = ridge.profile
-			var origin: Vector3 = ridge.origin
-			ground_height = maxf(ground_height, origin.y + ridge_height(
-				point.x - origin.x, point.y - origin.z, profile.x, profile.y,
-				int(profile.z), ridge.noise))
 		placements.append(Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * scale),
 			Vector3(point.x, ground_height + 4.5 * scale - 0.15, point.y)))
+		# Seedlings share a grove's suitable soil instead of filling the whole
+		# arena with uniformly spaced trees. Keep roots on the sampled surface.
+		if random.randf() < 0.32:
+			var seedling := point + Vector2(random.randf_range(-3, 3), random.randf_range(-3, 3))
+			if maxf(absf(seedling.x), absf(seedling.y)) < 126: continue
+			var seedling_height := background_height(seedling, ridges)
+			if absf(seedling_height - ground_height) > 1.5: continue
+			var small := random.randf_range(0.16, 0.36)
+			placements.append(Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * small),
+				Vector3(seedling.x, seedling_height + 4.5 * small - 0.05, seedling.y)))
 	var instances := MultiMesh.new()
 	instances.transform_format = MultiMesh.TRANSFORM_3D
 	instances.use_colors = true

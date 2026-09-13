@@ -174,10 +174,11 @@ func _ready() -> void:
 	logout_button.disabled = true
 	logout_button.pressed.connect(func(): logout_requested.emit())
 	account_row.add_child(logout_button)
-	username = field(right, "Username (3–24 letters / digits)", "")
+	username = field(right, "Username (3–24 letters / digits / _)", "")
 	password = field(right, "Password (at least 10 characters)", "")
 	password.secret = true
 	endpoint = field(right, "API URL", settings.get_value("network", "endpoint", "http://127.0.0.1:8000"))
+	endpoint.tooltip_text = "127.0.0.1 connects to this computer. For a remote server, enter its HTTPS address."
 	var connection_row := HBoxContainer.new()
 	right.add_child(connection_row)
 	online_mode = OptionButton.new()
@@ -435,6 +436,26 @@ func bar(at: Vector2, color: Color) -> ProgressBar:
 func online(register: bool) -> void:
 	if busy:
 		return
+	var name := username.text.strip_edges()
+	var address := endpoint.text.strip_edges().trim_suffix("/")
+	var account_pattern := RegEx.new()
+	account_pattern.compile("^[A-Za-z0-9_]{3,24}$")
+	if account_pattern.search(name) == null:
+		status.text = "Use 3–24 letters, digits or underscores for your username."
+		username.grab_focus()
+		return
+	if password.text.length() < 10 or password.text.length() > 128:
+		status.text = "Your password must contain 10–128 characters."
+		password.grab_focus()
+		return
+	var address_pattern := RegEx.new()
+	address_pattern.compile("^https?://[^\\s/?#@]+(?:/[^\\s?#]*)?$")
+	if address_pattern.search(address) == null:
+		status.text = "Enter a server address such as https://game.example.com (no query or fragment)."
+		endpoint.grab_focus()
+		return
+	username.text = name
+	endpoint.text = address
 	busy = true
 	connection_cancel.disabled = false
 	status.text = "Connecting to operations service…"

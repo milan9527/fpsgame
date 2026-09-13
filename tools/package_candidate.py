@@ -12,7 +12,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [
-    "candidate_manifest",
+    "candidate_manifest", "login_form",
     "team_rules", "rescue_rules", "party_team_rules", "party_lobby_rules",
     "duo_disconnect_rules", "duo_spectator", "team_hud", "team_pings",
     "local_duo_profile", "duo_checkpoint", "checkpoint_rules", "bindings_rules",

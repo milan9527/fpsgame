@@ -14,6 +14,7 @@
 
 ```sh
 .venv/bin/python tools/package_android.py
+.venv/bin/python tools/test_android_ui.py
 .venv/bin/python tools/test_android_source_network.py
 .venv/bin/python tools/test_android_devicefarm.py
 .venv/bin/python tools/publish_android.py
@@ -42,3 +43,13 @@
 ## 0.38.0-android.3：瞄准点修复
 
 与 Windows 同步修复开镜过渡和枪模后坐动画造成的红点偏移，改为屏幕中心瞄准点。服务器散布、伤害和命中盒不变。version code 为 3803，同签名覆盖安装，原下载地址和二维码有效。瞄准几何回归覆盖三种武器及侧身/后坐/开镜过渡 108 个组合。
+
+## 0.38.0-android.4：陀螺仪瞄准
+
+在主菜单或 FIELD MENU 中打开 **GYROSCOPE**。默认 OFF；选择 ADS ONLY（仅开镜）或 ALWAYS（游戏中始终开启）。灵敏度独立可调 0.1–4.0 倍，并支持水平、垂直反转；设置自动保存。陀螺仪与手指瞄准叠加，不改变联网协议或服务器判定。
+
+需要手机硬件陀螺仪，不需要额外运行时权限。页面显示是否收到传感器读数；尚未收到读数时可移动手机检查，不能仅凭零读数判断硬件不存在。开菜单、失焦、切到后台、倒地、死亡、乘车时不使用陀螺仪转向；恢复时清除滤波历史，避免累计跳转。采用小幅噪声死区和角速度平滑。
+
+Godot 4.4.1 Android 已将陀螺仪读数转为屏幕方向的弧度/秒，本实现直接将屏幕 Y/X 轴角速度积分为水平/垂直瞄准，不重复旋转横屏坐标。自动化测试用合成输入验证轴向、模式、30/60/120 FPS 一致性、反转、噪声过滤、后台/菜单抑制、触屏叠加和设置保存；这不替代实际手持手机转动的手感测试。version code 为 3804，同签名覆盖安装。
+
+本次 APK 在 AWS Device Farm LG Stylo 6 上通过原生启动冒烟检查；实体手机转动与陀螺仪手感尚未实测。单人/双人 AWS 联网和账号恢复回归通过。

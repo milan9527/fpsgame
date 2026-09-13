@@ -21,7 +21,8 @@ def verify_build(build):
     assert network["apk_sha256"] == build["sha256"]
     for evidence, marker in [("login-memory-test.log", "REMEMBERED_LOGIN_PASS"),
                              ("login-memory-ui.log", "LOGIN_MEMORY_UI_PASS"),
-                             ("aim-alignment.log", "AIM_ALIGNMENT_PASS")]:
+                             ("aim-alignment.log", "AIM_ALIGNMENT_PASS"),
+                             ("gyro-aim.log", "GYRO_AIM_PASS")]:
         assert marker in (ROOT / "artifacts/android-build" / evidence).read_text()
     assert network["status"] == "passed" and set(network["checks"]) == {"solo", "duo"}
     native_build = json.loads((ROOT / "artifacts/android-build/devicefarm.json").read_text())
@@ -29,6 +30,7 @@ def verify_build(build):
     assert native["result"] == "PASSED", "Native Device Farm test must pass"
     assert "MOBILE_CONTROLS_PASS" in (ROOT / "artifacts/android-build/final-touch-test.log").read_text()
     assert hashlib.sha256((ROOT / "client/scripts/mobile_controls.gd").read_bytes()).hexdigest() == build["touch_source_sha256"]
+    assert hashlib.sha256((ROOT / "client/scripts/gyro_aim.gd").read_bytes()).hexdigest() == build["gyro_source_sha256"]
     import subprocess
     subprocess.run([str(ROOT / "artifacts/android-sdk/build-tools/35.0.0/apksigner"),
                     "verify", build["apk"]], check=True)

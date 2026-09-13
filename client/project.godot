@@ -21,3 +21,6 @@ environment/defaults/default_clear_color=Color(0.025,0.04,0.065,1)
 textures/default_filters/use_nearest_mipmap_filter=false
 [physics]
 common/physics_ticks_per_second=60
+
+[input_devices]
+sensors/enable_gyroscope=true

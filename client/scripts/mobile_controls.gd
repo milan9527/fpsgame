@@ -2,6 +2,11 @@ extends Control
 ## Touch-only presentation; commands still use the game's authoritative input path.
 
 var game
+var gyro := preload("res://scripts/gyro_aim.gd").new()
+var gyro_panel: Control
+var gyro_status: Label
+var gyro_readings_seen := false
+var app_focused := true
 var fingers := {}
 var toggles := {}
 var buttons := {}
@@ -32,8 +37,10 @@ func bind(target) -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	load_gyro_settings()
 	build_menu()
 	build_pause()
+	build_gyro_settings()
 	game.ui.pause_changed.connect(func(_value): release_all())
 	game.ui.inventory_changed.connect(func(_value): release_all())
 	game.ui.map_changed.connect(func(_value): release_all())
@@ -95,6 +102,7 @@ func build_menu() -> void:
 	button(left, "DUO  /  OFFLINE", func(): game.start_solo("duo"))
 	button(left, "BASIC TRAINING", func(): game.start_training())
 	button(left, "CONTINUE SAVED GAME", func(): game.resume_solo())
+	button(left, "GYROSCOPE", func(): show_gyro_settings(true))
 	label(left, "Left thumb: move\nRight side: look\nDrag FIRE to aim while shooting", 24)
 	var right := VBoxContainer.new()
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -161,6 +169,7 @@ func build_pause() -> void:
 	button(box, "RESUME", func(): game.ui.set_pause(false))
 	save_button = button(box, "SAVE GAME & RETURN", func(): game.suspend_solo())
 	button(box, "RETURN TO MAIN MENU", func(): game.leave())
+	button(box, "GYROSCOPE", func(): show_gyro_settings(true))
 	var voice := CheckButton.new()
 	voice.text = "Team voice: listen and enable microphone"
 	voice.custom_minimum_size.y = 88
@@ -174,12 +183,12 @@ func build_pause() -> void:
 	label(box, "Hold TALK in a duo match to speak.\nOnline matches continue while this menu is open.", 24)
 
 func modal() -> bool:
-	return game.ui.pause_panel.visible or game.ui.inventory.visible or game.ui.tactical_map.visible or game.ui.controls.visible
+	return (gyro_panel != null and gyro_panel.visible) or game.ui.pause_panel.visible or game.ui.inventory.visible or game.ui.tactical_map.visible or game.ui.controls.visible
 
 func playing() -> bool:
 	return game != null and game.running and not game.ui.menu.visible and not modal()
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if game == null:
 		return
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -208,6 +217,8 @@ func _process(_delta: float) -> void:
 	last_size = size
 	last_playing = active
 	last_alive = alive
+	if OS.has_feature("android"):
+		apply_gyro(Input.get_gyroscope(), delta)
 
 func layout_buttons() -> void:
 	var w := size.x
@@ -350,10 +361,17 @@ func release_all() -> void:
 	queue_redraw()
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]:
+		app_focused = false
+		gyro.reset()
 		release_all()
+	elif what in [NOTIFICATION_APPLICATION_FOCUS_IN, NOTIFICATION_APPLICATION_RESUMED]:
+		app_focused = true
+		gyro.reset()
 	elif what == NOTIFICATION_WM_GO_BACK_REQUEST and game != null:
-		if game.running:
+		if gyro_panel != null and gyro_panel.visible:
+			show_gyro_settings(false)
+		elif game.running:
 			special("pause")
 		else:
 			game.request_quit()
@@ -380,3 +398,79 @@ func _draw() -> void:
 		draw_circle(stick_center, 115, Color(0.04, 0.08, 0.12, 0.55))
 		draw_arc(stick_center, 115, 0, TAU, 48, Color(0.8, 0.9, 0.9, 0.7), 3)
 		draw_circle(stick_center + stick * 72, 44, Color(0.7, 0.8, 0.8, 0.7))
+
+func load_gyro_settings() -> void:
+	gyro.mode = clampi(int(game.ui.settings.get_value("gyro", "mode", 0)), 0, 2)
+	var gain := float(game.ui.settings.get_value("gyro", "sensitivity", 1.0))
+	gyro.sensitivity = clampf(gain, 0.1, 4.0) if is_finite(gain) else 1.0
+	gyro.invert_x = game.ui.settings.get_value("gyro", "invert_x", false) == true
+	gyro.invert_y = game.ui.settings.get_value("gyro", "invert_y", false) == true
+
+func save_gyro_settings() -> void:
+	game.ui.settings.set_value("gyro", "mode", gyro.mode)
+	game.ui.settings.set_value("gyro", "sensitivity", gyro.sensitivity)
+	game.ui.settings.set_value("gyro", "invert_x", gyro.invert_x)
+	game.ui.settings.set_value("gyro", "invert_y", gyro.invert_y)
+	game.ui.save_settings()
+	gyro.reset()
+
+func show_gyro_settings(value: bool) -> void:
+	gyro_panel.visible = value
+	release_all()
+	gyro.reset()
+
+func build_gyro_settings() -> void:
+	gyro_panel = panel()
+	var center := CenterContainer.new()
+	gyro_panel.add_child(center)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size.x = 720
+	box.add_theme_constant_override("separation", 16)
+	center.add_child(box)
+	label(box, "GYROSCOPE AIM", 38)
+	var selection := OptionButton.new()
+	selection.custom_minimum_size.y = 80
+	for text in ["OFF", "ADS ONLY", "ALWAYS"]:
+		selection.add_item(text)
+	selection.select(gyro.mode)
+	selection.item_selected.connect(func(value): gyro.mode = value; save_gyro_settings())
+	box.add_child(selection)
+	var gain_label := label(box, "Sensitivity: %.1fx" % gyro.sensitivity)
+	var slider := HSlider.new()
+	slider.min_value = 0.1
+	slider.max_value = 4.0
+	slider.step = 0.1
+	slider.value = gyro.sensitivity
+	slider.custom_minimum_size.y = 60
+	slider.value_changed.connect(func(value):
+		gyro.sensitivity = value
+		gain_label.text = "Sensitivity: %.1fx" % value
+		save_gyro_settings())
+	box.add_child(slider)
+	for axis in ["Horizontal", "Vertical"]:
+		var inverse := CheckButton.new()
+		inverse.text = "Invert " + axis
+		inverse.custom_minimum_size.y = 72
+		inverse.button_pressed = gyro.invert_x if axis == "Horizontal" else gyro.invert_y
+		inverse.toggled.connect(func(value):
+			if axis == "Horizontal": gyro.invert_x = value
+			else: gyro.invert_y = value
+			save_gyro_settings())
+		box.add_child(inverse)
+	gyro_status = label(box, "", 22)
+	gyro_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	gyro_status.custom_minimum_size = Vector2(720, 100)
+	button(box, "BACK", func(): show_gyro_settings(false))
+	gyro_panel.hide()
+
+func apply_gyro(rate: Vector3, delta: float) -> void:
+	gyro_readings_seen = gyro_readings_seen or (rate.is_finite() and rate.length_squared() > 0.000001)
+	gyro_status.text = "Sensor readings received. Tilt the phone to aim.
+Touch aiming remains available." if gyro_readings_seen else "Move the phone to check sensor readings.
+A hardware gyroscope is required; touch aiming remains available."
+	var actor = game.actors.get(game.local_id)
+	var active: bool = app_focused and playing() and actor != null and actor.alive and not actor.downed and not actor.is_seated()
+	var angle := gyro.step(rate, delta, active, Input.is_action_pressed("aim"))
+	if active:
+		actor.yaw = wrapf(actor.yaw + angle.x, -PI, PI)
+		actor.pitch = clampf(actor.pitch + angle.y, -1.45, 1.45)

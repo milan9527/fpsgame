@@ -42,6 +42,7 @@ def main():
     game_path.write_text(text)
     mobile = ROOT / "client/scripts/mobile_controls.gd"
     shutil.copy2(mobile, source / "client/scripts/mobile_controls.gd")
+    shutil.copy2(ROOT / "client/scripts/gyro_aim.gd", source / "client/scripts/gyro_aim.gd")
     shutil.copy2(ROOT / "client/icon.svg", source / "client/icon.svg")
     shutil.copy2(ROOT / "client/export_presets.cfg", source / "client/export_presets.cfg")
     project = source / "client/project.godot"
@@ -49,7 +50,7 @@ def main():
     text = text.replace('config/name="Iron Meridian"', 'config/name="Iron Meridian"\nconfig/icon="res://icon.svg"')
     text = text.replace("[rendering]\n", "[rendering]\ntextures/vram_compression/import_etc2_astc=true\n")
     # Native touch events drive the game; mouse emulation remains available for GUI widgets.
-    text += '\n[input_devices]\npointing/emulate_touch_from_mouse=false\npointing/emulate_mouse_from_touch=true\n'
+    text += '\n[input_devices]\nsensors/enable_gyroscope=true\npointing/emulate_touch_from_mouse=false\npointing/emulate_mouse_from_touch=true\n'
     project.write_text(text)
     signing = ROOT / "artifacts/android-signing"
     signing.mkdir(exist_ok=True, mode=0o700)
@@ -98,7 +99,8 @@ def main():
     report = {"apk": str(apk), "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
               "size": apk.stat().st_size, "source_commit": RELEASE, "default_api": API,
               "touch_source_sha256": hashlib.sha256(mobile.read_bytes()).hexdigest(),
-              "package": "org.ironmeridian.game", "version_code": 3803,
+              "gyro_source_sha256": hashlib.sha256((ROOT / "client/scripts/gyro_aim.gd").read_bytes()).hexdigest(),
+              "package": "org.ironmeridian.game", "version_code": 3804,
               "architectures": ["arm64-v8a", "x86_64"], "signed": True}
     (OUT / "build.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))

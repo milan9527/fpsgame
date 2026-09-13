@@ -23,6 +23,7 @@ class RoomHeartbeat(BuildInfo):
     players: list[uuid.UUID] = Field(default_factory=list, max_length=16)
 
     session_versions: dict[uuid.UUID, Annotated[int, Field(strict=True, ge=0, le=9223372036854775806)]] = Field(default_factory=dict, max_length=16)
+    reconnectable: dict[uuid.UUID, Annotated[int, Field(strict=True, ge=1, le=30)]] = Field(default_factory=dict, max_length=16)
 
     @model_validator(mode='after')
     def valid_players(self):
@@ -30,6 +31,13 @@ class RoomHeartbeat(BuildInfo):
             raise ValueError('Players must be unique and fit room capacity')
         if self.mode == 'duo' and self.capacity % 2:
             raise ValueError('Duo capacity must contain complete two-player teams')
+        if self.reconnectable:
+            if self.phase != 'live':
+                raise ValueError('Reconnect seats require a live match')
+            if not self.reconnectable.keys() <= set(self.players):
+                raise ValueError('Reconnect seats must occupy player slots')
+            if not self.reconnectable.keys() <= self.session_versions.keys():
+                raise ValueError('Reconnect seats require session versions')
         return self
 
 

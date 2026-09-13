@@ -326,15 +326,19 @@ func report_room() -> bool:
 	var signature := room_signature()
 	var players: Array = []
 	var versions := {}
+	var reconnectable := {}
 	for session in sessions.values():
 		players.append(session.uid)
 		versions[session.uid] = int(session.get("session_version", 0))
 	for retained in retained_sessions.values():
 		players.append(retained.session.uid)
 		versions[retained.session.uid] = int(retained.session.get("session_version", 0))
+		var remaining: int = retained.until - Time.get_ticks_msec()
+		if phase == "live" and retained.generation == match_id and remaining > 0:
+			reconnectable[retained.session.uid] = mini(30, ceili(remaining / 1000.0))
 	var payload := build_info.duplicate()
 	payload.mode = match_mode
-	payload.merge({"room_id": room_id, "instance_id": room_instance, "generation": match_id, "revision": room_revision, "host": OS.get_environment("GAME_PUBLIC_HOST") if OS.has_environment("GAME_PUBLIC_HOST") else "127.0.0.1", "port": room_port, "capacity": MAX_PLAYERS, "phase": phase, "players": players, "session_versions": versions})
+	payload.merge({"room_id": room_id, "instance_id": room_instance, "generation": match_id, "revision": room_revision, "host": OS.get_environment("GAME_PUBLIC_HOST") if OS.has_environment("GAME_PUBLIC_HOST") else "127.0.0.1", "port": room_port, "capacity": MAX_PLAYERS, "phase": phase, "players": players, "session_versions": versions, "reconnectable": reconnectable})
 	var response: Dictionary = await http_call("/internal/rooms/heartbeat", payload, true)
 	room_heartbeat_busy = false
 	room_heartbeat_due = Time.get_ticks_msec() + 2000

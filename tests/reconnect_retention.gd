@@ -58,8 +58,18 @@ func run() -> void:
 		game.revoked = ["retained-fixture"] if scenario == "revoked_heartbeat" else []
 		await game.report_room()
 		assert("retained-fixture" in game.heartbeat.players and game.heartbeat.session_versions["retained-fixture"] == 3)
+		assert(game.heartbeat.reconnectable["retained-fixture"] >= 1 and game.heartbeat.reconnectable["retained-fixture"] <= 30)
+		assert(not game.heartbeat.reconnectable.has("other-fixture"))
 		if scenario != "revoked_heartbeat":
 			var until: int = game.retained_sessions[1].until
+			game.retained_sessions[1].until = Time.get_ticks_msec() - 1
+			await game.report_room()
+			assert(not game.heartbeat.reconnectable.has("retained-fixture"), "Expired seats must not advertise reconnect eligibility")
+			game.retained_sessions[1].until = until
+			game.retained_sessions[1].generation = "previous-round"
+			await game.report_room()
+			assert(not game.heartbeat.reconnectable.has("retained-fixture"), "A prior round must not advertise reconnect eligibility")
+			game.retained_sessions[1].generation = generation
 			game.expire_retained_sessions(until - 1)
 			assert(game.actors.has(1))
 			game.expire_retained_sessions(until)

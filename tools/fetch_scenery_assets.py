@@ -6,10 +6,12 @@ import json
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSETS = ['wooden_military_crate', 'boulder_01']
+ASSETS = ['wooden_military_crate', 'boulder_01', 'exterior_aircon_unit', 'industrial_wall_lamp', 'rollershutter_window_01']
 
 
 def fetch(entry, path):
+    if path.exists() and hashlib.md5(path.read_bytes()).hexdigest() == entry['md5']:
+        return
     response = httpx.get(entry['url'], timeout=120, follow_redirects=True)
     response.raise_for_status()
     if hashlib.md5(response.content).hexdigest() != entry['md5']:

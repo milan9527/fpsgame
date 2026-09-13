@@ -57,6 +57,15 @@ func run() -> void:
 	assert(game.world.loot_nodes[8].material_override.emission_enabled)
 	assert(game.world.loot_nodes[8].position.distance_to(game.loot[8].p + Vector3.UP * 0.35) < 0.001, "Reused IDs update the visible world position")
 	assert(game.world.loot_nodes[8].get_meta("supply_kind") == 1, "Reused IDs update the visible type")
+	var proxy: MeshInstance3D = game.world.loot_nodes[8]
+	var shell: Node3D = proxy.get_node("SupplyCaseVisual")
+	var highlighted_shell := false
+	for part in shell.find_children("*", "MeshInstance3D", true, false):
+		for surface in range(part.mesh.get_surface_count()):
+			if part.get_active_material(surface) == proxy.material_override:
+				highlighted_shell = true
+	assert(highlighted_shell, "The visible case must share category changes and highlight with its interaction proxy")
+	assert(shell.scale.is_equal_approx(proxy.mesh.size), "Detailed cases preserve the pickup footprint")
 	if "--capture-supplies" in OS.get_cmdline_user_args():
 		await RenderingServer.frame_post_draw
 		root.get_texture().get_image().save_png("res://../artifacts/supply-prompt.png")

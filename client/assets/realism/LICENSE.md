@@ -29,3 +29,10 @@ Additional Poly Haven CC0 sources (including their embedded/extracted maps):
 - https://polyhaven.com/a/boulder_01 — Rico Cilliers. Normalized, welded and reduced to 12,000 triangles for background scenery.
 
 Ground and plaster maps now use the original 2K versions. Their exact URLs and checksums are recorded in SOURCES.json.
+
+Additional facade assets from Poly Haven, CC0:
+- https://polyhaven.com/a/exterior_aircon_unit — Monsta3D. First variant selected and normalized for wall mounting.
+- https://polyhaven.com/a/industrial_wall_lamp — Kuutti Siitonen. Normalized for wall mounting.
+- https://polyhaven.com/a/rollershutter_window_01 — MP. First variant selected and normalized for wall mounting.
+
+`supply_case.glb` is original project geometry authored by tools/build_supply_case.py.

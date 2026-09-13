@@ -17,6 +17,7 @@ static func military_materials(model: Node3D) -> void:
 static func material_surface(material: StandardMaterial3D, color: String) -> void:
 	# Supply-category colors must not be replaced by architectural plaster.
 	if color in ["e8c77b", "77d7ad", "7bbee8", "d9844e", "c2d6c9", "b5a1dc"]:
+		material.albedo_color *= Color(0.25, 0.25, 0.25, 1)
 		material.roughness = 0.85
 		return
 	if color == "303835":
@@ -72,6 +73,15 @@ static func environment(environment: Environment) -> void:
 	environment.fog_light_energy = 0.55
 	environment.fog_density = 0.0012
 	environment.fog_sky_affect = 0.08
+	if RenderingServer.get_current_rendering_method() == "forward_plus":
+		sky.radiance_size = Sky.RADIANCE_SIZE_64
+		environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+		environment.ambient_light_energy = 0.6
+		environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+		environment.ssao_enabled = true
+		environment.ssao_radius = 0.8
+		environment.ssao_intensity = 1.2
+		environment.ssao_power = 1.3
 
 static func building(world, at: Vector3, _style: int) -> void:
 	var first_detail: int = world.get_child_count()
@@ -90,8 +100,16 @@ static func building(world, at: Vector3, _style: int) -> void:
 		for x in [-5, 5]:
 			world.block(at + Vector3(x, 0.36, z), Vector3(6, 0.34, 0.035), "5b625d", false)
 		var placements: Array = world.get_meta("shutter_placements", [])
-		for x in [-5, 5]: placements.append(Transform3D(Basis(Vector3.UP, PI if z < 0 else 0), at + Vector3(x, 2.4, z)))
+		for x in [-5, 5]: placements.append(Transform3D(Basis(Vector3.UP, PI if z < 0 else 0), at + Vector3(x, 2.4, z + signf(z) * 0.12)))
 		world.set_meta("shutter_placements", placements)
+		var facing := Basis(Vector3.UP, PI if z < 0 else 0)
+		var outside: float = z + signf(z) * 0.18
+		var aircons: Array = world.get_meta("aircon_placements", [])
+		aircons.append(Transform3D(facing, at + Vector3(6.7, 1.8, outside)))
+		world.set_meta("aircon_placements", aircons)
+		var lamps: Array = world.get_meta("lamp_placements", [])
+		lamps.append(Transform3D(facing, at + Vector3(2.8, 2.8, outside)))
+		world.set_meta("lamp_placements", lamps)
 	for index in range(first_detail, world.get_child_count()):
 		var node = world.get_child(index)
 		node.set_meta("visual_batch", "detail-" + str(node.material_override.get_instance_id()))
@@ -125,6 +143,24 @@ static func supply_crate(world, at: Vector3) -> void:
 	var model: Node3D = load("res://assets/realism/supply_crate.glb").instantiate()
 	model.position = at
 	world.add_child(model)
+
+static func supply_case(proxy: MeshInstance3D) -> void:
+	var shell: Node3D = proxy.get_node_or_null("SupplyCaseVisual")
+	if shell == null:
+		shell = load("res://assets/realism/supply_case.glb").instantiate()
+		shell.name = "SupplyCaseVisual"
+		proxy.add_child(shell)
+		# Hide only the proxy geometry; its children and highlight material remain active.
+		proxy.layers = 0
+	shell.scale = proxy.mesh.size
+	if shell.get_meta("category_material", 0) == proxy.material_override.get_instance_id():
+		return
+	for part in shell.find_children("*", "MeshInstance3D", true, false):
+		for surface in range(part.mesh.get_surface_count()):
+			var source: Material = part.mesh.surface_get_material(surface)
+			if source.resource_name == "Supply body":
+				part.set_surface_override_material(surface, proxy.material_override)
+	shell.set_meta("category_material", proxy.material_override.get_instance_id())
 
 static func mountain(radius: float, height: float, index: int) -> ArrayMesh:
 	var surface := SurfaceTool.new()
@@ -206,10 +242,10 @@ static func ground_detail(world) -> void:
 		world.add_child(grass)
 	template.free()
 
-static func batch_details(world) -> void:
-	var panel: Node3D = load("res://assets/realism/shutter_panel.glb").instantiate()
+static func batch_facade(world, asset: String, placement_key: String) -> void:
+	var panel: Node3D = load("res://assets/realism/" + asset + ".glb").instantiate()
 	world.add_child(panel)
-	var placements: Array = world.get_meta("shutter_placements", [])
+	var placements: Array = world.get_meta(placement_key, [])
 	for part in panel.find_children("*", "MeshInstance3D", true, false):
 		var instances := MultiMesh.new()
 		instances.transform_format = MultiMesh.TRANSFORM_3D
@@ -221,6 +257,11 @@ static func batch_details(world) -> void:
 		world.add_child(batch)
 	world.remove_child(panel)
 	panel.queue_free()
+
+static func batch_details(world) -> void:
+	batch_facade(world, "window_shutter", "shutter_placements")
+	batch_facade(world, "aircon", "aircon_placements")
+	batch_facade(world, "wall_lamp", "lamp_placements")
 	var groups := {}
 	for node in world.get_children():
 		if node.has_meta("visual_batch"):

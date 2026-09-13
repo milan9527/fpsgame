@@ -234,6 +234,7 @@ func show_loot(items: Dictionary) -> void:
 		update_supply_attachment(mesh, item.kind)
 
 func update_supply_attachment(mesh: MeshInstance3D, kind: int) -> void:
+	Visuals.supply_case(mesh)
 	var existing = mesh.get_node_or_null("ForegripDisplay")
 	if kind == 5 and existing == null:
 		var model = preload("res://assets/foregrip.glb").instantiate()

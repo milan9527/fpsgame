@@ -5,10 +5,14 @@ import bmesh
 from mathutils import Vector
 
 ROOT = Path(__file__).resolve().parents[1]
-for source, name in [('wooden_military_crate', 'supply_crate'), ('boulder_01', 'boulder')]:
+for source, name in [('wooden_military_crate', 'supply_crate'), ('boulder_01', 'boulder'), ('exterior_aircon_unit', 'aircon'), ('industrial_wall_lamp', 'wall_lamp'), ('rollershutter_window_01', 'window_shutter')]:
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=str(ROOT / 'artifacts/realism-sources' / source / 'model.gltf'))
     meshes = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH']
+    if name in ['aircon', 'window_shutter']:
+        # The downloads contain side-by-side variants, not parts of one object.
+        for extra in meshes[1:]: bpy.data.objects.remove(extra, do_unlink=True)
+        meshes = meshes[:1]
     bpy.ops.object.select_all(action='DESELECT')
     for obj in meshes: obj.select_set(True)
     bpy.context.view_layer.objects.active = meshes[0]
@@ -19,11 +23,13 @@ for source, name in [('wooden_military_crate', 'supply_crate'), ('boulder_01', '
     maximum = Vector(tuple(max(v.co[i] for v in obj.data.vertices) for i in range(3)))
     extent = maximum - minimum
     origin = Vector(((minimum.x+maximum.x)/2,(minimum.y+maximum.y)/2,minimum.z))
-    target = Vector((2.5,2.0,1.5)) if name == 'supply_crate' else extent / max(extent)
+    dimensions = {'supply_crate': (2.5,2.0,1.5), 'aircon': (1.2,0.45,0.85), 'wall_lamp': (0.28,0.25,0.5), 'window_shutter': (1.85,0.18,1.13)}
+    target = Vector(dimensions[name]) if name in dimensions else extent / max(extent)
+    if name == 'window_shutter': origin.z = (minimum.z+maximum.z)/2
     for vertex in obj.data.vertices:
         vertex.co -= origin
         for axis in range(3):vertex.co[axis] *= target[axis]/extent[axis]
-    if name == 'boulder':
+    if name != 'supply_crate':
         edit = bmesh.new()
         edit.from_mesh(obj.data)
         bmesh.ops.remove_doubles(edit, verts=list(edit.verts), dist=0.00001)

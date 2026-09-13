@@ -176,5 +176,183 @@
       "md5": "26e2eef4a1f68c9557c65cd375b21d6c"
     },
     "modification": "Normalized in Blender; static mesh triangle budget capped at 12000."
+  },
+  {
+    "asset": "exterior_aircon_unit",
+    "page": "https://polyhaven.com/a/exterior_aircon_unit",
+    "license": "CC0-1.0",
+    "authors": {
+      "Monsta3D": "All"
+    },
+    "source": {
+      "include": {
+        "textures/exterior_aircon_unit_01_nor_gl_1k.jpg": {
+          "size": 472088,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/exterior_aircon_unit/exterior_aircon_unit_01_nor_gl_1k.jpg",
+          "md5": "244025f2008cbdc8c8680f0c962ed26f"
+        },
+        "textures/exterior_aircon_unit_01_opacity_1k.jpg": {
+          "size": 333675,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/exterior_aircon_unit/exterior_aircon_unit_01_opacity_1k.jpg",
+          "md5": "f253dbcb057612371dd1b6d37095c6ba"
+        },
+        "textures/exterior_aircon_unit_rusted_01_arm_1k.jpg": {
+          "size": 673246,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/exterior_aircon_unit/exterior_aircon_unit_rusted_01_arm_1k.jpg",
+          "md5": "f1c2653ac0fb58e8641f9076a2af8a67"
+        },
+        "textures/exterior_aircon_unit_01_arm_1k.jpg": {
+          "size": 651293,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/exterior_aircon_unit/exterior_aircon_unit_01_arm_1k.jpg",
+          "md5": "9af3805e7371643962ffe6079d547b00"
+        },
+        "textures/exterior_aircon_unit_02_arm_1k.jpg": {
+          "size": 484026,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/exterior_aircon_unit/exterior_aircon_unit_02_arm_1k.jpg",
+          "md5": "98b44ba240f832fe4fa94e90d1887c6a"
+        },
+        "textures/exterior_aircon_unit_rusted_02_arm_1k.jpg": {
+          "size": 605557,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/exterior_aircon_unit/exterior_aircon_unit_rusted_02_arm_1k.jpg",
+          "md5": "6e2bee1569b55a3b01d18799e942a6af"
+        },
+        "exterior_aircon_unit.bin": {
+          "size": 494784,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/exterior_aircon_unit/exterior_aircon_unit.bin",
+          "md5": "971c2cfcbc29256d7872eafe74352279"
+        },
+        "textures/exterior_aircon_unit_02_nor_gl_1k.jpg": {
+          "size": 942230,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/exterior_aircon_unit/exterior_aircon_unit_02_nor_gl_1k.jpg",
+          "md5": "e00f9c963e9f3dc798d84f7ebcc4185a"
+        },
+        "textures/exterior_aircon_unit_rusted_01_nor_gl_1k.jpg": {
+          "size": 583620,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/exterior_aircon_unit/exterior_aircon_unit_rusted_01_nor_gl_1k.jpg",
+          "md5": "5b9df77429c9010ea389aef30fd7d460"
+        },
+        "textures/exterior_aircon_unit_rusted_01_diff_1k.jpg": {
+          "size": 606076,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/exterior_aircon_unit/exterior_aircon_unit_rusted_01_diff_1k.jpg",
+          "md5": "7b9fba8819918dc388c49f05b5522575"
+        },
+        "textures/exterior_aircon_unit_01_diff_1k.jpg": {
+          "size": 506664,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/exterior_aircon_unit/exterior_aircon_unit_01_diff_1k.jpg",
+          "md5": "81003ea4afe59ed4dac090791e41f562"
+        },
+        "textures/exterior_aircon_unit_rusted_02_opacity_1k.jpg": {
+          "size": 357558,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/exterior_aircon_unit/exterior_aircon_unit_rusted_02_opacity_1k.jpg",
+          "md5": "0540ff18330b76e4e55053d5bd21f59e"
+        },
+        "textures/exterior_aircon_unit_rusted_02_nor_gl_1k.jpg": {
+          "size": 947477,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/exterior_aircon_unit/exterior_aircon_unit_rusted_02_nor_gl_1k.jpg",
+          "md5": "53f4890e3c9b9fb2efcd96f3143f579b"
+        }
+      },
+      "size": 9634,
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/exterior_aircon_unit/exterior_aircon_unit_1k.gltf",
+      "md5": "10beccfb1bf0c973a0729be8970532a9"
+    },
+    "modification": "Normalized in Blender; static mesh triangle budget capped at 12000."
+  },
+  {
+    "asset": "industrial_wall_lamp",
+    "page": "https://polyhaven.com/a/industrial_wall_lamp",
+    "license": "CC0-1.0",
+    "authors": {
+      "Kuutti Siitonen": "All"
+    },
+    "source": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/industrial_wall_lamp/industrial_wall_lamp_1k.gltf",
+      "md5": "3e6245e63698d5b7aef862280ec77d74",
+      "size": 5800,
+      "include": {
+        "textures/industrial_wall_lamp_emissive_1k.jpg": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/industrial_wall_lamp/industrial_wall_lamp_emissive_1k.jpg",
+          "md5": "32a123a424debe690c0bde4dc0ddeab0",
+          "size": 62349
+        },
+        "textures/industrial_wall_lamp_nor_gl_1k.jpg": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/industrial_wall_lamp/industrial_wall_lamp_nor_gl_1k.jpg",
+          "md5": "e1b1f9f223e26c4631418a338f1fe08f",
+          "size": 673018
+        },
+        "textures/industrial_wall_lamp_diff_1k.jpg": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/industrial_wall_lamp/industrial_wall_lamp_diff_1k.jpg",
+          "md5": "fec1b0755dccb02b19b6a386169460cc",
+          "size": 669629
+        },
+        "textures/industrial_wall_lamp_arm_1k.jpg": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/industrial_wall_lamp/industrial_wall_lamp_arm_1k.jpg",
+          "md5": "10de18cfac3070f42bc4fcd79d3993f4",
+          "size": 753080
+        },
+        "textures/industrial_wall_lamp_glass_nor_gl_1k.jpg": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/industrial_wall_lamp/industrial_wall_lamp_glass_nor_gl_1k.jpg",
+          "md5": "05d60c2d147a240b347023e01df7129f",
+          "size": 585913
+        },
+        "textures/industrial_wall_lamp_glass_diff_1k.jpg": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/industrial_wall_lamp/industrial_wall_lamp_glass_diff_1k.jpg",
+          "md5": "3b92d16c0f316b2648e2c4dbd0ed4776",
+          "size": 316099
+        },
+        "textures/industrial_wall_lamp_glass_arm_1k.jpg": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/industrial_wall_lamp/industrial_wall_lamp_glass_arm_1k.jpg",
+          "md5": "8e7922054b07fcf58beb8009f88db049",
+          "size": 570850
+        },
+        "industrial_wall_lamp.bin": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/industrial_wall_lamp/industrial_wall_lamp.bin",
+          "md5": "86407c4250e46ad39c5a86e1dc1034f9",
+          "size": 141492
+        }
+      }
+    },
+    "modification": "Normalized in Blender; static mesh triangle budget capped at 12000."
+  },
+  {
+    "asset": "rollershutter_window_01",
+    "page": "https://polyhaven.com/a/rollershutter_window_01",
+    "license": "CC0-1.0",
+    "authors": {
+      "MP": "All"
+    },
+    "source": {
+      "include": {
+        "textures/rollershutter_window_01_arm_1k.jpg": {
+          "size": 592481,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rollershutter_window_01/rollershutter_window_01_arm_1k.jpg",
+          "md5": "4ab04fd28873a76e2d84e47147eae6b0"
+        },
+        "rollershutter_window_01.bin": {
+          "size": 54432,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/rollershutter_window_01/rollershutter_window_01.bin",
+          "md5": "54837c166c34e1a1ca7f6495a82ab6d9"
+        },
+        "textures/rollershutter_window_01_graffiti_diff_1k.jpg": {
+          "size": 660597,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rollershutter_window_01/rollershutter_window_01_graffiti_diff_1k.jpg",
+          "md5": "10d15a7029c107af920b8f758e96a384"
+        },
+        "textures/rollershutter_window_01_nor_gl_1k.jpg": {
+          "size": 360410,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rollershutter_window_01/rollershutter_window_01_nor_gl_1k.jpg",
+          "md5": "ce48690b51f8e17ab3567878158055f1"
+        },
+        "textures/rollershutter_window_01_diff_1k.jpg": {
+          "size": 563314,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rollershutter_window_01/rollershutter_window_01_diff_1k.jpg",
+          "md5": "0800d21822ec7199c825caafda90427a"
+        }
+      },
+      "size": 4991,
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/rollershutter_window_01/rollershutter_window_01_1k.gltf",
+      "md5": "5228a7253b40de720ad8247757d218f1"
+    },
+    "modification": "Normalized in Blender; static mesh triangle budget capped at 12000."
   }
 ]

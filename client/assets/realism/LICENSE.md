@@ -21,3 +21,5 @@ Exact download URLs and texture checksums are recorded in SOURCES.json.
 `shutter_panel.glb` is an original project asset created by tools/build_realism_assets.py.
 `uniform.png` is an original procedural camouflage weave made by tools/generate_uniform_texture.py.
 No assets from Peace Elite or PUBG are included. This project is not affiliated with them.
+
+`grass.glb` is original curved-blade geometry authored by tools/build_grass.py.

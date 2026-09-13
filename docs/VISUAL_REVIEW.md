@@ -50,3 +50,11 @@ tools/godot --headless --path client --editor --import
 本轮截图目录为 `artifacts/realism2-review/`，完整游戏画面为 `gameplay.png`；前后对比图为 `artifacts/realism2-comparison.png`。验证包括武器模型/锚点、108 组瞄准射线、手臂动作与单机 smoke；碰撞快照仍与原版 268 项一致。旧手臂测试对已停用的枪身准星点仍有显示断言，现改为检查 HUD 准星设计所要求的隐藏状态。截图工具也增加输出目录创建与保存结果检查，避免图片保存失败时错误报告通过。
 
 第三人称人物几何、其他枪械和环境总体密度仍需要后续美术工作；本轮没有 Android/Windows 真机性能结论。改动仅在本地，尚未推送或发布客户端。
+
+## 第三轮：植被、地形与可运行预览包
+
+用 Blender 制作九片弯曲叶片的原创草簇，替换原先的尖刺草。草簇采用颜色渐变、确定性噪声控制疏密，并按 24 米网格分组实例化，75 米外停止绘制；道路和建筑周边仍留空。远山加入多层噪声山脊，减少重复圆顶轮廓。重建草簇：`tools/blender-4.3.2-linux-x64/blender --background --python tools/build_grass.py`。
+
+实际画面保存在 `artifacts/realism3-review/`。源码与打包后的 Linux 程序均通过 16 人单机 smoke，环境截图通过，268 项碰撞快照与原版完全一致。
+
+`artifacts/visual-preview/` 提供本地 Windows / Linux 预览包，包含前三轮美术改动。Windows 使用嵌入资源的 EXE，导出成功，但未在 Windows 系统上启动验证；Linux 因本机缺少专用 Linux 导出模板，使用本机 Godot 4.4.1 运行时和 PCK，并已从项目目录外启动验证。用户无需另装 Godot。预览包的默认 API 仍是 localhost，用于单机预览；没有验证它与线上服务器的协议兼容性。没有上传预览包、改动线上服务或推送 GitHub。

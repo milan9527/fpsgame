@@ -114,6 +114,10 @@ static func tree(world, at: Vector3) -> void:
 static func mountain(radius: float, height: float, index: int) -> ArrayMesh:
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var noise := FastNoiseLite.new()
+	noise.seed = 941 + index
+	noise.frequency = 0.035
+	noise.fractal_octaves = 3
 	var points := []
 	for z in range(33):
 		var row := []
@@ -122,7 +126,8 @@ static func mountain(radius: float, height: float, index: int) -> ArrayMesh:
 			var pz := (z / 16.0 - 1.0) * radius
 			var distance := Vector2(px, pz).length() / radius
 			var elevation := pow(maxf(0, 1.0 - distance * distance), 2) * height
-			elevation *= 0.85 + 0.15 * sin(px * 0.08 + index) * cos(pz * 0.06 - index)
+			elevation *= 0.70 + 0.65 * (1.0 - absf(noise.get_noise_2d(px, pz)))
+			elevation *= 0.88 + 0.12 * sin(px * 0.09 + pz * 0.045 + index)
 			row.append(Vector3(px, elevation, pz))
 		points.append(row)
 	for z in range(32):
@@ -137,43 +142,45 @@ static func ground_detail(world) -> void:
 	world.block(Vector3(0, -0.25, 0), Vector3(650, 0.1, 650), "737b68", false)
 	var random := RandomNumberGenerator.new()
 	random.seed = 55191
-	var surface := SurfaceTool.new()
-	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for angle in [0.0, PI / 3, PI * 2 / 3]:
-		var rotation := Basis(Vector3.UP, angle)
-		var side := Vector3(0.025, 0, 0)
-		var middle := Vector3(0, 0.11, 0)
-		var tip := Vector3(0.035, 0.23, 0)
-		for point in [-side, middle - side * 0.5, side, side, middle - side * 0.5, middle + side * 0.5, middle - side * 0.5, tip, middle + side * 0.5]:
-			surface.set_color(Color("4e5940").srgb_to_linear().lerp(Color("8a9060").srgb_to_linear(), point.y / 0.23))
-			surface.add_vertex(rotation * point)
-	surface.generate_normals()
-	var mesh := surface.commit()
+	var template: Node3D = load("res://assets/realism/grass.glb").instantiate()
+	var source: MeshInstance3D = template.find_children("*", "MeshInstance3D", true, false)[0]
+	var mesh: Mesh = source.mesh
 	var material := StandardMaterial3D.new()
 	material.vertex_color_use_as_albedo = true
 	material.roughness = 1.0
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mesh.surface_set_material(0, material)
-	var multimesh := MultiMesh.new()
-	multimesh.transform_format = MultiMesh.TRANSFORM_3D
-	multimesh.mesh = mesh
-	var transforms: Array[Transform3D] = []
-	for attempt in range(12000):
+	var cells := {}
+	var density := FastNoiseLite.new()
+	density.seed = 673
+	density.frequency = 0.055
+	for attempt in range(40000):
 		var point := Vector2(random.randf_range(-109, 109), random.randf_range(-109, 109))
 		if absf(point.x) < 10 or absf(point.y) < 9: continue
+		if random.randf() > 0.65 + density.get_noise_2d(point.x, point.y): continue
 		var blocked := false
 		for obstacle in world.ground_obstacles:
 			if obstacle.grow(0.5).has_point(point): blocked = true; break
 		if blocked: continue
-		var scale := random.randf_range(0.55, 1.3)
-		transforms.append(Transform3D(Basis(Vector3.UP, random.randf() * TAU).scaled(Vector3.ONE * scale), Vector3(point.x, 0.01, point.y)))
-	multimesh.instance_count = transforms.size()
-	for index in range(transforms.size()): multimesh.set_instance_transform(index, transforms[index])
-	var grass := MultiMeshInstance3D.new()
-	grass.multimesh = multimesh
-	grass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	grass.visibility_range_end = 65
-	world.add_child(grass)
+		var cell := Vector2i(floori(point.x / 24), floori(point.y / 24))
+		if not cells.has(cell): cells[cell] = []
+		var scale := random.randf_range(0.65, 1.15)
+		var local := Vector3(point.x - cell.x * 24 - 12, 0.01, point.y - cell.y * 24 - 12)
+		cells[cell].append(Transform3D(Basis(Vector3.UP, random.randf() * TAU).scaled(Vector3.ONE * scale), local))
+	for cell in cells:
+		var instances := MultiMesh.new()
+		instances.transform_format = MultiMesh.TRANSFORM_3D
+		instances.mesh = mesh
+		instances.instance_count = cells[cell].size()
+		for index in range(instances.instance_count): instances.set_instance_transform(index, cells[cell][index])
+		var grass := MultiMeshInstance3D.new()
+		grass.name = "GrassCell"
+		grass.multimesh = instances
+		grass.material_override = material
+		grass.position = Vector3(cell.x * 24 + 12, 0, cell.y * 24 + 12)
+		grass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		grass.visibility_range_end = 75
+		world.add_child(grass)
+	template.free()
 
 static func batch_details(world) -> void:
 	var panel: Node3D = load("res://assets/realism/shutter_panel.glb").instantiate()

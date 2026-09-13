@@ -7,7 +7,7 @@ static func military_materials(model: Node3D) -> void:
 			if not source is StandardMaterial3D: continue
 			if source.resource_name not in ["Field sleeves", "Ranger / field uniform", "Ranger / armor", "Wrist straps"]: continue
 			var material: StandardMaterial3D = source.duplicate()
-			material.albedo_color = Color(0.3, 0.3, 0.3)
+			material.albedo_color = Color(0.5, 0.5, 0.5) if source.resource_name == "Ranger / field uniform" else Color(0.3, 0.3, 0.3)
 			material.albedo_texture = load("res://assets/realism/uniform.png")
 			material.roughness = 1.0
 			material.metallic_specular = 0.15
@@ -15,6 +15,10 @@ static func military_materials(model: Node3D) -> void:
 			mesh.set_surface_override_material(index, material)
 
 static func material_surface(material: StandardMaterial3D, color: String) -> void:
+	# Supply-category colors must not be replaced by architectural plaster.
+	if color in ["e8c77b", "77d7ad", "7bbee8", "d9844e", "c2d6c9", "b5a1dc"]:
+		material.roughness = 0.85
+		return
 	if color == "303835":
 		material.roughness = 0.8
 		material.metallic = 0.35
@@ -23,7 +27,7 @@ static func material_surface(material: StandardMaterial3D, color: String) -> voi
 	var scale := 0.28
 	if color in ["737b68", "667b80"]:
 		kind = "ground"
-		scale = 0.09 if color == "737b68" else 0.025
+		scale = 0.18 if color == "737b68" else 0.035
 	elif color == "3b484c":
 		kind = "asphalt"
 		scale = 0.125
@@ -32,8 +36,8 @@ static func material_surface(material: StandardMaterial3D, color: String) -> voi
 		scale = 0.4
 	elif color in ["bfc3a0", "dfb86b"]: return
 	material.albedo_color = Color(0.48, 0.48, 0.48)
-	if color == "829b9a": material.albedo_color = Color(0.40, 0.45, 0.43)
-	if color == "a08773": material.albedo_color = Color(0.48, 0.46, 0.42)
+	if color == "829b9a": material.albedo_color = Color(0.29, 0.40, 0.34)
+	if color == "a08773": material.albedo_color = Color(0.60, 0.43, 0.32)
 	material.albedo_texture = load("res://assets/realism/" + kind + "_albedo.jpg")
 	material.normal_enabled = true
 	material.normal_texture = load("res://assets/realism/" + kind + "_normal.jpg")
@@ -44,6 +48,12 @@ static func material_surface(material: StandardMaterial3D, color: String) -> voi
 	material.uv1_world_triplanar = true
 	material.uv1_scale = Vector3.ONE * scale
 	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	if color == "737b68":
+		# The arena is planar: avoid triplanar sampling and retain grazing-angle detail.
+		material.uv1_triplanar = false
+		material.uv1_world_triplanar = false
+		material.uv1_scale = Vector3(40, 40, 1)
+		material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 
 static func environment(environment: Environment) -> void:
 	var sky := Sky.new()
@@ -111,27 +121,32 @@ static func tree(world, at: Vector3) -> void:
 	distant.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	world.add_child(distant)
 
+static func supply_crate(world, at: Vector3) -> void:
+	var model: Node3D = load("res://assets/realism/supply_crate.glb").instantiate()
+	model.position = at
+	world.add_child(model)
+
 static func mountain(radius: float, height: float, index: int) -> ArrayMesh:
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var noise := FastNoiseLite.new()
 	noise.seed = 941 + index
-	noise.frequency = 0.035
-	noise.fractal_octaves = 3
+	noise.frequency = 0.018
+	noise.fractal_octaves = 2
 	var points := []
-	for z in range(33):
+	for z in range(65):
 		var row := []
-		for x in range(33):
-			var px := (x / 16.0 - 1.0) * radius
-			var pz := (z / 16.0 - 1.0) * radius
+		for x in range(65):
+			var px := (x / 32.0 - 1.0) * radius
+			var pz := (z / 32.0 - 1.0) * radius
 			var distance := Vector2(px, pz).length() / radius
 			var elevation := pow(maxf(0, 1.0 - distance * distance), 2) * height
 			elevation *= 0.70 + 0.65 * (1.0 - absf(noise.get_noise_2d(px, pz)))
 			elevation *= 0.88 + 0.12 * sin(px * 0.09 + pz * 0.045 + index)
 			row.append(Vector3(px, elevation, pz))
 		points.append(row)
-	for z in range(32):
-		for x in range(32):
+	for z in range(64):
+		for x in range(64):
 			for point in [points[z][x], points[z][x + 1], points[z + 1][x], points[z][x + 1], points[z + 1][x + 1], points[z + 1][x]]:
 				surface.add_vertex(point)
 	surface.index()
@@ -142,6 +157,15 @@ static func ground_detail(world) -> void:
 	world.block(Vector3(0, -0.25, 0), Vector3(650, 0.1, 650), "737b68", false)
 	var random := RandomNumberGenerator.new()
 	random.seed = 55191
+	# Scenery beyond the playable ground, so it creates no invisible cover.
+	for i in range(30):
+		var rock: Node3D = load("res://assets/realism/boulder.glb").instantiate()
+		var angle := i * TAU / 30.0
+		var radius := random.randf_range(165, 188)
+		rock.position = Vector3(cos(angle) * radius, -0.25, sin(angle) * radius)
+		rock.rotation.y = random.randf() * TAU
+		rock.scale = Vector3.ONE * random.randf_range(5, 12)
+		world.add_child(rock)
 	var template: Node3D = load("res://assets/realism/grass.glb").instantiate()
 	var source: MeshInstance3D = template.find_children("*", "MeshInstance3D", true, false)[0]
 	var mesh: Mesh = source.mesh

@@ -26,6 +26,7 @@ func run() -> void:
 			actor.crouch = true
 			actor.update_stance()
 		actor.character_animation.update(actor, 0.22)
+		actor.update_weapon_attachment()
 		var label := Label3D.new()
 		label.text = ["IDLE / READY", "WALK / SKINNED", "CROUCH / SKINNED"][i]
 		label.position = actor.position + Vector3(0, 2.0 if i < 2 else 1.45, 0)

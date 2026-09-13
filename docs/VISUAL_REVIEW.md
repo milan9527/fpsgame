@@ -58,3 +58,13 @@ tools/godot --headless --path client --editor --import
 实际画面保存在 `artifacts/realism3-review/`。源码与打包后的 Linux 程序均通过 16 人单机 smoke，环境截图通过，268 项碰撞快照与原版完全一致。
 
 `artifacts/visual-preview/` 提供本地 Windows / Linux 预览包，包含前三轮美术改动。Windows 使用嵌入资源的 EXE，导出成功，但未在 Windows 系统上启动验证；Linux 因本机缺少专用 Linux 导出模板，使用本机 Godot 4.4.1 运行时和 PCK，并已从项目目录外启动验证。用户无需另装 Godot。预览包的默认 API 仍是 localhost，用于单机预览；没有验证它与线上服务器的协议兼容性。没有上传预览包、改动线上服务或推送 GitHub。
+
+## 第四轮：人物、扫描道具与地表清晰度（目标仍在进行）
+
+第三人称人物改用带褶皱的圆润四肢、头盔/护目镜、背心、肩带、弹匣袋、护膝、靴底和背包。保留 17 根骨骼及 15 段动作；布料纹理打包进 Blender 源文件。真实渲染检查通过站立、行走、奔跑、蹲伏、换弹、跳跃、死亡、倒地爬行和驾驶/乘车姿态。
+
+原有散布掩体改用 Poly Haven CC0 木箱模型，最大外形归一化到原来的 2.5×1.5×2 米碰撞尺寸。外围岩石位于可行走地面之外，只作背景。两者的下载校验、来源和许可记录在 SOURCES.json / LICENSE.md。重建工具为 `tools/fetch_scenery_assets.py` 和 `tools/build_scenery_assets.py`，木箱 11,998 三角面，岩石 12,000 三角面。岩石先焊接重合顶点再减面，避免不连通的扫描网格无法达到预算。
+
+地表和墙面改用 2K 原图，地面使用平面 UV 与各向异性过滤；三平面映射的墙壁/山体仍用普通 mipmap 过滤。本机软件渲染已验证平面 UV 不会触发先前三平面+各向异性组合的卡顿。远山网格提高到 65×65，降低噪声频率以减少尖锐折面。恢复补给类别颜色，防止通用墙面材质覆盖道具识别色。
+
+最新游戏/环境截图在 `artifacts/realism4-review/`，人物展示图为 `artifacts/realism4-characters.png`。当前只是检查点，尚未认定达到用户的整体画质要求。仍需提高补给物和建筑的完整度、场景自然层次，并完成最终客户端打包及平台性能验证；之前的 visual-preview ZIP 仍是第三轮版本，没有冒充包含本轮更新。

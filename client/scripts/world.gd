@@ -131,7 +131,9 @@ func _ready() -> void:
 		var at := Vector3(rng.randf_range(-100, 100), 0, rng.randf_range(-100, 100))
 		if absf(at.x) < 12 or absf(at.z) < 10:
 			continue
-		block(at + Vector3(0, 0.75, 0), Vector3(2.5, 1.5, 2), "657477")
+		var cover := block(at + Vector3(0, 0.75, 0), Vector3(2.5, 1.5, 2), "657477")
+		cover.visible = false
+		Visuals.supply_crate(self, at)
 		map_features.append({"rect": Rect2(Vector2(at.x - 1.25, at.z - 1), Vector2(2.5, 2)), "kind": "cover"})
 	for i in range(65):
 		var angle := rng.randf() * TAU

@@ -1,6 +1,10 @@
 extends SceneTree
 
 func _initialize() -> void:
+	if DisplayServer.get_name() == "headless":
+		push_error("Skin bounds require a rendering server; run with xvfb-run")
+		quit(1)
+		return
 	call_deferred("run")
 
 func run() -> void:

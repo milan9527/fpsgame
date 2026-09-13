@@ -134,33 +134,82 @@ def panel(name, center, dimensions, mat, bone, bevel=0.02):
     return skin(box(name, center, dimensions, mat, bevel), bone)
 
 
-def limb(name, start, end, width, depth, mat, bone):
-    direction = end - start
-    obj = box(name, (start + end) / 2, (width, depth, direction.length * 0.88), mat, 0.025)
-    obj.rotation_mode = 'QUATERNION'
-    obj.rotation_quaternion = vec(0, 0, 1).rotation_difference(direction.normalized())
+def organic(name, center, dimensions, mat, bone):
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=16, radius=1, location=center)
+    obj = bpy.context.object; obj.name = name
+    obj.scale = Vector(dimensions) * 0.5
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    for polygon in obj.data.polygons: polygon.use_smooth = True
+    obj.data.materials.append(mat)
     return skin(obj, bone)
 
 
-panel('Chest plates', (0, 0, 1.19), (0.50, 0.29, 0.43), armor, 'Hips', 0.045)
-panel('Pelvis armor', (0, 0, 0.92), (0.37, 0.26, 0.18), cloth, 'Hips', 0.025)
-panel('Helmet', (0, 0, 1.62), (0.37, 0.37, 0.32), armor, 'Head', 0.065)
-panel('Visor', (0, 0.183, 1.62), (0.30, 0.022, 0.105), visor, 'Head', 0.008)
-panel('Pack', (0, -0.19, 1.19), (0.35, 0.17, 0.33), cloth, 'Hips', 0.025)
-for side, sign in [('L', -1), ('R', 1)]:
-    limb('Thigh armor ' + side, rest['Hip.' + side], rest['Knee.' + side], 0.20, 0.22, cloth, 'Thigh.' + side)
-    limb('Shin armor ' + side, rest['Knee.' + side], rest['Ankle.' + side], 0.18, 0.20, cloth, 'Shin.' + side)
-    panel('Boot ' + side, (sign * 0.14, 0.055, 0.09), (0.22, 0.35, 0.18), steel, 'Foot.' + side)
-    limb('Sleeve ' + side, rest['Shoulder.' + side], rest['Elbow.' + side], 0.17, 0.19, cloth, 'UpperArm.' + side)
-    limb('Forearm ' + side, rest['Elbow.' + side], rest['Hand.' + side], 0.13, 0.15, cloth, 'Forearm.' + side)
-    panel('Glove ' + side, rest['Hand.' + side], (0.12, 0.13, 0.11), steel, 'Hand.' + side)
-    for joint, bone, radius in [('Knee.', 'Shin.', 0.095), ('Elbow.', 'Forearm.', 0.065), ('Shoulder.', 'UpperArm.', 0.095)]:
-        bpy.ops.mesh.primitive_uv_sphere_add(segments=12, ring_count=8, radius=radius, location=rest[joint + side])
-        obj = bpy.context.object
-        obj.name = joint + side + ' flexible joint'
-        obj.data.materials.append(armor)
-        skin(obj, bone + side)
-    panel('Pouch ' + side, (sign * 0.12, 0.17, 1.11), (0.12, 0.10, 0.17), cloth, 'Hips')
+def limb(name, start, end, width, depth, mat, bone):
+    direction = end - start
+    vertices, faces = [], []
+    rings, segments = 17, 24
+    for ring in range(rings):
+        t = ring/(rings-1)
+        taper = 0.76 + 0.24*math.sin(math.pi*t)
+        for segment in range(segments):
+            angle = segment*math.tau/segments
+            fold = 1 + 0.055*math.sin(t*31 + math.sin(angle*3))*math.sin(math.pi*t)
+            vertices.append((math.cos(angle)*width*0.5*taper*fold,
+                             math.sin(angle)*depth*0.5*taper*fold, (t-0.5)*direction.length))
+    for ring in range(rings-1):
+        for segment in range(segments):
+            n=(segment+1)%segments
+            faces.append((ring*segments+segment,ring*segments+n,(ring+1)*segments+n,(ring+1)*segments+segment))
+    mesh=bpy.data.meshes.new(name);mesh.from_pydata(vertices,[],faces);mesh.update()
+    uv=mesh.uv_layers.new(name='Uniform UV')
+    for polygon in mesh.polygons:
+        polygon.use_smooth=True
+        for loop in polygon.loop_indices:
+            index=mesh.loops[loop].vertex_index;u=(index%segments)/segments
+            if polygon.index%segments==segments-1 and u==0:u=1
+            uv.data[loop].uv=(u,index//segments/(rings-1)*1.5)
+    obj=bpy.data.objects.new(name,mesh);bpy.context.collection.objects.link(obj)
+    obj.location=(start+end)/2;obj.rotation_mode='QUATERNION'
+    obj.rotation_quaternion=vec(0,0,1).rotation_difference(direction.normalized())
+    obj.data.materials.append(mat)
+    return skin(obj,bone)
+
+
+# Fabric folds and rounded anatomy replace the original rigid block silhouette.
+fabric=cloth.node_tree.nodes.new('ShaderNodeTexImage')
+fabric.image=bpy.data.images.load(str(ROOT/'client/assets/realism/uniform.png'))
+cloth.node_tree.links.new(fabric.outputs['Color'],cloth.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
+webbing=material('Olive nylon webbing',(0.075,0.088,0.044))
+rubber=material('Boot rubber and balaclava',(0.014,0.018,0.012))
+organic('Uniform torso',(0,0,1.18),(0.49,0.29,0.49),cloth,'Hips')
+panel('Front carrier',(0,0.145,1.21),(0.37,0.07,0.34),webbing,'Hips',0.035)
+panel('Rear carrier',(0,-0.145,1.21),(0.38,0.06,0.35),webbing,'Hips',0.035)
+organic('Trouser hips',(0,0,0.93),(0.39,0.27,0.24),cloth,'Hips')
+organic('Covered head',(0,0.01,1.58),(0.27,0.28,0.35),rubber,'Head')
+organic('Helmet shell',(0,-0.012,1.70),(0.35,0.36,0.21),webbing,'Head')
+for sign in [-1,1]:
+    organic('Goggle rim',(sign*0.065,0.145,1.642),(0.143,0.055,0.082),rubber,'Head')
+    organic('Goggle lens',(sign*0.065,0.168,1.644),(0.116,0.020,0.055),visor,'Head')
+    panel('Carrier shoulder strap',(sign*0.15,0.03,1.395),(0.065,0.30,0.045),webbing,'Hips',0.012)
+    panel('Helmet rail',(sign*0.172,-0.015,1.69),(0.025,0.17,0.035),rubber,'Head',0.008)
+for row in range(4):
+    panel('Carrier stitching',(0,0.187,1.12+row*0.061),(0.35,0.009,0.014),cloth,'Hips',0.003)
+for x in [-0.11,0,0.11]:
+    panel('Magazine pouch',(x,0.207,1.12),(0.094,0.075,0.16),webbing,'Hips',0.012)
+    panel('Pouch flap',(x,0.248,1.185),(0.09,0.008,0.037),cloth,'Hips',0.004)
+panel('Field pack',(0,-0.24,1.20),(0.32,0.19,0.37),webbing,'Hips',0.05)
+for side, sign in [('L',-1),('R',1)]:
+    limb('Trouser thigh '+side,rest['Hip.'+side],rest['Knee.'+side],0.22,0.23,cloth,'Thigh.'+side)
+    limb('Trouser shin '+side,rest['Knee.'+side],rest['Ankle.'+side],0.17,0.18,cloth,'Shin.'+side)
+    organic('Boot '+side,(sign*0.14,0.057,0.09),(0.17,0.32,0.18),rubber,'Foot.'+side)
+    panel('Boot sole '+side,(sign*0.14,0.065,0.025),(0.17,0.33,0.035),rubber,'Foot.'+side,0.012)
+    limb('Sleeve '+side,rest['Shoulder.'+side],rest['Elbow.'+side],0.18,0.18,cloth,'UpperArm.'+side)
+    limb('Forearm '+side,rest['Elbow.'+side],rest['Hand.'+side],0.13,0.14,cloth,'Forearm.'+side)
+    organic('Glove '+side,rest['Hand.'+side],(0.105,0.13,0.085),rubber,'Hand.'+side)
+    for joint,bone,radius in [('Knee.','Shin.',0.085),('Elbow.','Forearm.',0.060),('Shoulder.','UpperArm.',0.09)]:
+        organic(joint+side,rest[joint+side],(radius*2,radius*2,radius*2),cloth,bone+side)
+    panel('Knee pad '+side,rest['Knee.'+side]+vec(0,0.083,0),(0.13,0.042,0.13),webbing,'Shin.'+side,0.025)
+    panel('Cargo pocket '+side,rest['Hip.'+side]+vec(sign*0.105,0,-0.13),(0.045,0.14,0.16),cloth,'Thigh.'+side,0.014)
 # Weapon bone remains animated; Godot attaches the currently equipped model.
 
 # One skinned mesh with material surfaces avoids dozens of mesh submissions per actor.
@@ -224,6 +273,7 @@ for clip, end_frame, options in clips:
 rig.animation_data.action = bpy.data.actions['Idle']
 bpy.context.scene.frame_set(0)
 bpy.ops.object.select_all(action='SELECT')
+bpy.ops.file.pack_all()
 bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / 'operator.blend'))
 bpy.ops.export_scene.gltf(filepath=str(OUT / 'operator.glb'), export_format='GLB', use_selection=True,
                           export_animations=True, export_animation_mode='ACTIONS', export_skins=True)

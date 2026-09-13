@@ -23,3 +23,9 @@ Exact download URLs and texture checksums are recorded in SOURCES.json.
 No assets from Peace Elite or PUBG are included. This project is not affiliated with them.
 
 `grass.glb` is original curved-blade geometry authored by tools/build_grass.py.
+
+Additional Poly Haven CC0 sources (including their embedded/extracted maps):
+- https://polyhaven.com/a/wooden_military_crate — Prabhjinder Singh. Rescaled to the existing cover bounds and reduced to 11,998 triangles.
+- https://polyhaven.com/a/boulder_01 — Rico Cilliers. Normalized, welded and reduced to 12,000 triangles for background scenery.
+
+Ground and plaster maps now use the original 2K versions. Their exact URLs and checksums are recorded in SOURCES.json.

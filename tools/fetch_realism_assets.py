@@ -32,10 +32,11 @@ def main():
     for name, asset in ASSETS.items():
         r = httpx.get('https://api.polyhaven.com/files/' + asset, timeout=60); r.raise_for_status()
         files = r.json()
+        resolution = "2k" if name in ["ground", "plaster"] else "1k"
         for kind, key in [('albedo', 'Diffuse'), ('normal', 'nor_gl'), ('roughness', 'Rough')]:
-            entry = files[key]['1k']['jpg']
+            entry = files[key][resolution]['jpg']
             jobs.append((entry, OUT / f'{name}_{kind}.jpg'))
-        sources.append({'asset': asset, 'page': 'https://polyhaven.com/a/' + asset, 'license': 'CC0-1.0', 'files': {kind: files[key]['1k']['jpg'] for kind, key in [('albedo', 'Diffuse'), ('normal', 'nor_gl'), ('roughness', 'Rough')]}})
+        sources.append({'asset': asset, 'page': 'https://polyhaven.com/a/' + asset, 'license': 'CC0-1.0', 'files': {kind: files[key][resolution]['jpg'] for kind, key in [('albedo', 'Diffuse'), ('normal', 'nor_gl'), ('roughness', 'Rough')]}})
     sky = json.loads((SOURCE / 'kloofendal_48d_partly_cloudy_puresky.json').read_text())['tonemapped']
     jobs.append((sky, SOURCE / 'sky-original.jpg'))
     tree_info = json.loads((SOURCE / 'fir_tree_01.json').read_text())['gltf']['1k']['gltf']

@@ -10,7 +10,7 @@ still visibly procedural. Work autonomously. NEVER push without confirmation.
 No AWS changes or publication needed. Do not claim UI-independent execution.
 
 ## Current work
-Committed checkpoint 6431dd7: stages 12 character UV/proportions and 13 yards.
+Committed checkpoint 0f2b9d5: stages 12–14 character, yards and terrain.
 Stage 14 adds slope-blended scanned rock/soil on decorative mountains:
 client/shaders/terrain_slopes.gdshader, world_visuals terrain material cache,
 world.gd material assignment, terrain_rock maps and fetch_terrain_material.py.
@@ -25,11 +25,12 @@ Full historical changes/evidence are in docs/VISUAL_REVIEW.md; read selectively.
 Improve architectural silhouettes and natural layout, dense ground vegetation,
 and realistic equipment. Current screenshot still falls well below reference.
 Stage14 Compatibility capture passed; license and review updated.
-Refresh runnable desktop packages after clean commit using
-python3 tools/package_visual_preview.py. Existing previews at
-artifacts/visual-preview/9648cb40b560/ contain stages6–11 and content18 ONLY.
+Current desktop packages: artifacts/visual-preview/0f2b9d5f721b/, stages6–14,
+content19. verification.json records both exports, packaged Linux offline/roof
+checks and archive hashes. Rebuild via python3 tools/package_visual_preview.py
+from a clean commit. Previous 9648cb40b560 packages are obsolete content18.
 Linux packaged offline/roof checks passed; Windows exported, not hardware-tested.
-New source19 cannot join old18 servers. No live deployment has been changed.
+New source19 cannot join old18 servers. Stage14 aim checks passed 108 samples. No live deployment has been changed.
 
 ## Tools and validation
 Godot tools/godot 4.4.1; Blender tools/blender-4.3.2-linux-x64/blender 4.3.2.

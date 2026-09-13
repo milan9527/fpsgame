@@ -160,3 +160,7 @@ Blender 原创双坡/单坡金属屋顶及接缝，分别应用到两种建筑�
 背景山体从单色改为世界空间岩土混合：缓坡使用原有地表扫描图，陡坡过渡到 CC0 `rock_face_03` 的 2K 色彩、法线和粗糙度贴图。三轴投影减少坡面拉伸，低频变化打散统一分界，启用 mipmap。没有修改山体几何或碰撞，内容号仍为 `ash-valley-19`。
 
 Forward+ 与 Compatibility 实际单机截图均通过，分别在 `artifacts/realism14-forward/gameplay.png` 和 `artifacts/realism14-compat/gameplay.png`。人工检查 Forward+ 截图可见山体岩土层次，但远景雾削弱细节，地面草丛稀疏、建筑体块和排列仍然简单。这是局部材质改善，不代表达到参考游戏的整体写实画质。没有进行 GPU 实机性能验证。
+
+第十四轮已更新本地 Windows/Linux 预览：`artifacts/visual-preview/0f2b9d5f721b/`，包含第十二至十四轮改动，内容号 19。两个平台导出和打包后 Linux 单机/屋顶碰撞检查通过，归档校验值在 `verification.json`；Windows 尚未实机验证。源码瞄准检查通过 108 个样本，覆盖三个武器、切换、后坐力、侧倾和射线。未推送或部署。
+
+另从 `/tmp` 启动打包后的 Linux 程序完成 Forward+ 实际单机截图，证明相邻 PCK 及新材质可加载：`artifacts/visual-preview/0f2b9d5f721b/capture/gameplay.png`，日志 `artifacts/realism14-packaged-render.log` 通过。

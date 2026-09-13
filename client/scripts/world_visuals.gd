@@ -74,6 +74,9 @@ static func material_surface(material: StandardMaterial3D, color: String) -> voi
 	if color == "829b9a": material.albedo_color = Color(0.29, 0.40, 0.34)
 	if color == "a08773": material.albedo_color = Color(0.60, 0.43, 0.32)
 	material.albedo_texture = load("res://assets/realism/" + kind + "_albedo.jpg")
+	if color in ["b0a58c", "829b9a", "a08773"]:
+		material.albedo_texture = load("res://assets/realism/plaster_painted.jpg")
+		scale = 0.55
 	material.normal_enabled = true
 	material.normal_texture = load("res://assets/realism/" + kind + "_normal.jpg")
 	material.normal_scale = 0.35
@@ -291,7 +294,7 @@ static func background_forest(world) -> void:
 	var quad := QuadMesh.new()
 	quad.size = Vector2(9.5, 9.5)
 	var material := StandardMaterial3D.new()
-	material.albedo_texture = load("res://assets/realism/fir_impostor.png")
+	material.albedo_texture = load("res://assets/realism/fir_background.png")
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 	material.alpha_scissor_threshold = 0.28
 	material.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y

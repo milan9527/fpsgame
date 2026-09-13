@@ -41,6 +41,10 @@
         "md5": "7fd195f6cf4002e7ce4956c7e657ad0b",
         "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grey_plaster_02/grey_plaster_02_rough_2k.jpg"
       }
+    },
+    "painted_variant": {
+      "output": "plaster_painted.jpg",
+      "modification": "Contrast 0.55, saturation 0.70, brightness 1.10 via tools/prepare_wall_finish.py; original normal and roughness maps retained."
     }
   },
   {
@@ -92,7 +96,135 @@
     "page": "https://polyhaven.com/a/fir_tree_01",
     "license": "CC0-1.0",
     "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/fir_tree_01/fir_tree_01_1k.gltf",
-    "modification": "Variant C extracted and normalized in Blender; full geometry near, rendered billboard at distance."
+    "modification": "Variant C extracted and normalized in Blender; full geometry near, rendered billboard at distance.",
+    "background_variant": {
+      "variant": "B",
+      "output": "fir_background.png",
+      "modification": "Normalized and rendered in Blender to a 1024px alpha billboard; high-resolution geometry is not instantiated in-game.",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/fir_tree_01/fir_tree_01.bin",
+      "ranges": [
+        {
+          "offset": 288300420,
+          "length": 29820,
+          "sha256": "cc04ef9512d1918e2583889ae738bc3bdd37308796f6830290b6ca3af80b9b3a"
+        },
+        {
+          "offset": 288330240,
+          "length": 69288,
+          "sha256": "dfd35a74f4f09b6f96499b402f1757548b6455a4f14a3102b4fbf7b729215e6c"
+        },
+        {
+          "offset": 288399528,
+          "length": 69288,
+          "sha256": "58bd7c96d6c028547ffa99e78ffd497266b06c8548ad860dc2a49c99e3f0c54d"
+        },
+        {
+          "offset": 288468816,
+          "length": 23096,
+          "sha256": "00d55540c36a9838cf61150b5b58be08f0d63425324adf60a4617b78af7ecef0"
+        },
+        {
+          "offset": 288491912,
+          "length": 46192,
+          "sha256": "1046db3b140babbec925e06e9d9bcd20e637e4148cb1ebf2d5e7361961f1903c"
+        },
+        {
+          "offset": 288538104,
+          "length": 46192,
+          "sha256": "fde1df256e11e29a8c7c3ce1aa2d42aae5d74b895a993a5ffaffb2219ac0cb6b"
+        },
+        {
+          "offset": 288584296,
+          "length": 57492,
+          "sha256": "50eec1e4e12db6ecd463894fd5f6f58e3de60ec8b8659015ac77753fe60f070b"
+        },
+        {
+          "offset": 288641788,
+          "length": 492612,
+          "sha256": "bd8379540ca38b3c1d40e6bda89c189f63579efcbf053ab9c4e3267a3cd2f93b"
+        },
+        {
+          "offset": 289134400,
+          "length": 492612,
+          "sha256": "0be8d4b0980dfa0af1cda7481a58aa63cf70d2af939e40cd0ff119df03e8b447"
+        },
+        {
+          "offset": 289627012,
+          "length": 164204,
+          "sha256": "0971647c838f95b142f09d4d823401dfe4344911f78a37a3268df52e29d17831"
+        },
+        {
+          "offset": 289791216,
+          "length": 328408,
+          "sha256": "ae8699aa1e05fb45cc40bd180d8ed416934da4012f3818a60bb07212550c681d"
+        },
+        {
+          "offset": 290119624,
+          "length": 328408,
+          "sha256": "d22901529d374eab3b6d59f6ea3831363aa42317be39bb0d5da2a0f8f5c98718"
+        },
+        {
+          "offset": 290448032,
+          "length": 472656,
+          "sha256": "e112f9c09a8819f008404de88d414e1e90cbd94f3aceda0256de8eec2124fa29"
+        },
+        {
+          "offset": 290920688,
+          "length": 34815744,
+          "sha256": "bb44059fccd7de493e3e0f45ae5c68165185f8c7f661dfa258d8a24332d69e6d"
+        },
+        {
+          "offset": 325736432,
+          "length": 34815744,
+          "sha256": "a45f061257120585848566c35252e44e341bc68862e9984d6f14ebb5bd99a072"
+        },
+        {
+          "offset": 360552176,
+          "length": 11605248,
+          "sha256": "a1055172ec36b167ffb4655be9afa2803fcc559579cad3d8be1a0088a9ae3d7e"
+        },
+        {
+          "offset": 372157424,
+          "length": 23210496,
+          "sha256": "3d7ef1d8ec1341a9f764b5a222b4809422713d4e098e4e42d51ba6499a0ee8fc"
+        },
+        {
+          "offset": 395367920,
+          "length": 23210496,
+          "sha256": "60fd5fe063616e598b2202973b1b831c31ae3fdfc624f4defc92a32eb467bcd9"
+        },
+        {
+          "offset": 418578416,
+          "length": 26487552,
+          "sha256": "15ee6e3acf1dd29ddfc94b208b70f69b1828dbdd050e4644b9f0b45e28f4e7aa"
+        },
+        {
+          "offset": 445065968,
+          "length": 39900,
+          "sha256": "01550b394bee3b4186381594179129083a4a7c325d4ad441d244da6bcef8698a"
+        },
+        {
+          "offset": 445105868,
+          "length": 39900,
+          "sha256": "3f05fb4c4beb3efd128c2cf9d5a20e84fd96e447f9a48716bc4985356b60a22c"
+        },
+        {
+          "offset": 445145768,
+          "length": 13300,
+          "sha256": "e016c4db4b17199511110bf55c4a26542a2911d2d64cfb84d9e4f3d725ac35a0"
+        },
+        {
+          "offset": 445159068,
+          "length": 26600,
+          "sha256": "43953f8c8c576de567dbbecb1761b6454ae9b60e302e048b597de0e899ed5079"
+        },
+        {
+          "offset": 445185668,
+          "length": 26600,
+          "sha256": "cd8c90c5933a5a89380dc5c2c954e50a05b43421b43500f470d32c1c09c7aae1"
+        }
+      ]
+    }
   },
   {
     "asset": "kloofendal_48d_partly_cloudy_puresky",

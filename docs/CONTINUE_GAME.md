@@ -29,6 +29,16 @@ Stages 6–8 are ready for a local checkpoint; see docs/VISUAL_REVIEW.md.
   Optic screenshots: artifacts/realism8-optic-forward/ and realism8-optic/.
 
 ## Next work
+Stage 10 replaces only the background grove billboard with fuller CC0 fir B,
+and adds a lower-contrast painted plaster derivative. Both new textures have
+explicit mipmaps (initial captures exposed aliasing without them).
+Latest verified actual screenshot: artifacts/realism10-final/gameplay.png.
+Runtime does not instantiate the 2.3M-triangle source tree. Its 105 MiB Blender
+intermediate lives in artifacts/realism-sources/tree-b/background_fir.blend;
+rebuild with tools/fetch_tree_variant.py then FIR_VARIANT=B in Blender running
+tools/build_tree_impostor.py. Sources/range hashes are in SOURCES.json.
+The b3fdf590901d preview packages also predate stage 10.
+
 Stage 9 adds a profiled carbine receiver, boolean ejection recess, selector and
 continuous rail, plus cached procedural roughness on weapon steel/polymer.
 Actual Forward+ image: artifacts/realism9-gameplay/gameplay.png. Aim 108 samples,

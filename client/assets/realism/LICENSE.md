@@ -39,3 +39,14 @@ Additional facade assets from Poly Haven, CC0:
 
 `roof_gable.glb` and `roof_shed.glb` are original project geometry authored by
 `tools/build_roofs.py`. They use the project's existing metal roof material at runtime.
+
+`fir_background.png` is a Blender-rendered derivative of Poly Haven
+`fir_tree_01`, variant B (Rob Tuytel / Rico Cilliers, CC0).
+The high-resolution authoring scene can be regenerated with
+`tools/fetch_tree_variant.py` and `FIR_VARIANT=B tools/build_tree_impostor.py`
+(the latter runs inside Blender). Download ranges and hashes are recorded in
+`SOURCES.json`; the large intermediate Blend stays under local `artifacts/`.
+
+`plaster_painted.jpg` is a contrast/saturation/brightness-adjusted derivative
+of the existing CC0 `grey_plaster_02` albedo, prepared by
+`tools/prepare_wall_finish.py`. Its original source is listed in `SOURCES.json`.

@@ -12,9 +12,22 @@
 
 构建失败会保留日志和失败状态，不将失败目录当作通过的候选包。成功报告中的 `scope` 仅说明包内离线规则验证，不代替网络、渲染或物理音频设备验收。后续发布仍需相应回归与服务版本切换。
 
-## 0.38 候选准备
+## 0.38 候选（未部署）
 
-源码版本为 0.38.0-dev，协议 17、资源 ash-valley-18、数据库 0004 不变；在线仍要求完整版本清单匹配。新增安全路线可用时提前转移、驾驶员等待队友与危险中断、机器人主动搭乘及安全下车。构建、渲染、后端、网络和部署验证尚待完成，运行服务及默认归档仍为 0.37。
+源码版本为 0.38.0-dev，协议 17、资源 ash-valley-18、数据库 0004 不变；在线仍要求完整版本清单匹配。新增安全路线可用时提前转移、驾驶员等待队友与危险中断、机器人主动搭乘及安全下车。运行服务及默认归档仍为 0.37。
+
+- 源提交：`484d98d958a0973d5dc630ce6474dcdcba950035`。
+- 目录：`artifacts/candidates/0.38.0-dev-484d98d9-ssm8gza_/`。
+- 归档：63,217,821 字节，SHA-256 `e2a94bca580253e22f4df38d9fc3ec145d4d8fc139e874ece5aa9297212bcb69`。
+- 导入、导出及 48 项包内规则共 50 项检查通过；`artifacts/candidate-038-build-final.log`。
+- 从归档重新解压、使用全新用户目录执行默认 `play.sh --headless -- --smoke` 通过；候选内 `archive-startup.json`、`logs/archive-startup.log`。
+- 4 项实际 OpenGL 渲染检查通过：角色动画、倒地动画、语音设置界面和载具观战；`render-verification/verification.json`。
+- 后端在隔离 Docker 内网、临时 PostgreSQL/Redis 中通过 95 项测试，无跳过；一项第三方 Starlette 弃用警告。`backend-verification.json`、`logs/backend-tests.log`。
+- 专服镜像以非 root 用户运行，执行文件/PCK/build.json 与候选逐字节一致，禁用网络启动检查通过；`server-image.json`。
+
+后端镜像 `iron-meridian-api:0.38-484d98d9` 固定 ID 为 `sha256:62e6c5e6813bc83f52f89a1932ad0b92cc4e94bab0081eb581f819a94b7e1ed2`；专服 `iron-meridian-candidate:484d98d958a0` 固定 ID 为 `sha256:00e5f2831d82dafc5069794766f5c54df16f27986a55f2f1acd8dd438129db31`。两者尚未替换运行服务。
+
+首次候选 `0.38.0-dev-37471e67-1sovf4g8` 在 37 项检查后因乘客测试中间日志被识别为额外成功标记而失败，未生成合格归档。修正日志命名并提交后完整重建通过，失败目录保留。存量数据库恢复演练、打包客户端联网、自然对局和部署仍待完成；本候选不等于完整商业游戏，也不替代这些验收。
 
 ## 0.37 候选（已作为开发版本发布）
 

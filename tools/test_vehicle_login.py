@@ -28,6 +28,7 @@ def main():
     parser.add_argument("--combat", action="store_true", help="Third authenticated client shoots the moving driver")
     parser.add_argument("--spectator", action="store_true", help="Eliminated duo teammate follows the network driver")
     parser.add_argument("--bot-driver", action="store_true", help="Authenticated passenger rides with its server-assigned bot teammate")
+    parser.add_argument("--bot-rider", action="store_true", help="Authenticated driver carries its normally boarding bot teammate")
     parser.add_argument("--boarding-wait", action="store_true", help="Passenger observes the bot waiting before boarding")
     parser.add_argument("--bot-turn", choices=["left", "right"], default="", help="Exercise a curved evacuation route with the bot teammate")
     parser.add_argument("--client-fps", type=int, choices=[30, 60, 120], default=0)
@@ -35,6 +36,8 @@ def main():
     parser.add_argument("--candidate-dir", type=Path, help="Run server and all clients from a verified candidate PCK")
     options = parser.parse_args()
     mode = options.mode
+    if options.bot_rider and (mode != "duo" or options.bot_driver or options.spectator or options.combat or options.departure or options.impaired or options.boarding_wait or options.bot_turn):
+        parser.error("Bot rider requires a separate duo driver scenario")
     if options.boarding_wait and (not options.bot_driver or options.bot_turn):
         parser.error("Boarding wait requires a separate straight bot-driver scenario")
     if options.bot_turn and not options.bot_driver:
@@ -48,7 +51,7 @@ def main():
     if options.combat and (options.departure or options.impaired):
         parser.error("Moving combat is tested separately from outage/departure")
     count = 3 if options.combat or options.spectator else 2
-    if options.bot_driver:
+    if options.bot_driver or options.bot_rider:
         count = 1
     if options.impaired and options.departure:
         parser.error("Network recovery and driver departure are separate scenarios")
@@ -60,6 +63,8 @@ def main():
     if options.combat:
         suffix += "-combat"
     account_suffix = suffix
+    if options.bot_rider:
+        suffix += "-bot-rider"
     if options.bot_driver:
         suffix += "-bot-driver"
         if options.boarding_wait:
@@ -95,6 +100,7 @@ def main():
                VEHICLE_COMBAT="1" if options.combat else "",
                VEHICLE_SPECTATOR="1" if options.spectator else "",
                VEHICLE_BOT_DRIVER="1" if options.bot_driver else "",
+               VEHICLE_BOT_RIDER="1" if options.bot_rider else "",
                VEHICLE_BOT_TURN=options.bot_turn, VEHICLE_BOARDING_WAIT="1" if options.boarding_wait else "",
                XDG_DATA_HOME=str(ROOT / f"artifacts/vehicle-login-{mode}-server-data"))
     env["SERVER_SECRET"] = next(line.split("=", 1)[1] for line in
@@ -137,6 +143,7 @@ def main():
                              VEHICLE_COMBAT="1" if options.combat else "",
                              VEHICLE_SPECTATOR="1" if options.spectator else "",
                              VEHICLE_BOT_DRIVER="1" if options.bot_driver else "",
+                             VEHICLE_BOT_RIDER="1" if options.bot_rider else "",
                              VEHICLE_BOT_TURN=options.bot_turn, VEHICLE_BOARDING_WAIT="1" if options.boarding_wait else "",
                              VEHICLE_CLIENT_FPS=str(options.client_fps),
                              XDG_DATA_HOME=str(ROOT / f"artifacts/vehicle-login-client-{i}-data"))
@@ -207,6 +214,10 @@ def main():
         if options.boarding_wait:
             assert "BOT_BOARDING_SERVER_PASS" in entries[0][2].read_text()
             assert "BOT_BOARDING_CLIENT_PASS" in entries[1][2].read_text()
+        if options.bot_rider:
+            assert entries[0][2].read_text().count("AUTHENTICATED peer=") == 1
+            assert "BOT_RIDER_SERVER_PASS" in entries[0][2].read_text()
+            assert "BOT_RIDER_CLIENT_PASS" in entries[1][2].read_text()
         if options.bot_turn:
             poses = []
             for entry in entries:
@@ -247,7 +258,7 @@ def main():
                           "pck_sha256": candidate["pck_sha256"]} if candidate else None,
             "scenario": {key: getattr(options, key) for key in
                          ("departure", "impaired", "audio", "combat", "spectator",
-                          "bot_driver", "bot_turn", "boarding_wait", "client_fps", "latency_ms")},
+                          "bot_driver", "bot_rider", "bot_turn", "boarding_wait", "client_fps", "latency_ms")},
             "logs": [str(entry[2].relative_to(ROOT)) for entry in entries],
             "fixture_sha256": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
                                for name in ("tools/test_vehicle_login.py", "tests/vehicle_login_server.gd",

@@ -59,7 +59,15 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml -f artif
 - 两客户端分别通过驾驶员断线和账号撤销后的制动、驾驶位释放及乘客安全流程。撤销场景确认驾驶输入立即清理。汇总 `artifacts/candidate-038-{drop,revoke}.log`；详细报告前缀 `artifacts/vehicle-login-duo-{drop,revoke}-packed-484d98d9-`。
 - 三客户端、30 FPS、单向 30 ms 下，通过正常输入射击移动中的驾驶员。命中时车速约 13.33 m/s，驾驶员生命降至 77，车体仍为 600、副驾驶生命仍为 100，射手消耗一发弹药，服务端回溯命中检查通过。汇总 `artifacts/candidate-038-combat.log`；详细报告前缀 `artifacts/vehicle-login-duo-combat-fps30-delay30-packed-484d98d9-`。
 
-以上均使用相同候选包和真实账号准入；受控丢包恢复不等于断线后重新登录并重返原对局的重连功能，也不等于公网长时间测试。机器人作为乘客的专项联网验证仍待完成。
+以上均使用相同候选包和真实账号准入；受控丢包恢复不等于断线后重新登录并重返原对局的重连功能，也不等于公网长时间测试。
+
+### 0.38 机器人副驾驶联网
+
+`tools/test_vehicle_login.py --mode duo --bot-rider --client-fps 30 --latency-ms 150 --candidate-dir ...` 使用一个真实账号自动客户端驾驶、一个正常分配的机器人队友作为副驾驶。服务器和客户端均加载此候选包；夹具只将参与角色放到车门附近、将其他机器人放到交战距离外，通过正常 AI 和座位检查上车，不直接给机器人设置座位或驾驶指令。
+
+服务器验证正常 AI 上车、随车行驶、停稳后跟随驾驶员离车及下车冷却；客户端验证同队机器人座位同步、移动中乘员存在和最终座位释放。30 FPS、固定单向 150 ms 场景通过，报告前缀 `artifacts/vehicle-login-duo-bot-rider-fps30-delay150-packed-484d98d9-`，汇总 `artifacts/candidate-038-bot-rider.log`。这证明受控网络搭乘流程，不证明自然搭乘频率、真人驾驶体验或公网稳定性。
+
+新增分支后，原有机器人驾驶员等待真人账号乘客上车场景在 30 FPS、单向 30 ms 下回归通过，日志 `artifacts/candidate-038-rider-driver-regression.log`。运行中的发布服务和默认归档仍为 0.37。
 
 ## 0.37 候选（已作为开发版本发布）
 

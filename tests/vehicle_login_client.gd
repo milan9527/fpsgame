@@ -61,6 +61,10 @@ func run() -> void:
 	var observed_wait_at := 0
 	var observed_wait_position := Vector3.INF
 	var bot_turn := OS.get_environment("VEHICLE_BOT_TURN")
+	var bot_rider := OS.get_environment("VEHICLE_BOT_RIDER") == "1"
+	var saw_bot_rider := false
+	var saw_bot_rider_motion := false
+	var rider_car
 	while true:
 		await physics_frame
 		assert(Time.get_ticks_msec() < deadline, "Authenticated client driving timeout")
@@ -164,6 +168,13 @@ func run() -> void:
 		if actor.is_seated():
 			saw_seated = true
 			var car = actor.vehicle_ref.get_ref()
+			if bot_rider:
+				var rider = car.seats.occupant(1)
+				if rider != null:
+					assert(rider.actor_id < 0 and rider.team_id == actor.team_id and actor.vehicle_seat == 0)
+					saw_bot_rider = true
+					rider_car = car
+					saw_bot_rider_motion = saw_bot_rider_motion or car.speed > 4
 			if OS.get_environment("VEHICLE_BOT_DRIVER") == "1" and car.driver_id < 0:
 				var driver = car.seats.occupant(0)
 				assert(driver != null and driver.team_id == actor.team_id and actor.vehicle_seat == 1)
@@ -198,6 +209,9 @@ func run() -> void:
 				else:
 					Input.action_release("jump")
 		if stage == "VEHICLE_DONE":
+			if bot_rider:
+				assert(saw_bot_rider and saw_bot_rider_motion and rider_car.seats.occupant(1) == null)
+				print("BOT_RIDER_CLIENT_PASS teammate=ok replicated_seat=ok moving=ok exit=ok")
 			if not bot_turn.is_empty():
 				if turn_done_at == 0:
 					turn_done_at = Time.get_ticks_msec()

@@ -44,3 +44,11 @@ http://127.0.0.1:18000
 初次不限制帧率的无图形测试进入了 live 对局，但未通过固定时刻的切枪/弹药断言。60 FPS 下切枪、各枪弹药、移动、姿态、手雷与远端同步均通过；未将这一观察解释为任意帧率/延迟都可靠。建议用 `./play.sh --max-fps 60` 启动游戏进行 SSH 试玩。
 
 单人记录：`artifacts/ssh-tunnel-verification.json`、`artifacts/ssh-tunnel-integration.log`。双人端口记录：`artifacts/ssh-duo-tunnel-verification.json`、`artifacts/ssh-duo-tunnel-integration.log`。测试生成的临时 SSH 密钥及服务在结束后清理，不修改常驻 SSH 配置。
+
+### 独立网络中的账号登录验证
+
+`tools/test_remote_ssh_login.py` 进一步从独立 Docker bridge 网络运行测试客户端，通过真实 SSH 连接宿主机桥接地址。客户端不能直接访问宿主机的 API 8000 端口，但经 SSH 后，两个已有测试账号均登录成功并读取到各自资料；错误密码返回 401，未认证资料请求返回 403。两份已发布 Godot 客户端随后通过同一隧道进入 16 名参战者的对局，移动、射击、切枪、弹药、姿态、手雷及远端同步均通过。
+
+报告：`artifacts/remote-ssh-login/verification.json`；游戏日志：同目录 `client-0.log`、`client-1.log`。测试密码仅放在临时受限文件，报告不包含密码或令牌。临时容器、SSH 服务及密钥在结束后清理。
+
+此测试区别于两个本机回环客户端，但仍运行在同一台宿主机上，不证明玩家的家庭网络、防火墙或未来 ECS/ALB/NLB 公网入口可用。后者尚未部署。

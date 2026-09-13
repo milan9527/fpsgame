@@ -20,7 +20,8 @@ def verify_build(build):
     assert memory["status"] == "passed" and memory["apk_sha256"] == build["sha256"]
     assert network["apk_sha256"] == build["sha256"]
     for evidence, marker in [("login-memory-test.log", "REMEMBERED_LOGIN_PASS"),
-                             ("login-memory-ui.log", "LOGIN_MEMORY_UI_PASS")]:
+                             ("login-memory-ui.log", "LOGIN_MEMORY_UI_PASS"),
+                             ("aim-alignment.log", "AIM_ALIGNMENT_PASS")]:
         assert marker in (ROOT / "artifacts/android-build" / evidence).read_text()
     assert network["status"] == "passed" and set(network["checks"]) == {"solo", "duo"}
     native_build = json.loads((ROOT / "artifacts/android-build/devicefarm.json").read_text())

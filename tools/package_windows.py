@@ -46,7 +46,10 @@ def main():
         patches.append(relative + ": default API URL")
     from client_login_patch import apply
     apply(source / "client")
+    from client_aim_patch import apply as apply_aim_fix
+    apply_aim_fix(source / "client")
     patches.append("remembered login: encrypted local storage")
+    patches.append("camera-center aiming reticle independent of gun animation")
     shutil.copy2(ROOT / "client/export_presets.cfg", source / "client/export_presets.cfg")
     for name, arguments in [
         ("import", ["--editor", "--import"]),

@@ -108,6 +108,7 @@ func update(actor, dt: float, ads: bool) -> void:
 	actor.gun.rotation = angles
 	if weapon_model != null:
 		weapon_model.visible = desired not in ["Throw", "Heal"]
-	sight_dot.visible = desired not in ["Throw", "Heal"] and not actor.weapon_blocked
+	# The HUD owns the ballistic reticle; the gun animation must not move it.
+	sight_dot.visible = false
 	if magazine != null:
 		magazine.position = magazine_rest + Vector3(0, -0.32 * sin(progress * PI) ** 2 if desired == "Reload" else 0.0, 0)

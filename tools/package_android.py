@@ -30,6 +30,8 @@ def main():
         path.write_text(text.replace('"http://127.0.0.1:8000"', json.dumps(API)))
     from client_login_patch import apply
     apply(source / "client")
+    from client_aim_patch import apply as apply_aim_fix
+    apply_aim_fix(source / "client")
     game_path = source / "client/scripts/game.gd"
     text = game_path.read_text()
     current = (ROOT / "client/scripts/game.gd").read_text()
@@ -96,7 +98,7 @@ def main():
     report = {"apk": str(apk), "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
               "size": apk.stat().st_size, "source_commit": RELEASE, "default_api": API,
               "touch_source_sha256": hashlib.sha256(mobile.read_bytes()).hexdigest(),
-              "package": "org.ironmeridian.game", "version_code": 3802,
+              "package": "org.ironmeridian.game", "version_code": 3803,
               "architectures": ["arm64-v8a", "x86_64"], "signed": True}
     (OUT / "build.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))

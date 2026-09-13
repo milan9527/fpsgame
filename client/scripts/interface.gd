@@ -594,7 +594,11 @@ func draw_hud() -> void:
 	if not spectating and not vehicle_view and weapon_blocked:
 		hud.draw_arc(center, 12, 0, TAU, 24, ACCENT, 2)
 		hud.draw_line(center + Vector2(-8, 8), center + Vector2(8, -8), ACCENT, 2)
-	elif not spectating and not vehicle_view and not sight_aiming:
+	elif not spectating and not vehicle_view and sight_aiming:
+		# A fixed camera-center dot stays accurate during ADS transitions and kick.
+		hud.draw_circle(center, 3.5, Color(0.03, 0.03, 0.03, 0.9))
+		hud.draw_circle(center, 2.0, Color("ff4035"))
+	elif not spectating and not vehicle_view:
 		for direction in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 			hud.draw_line(center + direction * 5, center + direction * 12, white, 2)
 	var now := feedback_pause_time if feedback_pause_time >= 0 else Time.get_ticks_msec()

@@ -17,7 +17,7 @@ def main():
     build = json.loads((ROOT / "artifacts/windows-build/build.json").read_text())
     tests = json.loads((ROOT / "artifacts/windows-verification/verification.json").read_text())
     assert tests["status"] == "passed" and tests["archive_sha256"] == build["sha256"]
-    assert {"menu", "solo", "duo", "online-solo-0", "online-solo-1",
+    assert {"menu", "solo", "duo", "aim", "online-solo-0", "online-solo-1",
             "online-duo-0", "online-duo-1"}.issubset(tests["checks"])
     archive = Path(build["archive"])
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == build["sha256"]

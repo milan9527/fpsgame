@@ -85,6 +85,7 @@ def main():
             for name in ["menu", "solo", "duo"]:
                 check(launch(name, "windows_runtime.gd"), "WINDOWS_RUNTIME_PASS")
                 assert (OUT / ("windows-" + name + ".png")).stat().st_size > 1000
+        check(launch("aim", "aim_alignment.gd"), "AIM_ALIGNMENT_PASS")
         for mode, port in [("solo", 27015), ("duo", 27022)]:
             pending = []
             for i in range(2):

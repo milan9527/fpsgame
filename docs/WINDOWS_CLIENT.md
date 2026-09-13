@@ -4,7 +4,7 @@
 
 2026-09-13 已发布 [Windows x64 ZIP](https://d3j1sc8stx5n1c.cloudfront.net/downloads/IronMeridian-Windows-x86_64.zip)，
 约 33 MiB。公网下载摘要与测试包一致：
-`737c7d47fb194e0d0d733b065bb45b27f6b879e7529f4bb27c0ee8c5f0225945`。
+`d588cafa455f2a1175337809b7bf9314c25968f5eaec2488c84e7743dddc79d5`。
 
 Windows 10/11 x64 便携版无需安装。右键 ZIP 选择“全部解压”，打开
 `IronMeridian-Windows` 文件夹，双击 `IronMeridian.exe`。
@@ -23,7 +23,7 @@ Windows 10/11 x64 便携版无需安装。右键 ZIP 选择“全部解压”，
 
 `tools/package_windows.py` 默认从已部署版本
 `484d98d958a0973d5dc630ce6474dcdcba950035` 提取独立源码，
-仅修改游戏与菜单的默认 API 地址，不打包当前分支尚未发布的玩法改动。
+加入默认 API 地址、记住登录和瞄准点修复，不打包当前分支尚未发布的玩法改动。
 保持协议 17、内容 `ash-valley-18`，与现有 ECS 游戏服务器兼容。
 
 需要 Godot 4.4.1、同版本官方 Windows x86_64 导出模板、Xvfb。
@@ -55,6 +55,10 @@ EXE、中文启动说明、玩家手册、许可证、构建清单一起打包�
 麦克风及显卡驱动测试。截图、运行日志与验证报告位于
 `artifacts/windows-verification/`。网络测试使用容器 host 网络，
 并在两个 Wine 环境初始化完成后同步启动客户端。
-以上七项检查和不指定测试脚本的正常主场景启动均已通过。
-首次容器桥接网络测试发生单个客户端断开；保留首次日志，切换 host
-网络后两种模式均通过，游戏 EXE 未因此修改。
+本次菜单、离线两种模式、瞄准回归及联网两种模式共八项检查均已通过。
+
+## 瞄准修复
+
+开镜动画期间旧版会在瞄具尚未居中时隐藏屏幕准星，狙击枪的枪模后坐动画也会移动红点。新版使用屏幕中心的红色瞄准点，关闭枪模上会偏移的红点；不修改服务器伤害、散布或命中盒。瞄准回归覆盖三种武器、开镜过渡、后坐和左右侧身共 108 个组合，并检查中心射线命中目标。通过 Windows EXE 在 Wine 环境执行该检查，截图为 `artifacts/windows-verification/aim-alignment.png`。
+
+请重新下载 ZIP 并完整解压，用新 EXE 启动。此版也加入登录成功后记住账号密码及 FORGET LOGIN 功能。

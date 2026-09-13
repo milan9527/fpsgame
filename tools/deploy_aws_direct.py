@@ -151,6 +151,11 @@ def image(kind, account):
 
 
 def main():
+    windows_archive = ROOT / "artifacts/IronMeridian-Windows-x86_64.zip"
+    windows_build = json.loads((ROOT / "artifacts/windows-build/build.json").read_text())
+    windows_tests = json.loads((ROOT / "artifacts/windows-verification/verification.json").read_text())
+    assert windows_tests["status"] == "passed"
+    assert hashlib.sha256(windows_archive.read_bytes()).hexdigest() == windows_build["sha256"] == windows_tests["archive_sha256"]
     account = aws("sts").get_caller_identity()["Account"]
     prefix = "im-" + state["run"]
     ec2 = aws("ec2")
@@ -347,6 +352,8 @@ def main():
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == "e2a94bca580253e22f4df38d9fc3ec145d4d8fc139e874ece5aa9297212bcb69"
     aws("s3").upload_file(str(archive), download_bucket, "downloads/" + archive.name,
                          ExtraArgs={"ContentType": "application/gzip", "CacheControl": "public,max-age=31536000,immutable"})
+    aws("s3").upload_file(str(windows_archive), download_bucket, "downloads/" + windows_archive.name,
+                         ExtraArgs={"ContentType": "application/zip", "CacheControl": "no-cache"})
     db = wait("PostgreSQL", lambda: rds.describe_db_instances(DBInstanceIdentifier=db_id)["DBInstances"][0],
               lambda x: x["DBInstanceStatus"] == "available")
     redis = wait("Redis", lambda: elasticache.describe_replication_groups(ReplicationGroupId=cache_id)["ReplicationGroups"][0],

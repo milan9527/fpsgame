@@ -28,8 +28,10 @@ VPC origin 服务安全组、S3 禁止公网直连。
 
 下载站点由 CloudFront 提供 HTTPS，源站为开启全部 Public Access Block 的
 S3 REST endpoint，使用 OAC 签名访问。网站只提供下载与说明，没有登录表单。
-安装 Linux x86_64 客户端后，将站点显示的 `/api` 地址填入游戏，注册或登录。
-离线模式不需要账号。当前安装包不适用于 Windows/macOS。
+Windows x64 ZIP 解压后双击 `IronMeridian.exe`，已预填 AWS API 地址。
+Linux x86_64 客户端使用 `play.sh` 启动，将站点显示的 `/api` 地址填入游戏，
+注册或登录。离线模式不需要账号；暂不提供 macOS 版。
+Windows 的构建和测试范围见 [WINDOWS_CLIENT.md](WINDOWS_CLIENT.md)。
 
 游戏客户端的 HTTPS JSON 请求经过 CloudFront VPC origin 到内部 ALB，
 再到私有 ECS API 服务。CloudFront 只允许指定的公开 API 路径；
@@ -48,7 +50,8 @@ TLS、Multi-AZ、七天备份及删除保护；Redis 启用 TLS、AUTH 和静态
 ## 执行和恢复
 
 需要已配置 AWS 身份、Python 环境中的 boto3、Docker，以及本机经过验证的
-0.38 API/游戏基础镜像和 Linux 安装包。脚本固定安装包 SHA-256，防止误发布。
+0.38 API/游戏基础镜像、Linux 安装包，以及通过验证的 Windows ZIP 和对应报告。
+脚本校验安装包 SHA-256，防止误发布。
 
 ```sh
 .venv/bin/python -u tools/deploy_aws_direct.py > artifacts/aws-direct-deploy.log 2>&1

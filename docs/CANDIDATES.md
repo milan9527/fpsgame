@@ -12,9 +12,9 @@
 
 构建失败会保留日志和失败状态，不将失败目录当作通过的候选包。成功报告中的 `scope` 仅说明包内离线规则验证，不代替网络、渲染或物理音频设备验收。后续发布仍需相应回归与服务版本切换。
 
-## 0.38 候选（已部署独立开发环境，未发布）
+## 0.38 候选（已作为开发版本发布）
 
-源码版本为 0.38.0-dev，协议 17、资源 ash-valley-18、数据库 0004 不变；在线仍要求完整版本清单匹配。新增安全路线可用时提前转移、驾驶员等待队友与危险中断、机器人主动搭乘及安全下车。独立开发服务为 0.38；发布服务及默认归档仍为 0.37。
+源码版本为 0.38.0-dev，协议 17、资源 ash-valley-18、数据库 0004 不变；在线仍要求完整版本清单匹配。新增安全路线可用时提前转移、驾驶员等待队友与危险中断、机器人主动搭乘及安全下车。独立开发服务、发布服务及默认归档均为 0.38。
 
 - 源提交：`484d98d958a0973d5dc630ce6474dcdcba950035`。
 - 目录：`artifacts/candidates/0.38.0-dev-484d98d9-ssm8gza_/`。
@@ -27,7 +27,7 @@
 
 后端镜像 `iron-meridian-api:0.38-484d98d9` 固定 ID 为 `sha256:62e6c5e6813bc83f52f89a1932ad0b92cc4e94bab0081eb581f819a94b7e1ed2`；专服 `iron-meridian-candidate:484d98d958a0` 固定 ID 为 `sha256:00e5f2831d82dafc5069794766f5c54df16f27986a55f2f1acd8dd438129db31`。两者已用于独立开发服务。
 
-首次候选 `0.38.0-dev-37471e67-1sovf4g8` 在 37 项检查后因乘客测试中间日志被识别为额外成功标记而失败，未生成合格归档。修正日志命名并提交后完整重建通过，失败目录保留。打包客户端联网验收、自然对局及发布仍需继续；本候选不等于完整商业游戏。
+首次候选 `0.38.0-dev-37471e67-1sovf4g8` 在 37 项检查后因乘客测试中间日志被识别为额外成功标记而失败，未生成合格归档。修正日志命名并提交后完整重建通过，失败目录保留。后续打包联网、自然对局及发布验证已完成；本候选不等于完整商业游戏。
 
 ### 0.38 存量数据与开发环境
 
@@ -35,7 +35,7 @@
 
 `deploy_candidate_dev.py --with-api` 在开发房间无人、无预约、结果队列为空时备份开发数据库并升级 API/专服。前后 users、matches、results 全字段指纹一致，保留现有 PostgreSQL/Redis 数据卷和旧镜像 ID，容器自动重启策略为 `unless-stopped`。备份在候选目录 `dev-backup/database.pgdump`，权限 0600；报告 `dev-deployment.json`，日志 `artifacts/candidate-038-dev-deploy.log`。本次没有触发失败回退。
 
-开发 API 8001、双人专服 UDP 27031 已为 0.38；发布 API 8000 及专服仍为 0.37。重启开发固定镜像使用：
+开发 API 8001、双人专服 UDP 27031 为 0.38；发布 API 8000 及专服亦已升级为 0.38。重启开发固定镜像使用：
 
 ```sh
 docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml -f artifacts/duo-candidate.override.json up -d --no-build
@@ -67,7 +67,7 @@ docker compose --env-file artifacts/duo-dev.env -f compose.duo-dev.yaml -f artif
 
 服务器验证正常 AI 上车、随车行驶、停稳后跟随驾驶员离车及下车冷却；客户端验证同队机器人座位同步、移动中乘员存在和最终座位释放。30 FPS、固定单向 150 ms 场景通过，报告前缀 `artifacts/vehicle-login-duo-bot-rider-fps30-delay150-packed-484d98d9-`，汇总 `artifacts/candidate-038-bot-rider.log`。这证明受控网络搭乘流程，不证明自然搭乘频率、真人驾驶体验或公网稳定性。
 
-新增分支后，原有机器人驾驶员等待真人账号乘客上车场景在 30 FPS、单向 30 ms 下回归通过，日志 `artifacts/candidate-038-rider-driver-regression.log`。运行中的发布服务和默认归档仍为 0.37。
+新增分支后，原有机器人驾驶员等待真人账号乘客上车场景在 30 FPS、单向 30 ms 下回归通过，日志 `artifacts/candidate-038-rider-driver-regression.log`。运行中的发布服务和默认归档已升级至 0.38，详见 [发行记录](RELEASE_038.md)。
 
 ## 0.37 候选（已作为开发版本发布）
 

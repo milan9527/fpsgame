@@ -24,12 +24,21 @@ docker compose up -d
 
 ## 远程玩家接入
 
-1. `.env` 的 `GAME_PUBLIC_HOST` 改为玩家能访问的域名或 IP。
-2. 在宿主机前配置 HTTPS 反向代理，将 API 转发至 `127.0.0.1:8000`；客户端输入对应 HTTPS URL。当前不自动申请域名或证书。
-3. 放行专用服务器 UDP 27015 和 27022，API 的 HTTPS 端口使用反向代理所设端口。
-4. 运行 `docker compose up -d` 载入配置。
+提供 `compose.public.yaml` 与 `infra/Caddyfile`，使用 Caddy 自动申请和续期公共 HTTPS 证书。部署需要已有域名，DNS 指向游戏主机；有 AAAA 记录时 IPv6 也须可达。先在现有 `.env` 增加 `PUBLIC_HOST`（仅 API 域名，不含协议/路径），并将 `GAME_PUBLIC_HOST` 设为玩家可达的游戏主机域名或 IP。不要覆盖现有凭据。
+
+允许 TCP 80/443 用于证书签发及 HTTPS，UDP 27015/27022 用于游戏连接。API 与游戏主机可用同一域名；HTTP 反向代理不会转发 ENet UDP。房间公布的主机地址必须可被外部玩家访问。调整游戏环境变量会重建专服，应在房间无人且结果队列已排空时执行。
+
+使用当前已验证的固定发布镜像，再叠加公网配置：
+
+```bash
+docker compose -f compose.yaml -f artifacts/release-0.38.0-dev/compose.override.json -f compose.public.yaml up -d --no-build
+```
+
+不要省略固定镜像 override，否则可能选到本地旧镜像标签。证书状态保存到 `edge_data`，配置状态保存到 `edge_config`，代理配置自动重启和日志轮转。客户端填写 `https://你的域名`。Caddy 服务端口不会映射管理 API，访问日志默认未启用。
 
 API 默认仅绑定环回地址；数据库与 Redis 不对外开放。开发用 HTTP 不应直接作为公网账号入口。若仅通过本机测试或 SSH 隧道连接，可使用默认地址。
+
+`tools/test_https_proxy.py` 已在独立临时 Caddy 容器内通过真实 API 的本机 HTTPS 检查，使用仅测试用的本地 CA，并严格校验证书链与 localhost 主机名；公开配置本身也通过 Caddy 校验。测试只读取 `/health`、`/protocol`，不登录、不改房间地址、不开放公网端口、不替换生产服务。报告 `artifacts/https-proxy-verification.json`。这不验证实际公共证书签发、DNS、防火墙或外部 UDP 可达性。当前公网代理尚未部署，等待明确域名。
 
 ## 备份
 

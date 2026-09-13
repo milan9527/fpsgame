@@ -164,3 +164,11 @@ Forward+ 与 Compatibility 实际单机截图均通过，分别在 `artifacts/re
 第十四轮已更新本地 Windows/Linux 预览：`artifacts/visual-preview/0f2b9d5f721b/`，包含第十二至十四轮改动，内容号 19。两个平台导出和打包后 Linux 单机/屋顶碰撞检查通过，归档校验值在 `verification.json`；Windows 尚未实机验证。源码瞄准检查通过 108 个样本，覆盖三个武器、切换、后坐力、侧倾和射线。未推送或部署。
 
 另从 `/tmp` 启动打包后的 Linux 程序完成 Forward+ 实际单机截图，证明相邻 PCK 及新材质可加载：`artifacts/visual-preview/0f2b9d5f721b/capture/gameplay.png`，日志 `artifacts/realism14-packaged-render.log` 通过。
+
+## 第十五轮：低矮草地与疏密斑块
+
+Blender 草丛从 9 片宽直叶改为 14 片更细低矮、带弯曲与枯绿差异的叶片，单簇 84 三角形。世界采样改为噪声控制的斑块密度，并变化垂直比例；首版 55,977 簇仍偏稀疏，实际查看后增至 169,031 簇，按 100 个 MultiMesh 单元、75 米距离裁剪。最终 Forward+ 实际游戏截图：`artifacts/realism15-dense/gameplay.png`。
+
+Compatibility 图形环境检查所有实例均避开道路和装卸场地，日志 `realism15-dense-check.log`；检查中的构建与遍历共约 6.6 秒（软件渲染环境，不是帧率指标）。无图形渲染模式读取 MultiMesh 变换会得到无效结果，因此不能据此判断植被穿插。序列化后由 Python 比较的 276 个碰撞形状/变换与第十三轮完全相同。`realism15-smoke.log` 单机检查通过，包括换弹、治疗、伤害、胜利、射线和掩体。
+
+地表覆盖改善，但远处细草仍有颗粒感；密度提高了渲染成本，尚需 LOD 和实机性能检查。建筑和角色仍未达到整体目标。现有 `0f2b9d5f721b` 桌面 ZIP 只到第十四轮，不含本轮草地；源码可直接运行。未推送或部署。

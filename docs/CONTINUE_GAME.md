@@ -10,21 +10,19 @@ still visibly procedural. Work autonomously. NEVER push without confirmation.
 No AWS changes or publication needed. Do not claim UI-independent execution.
 
 ## Current work
-Committed checkpoint 0f2b9d5: stages 12–14 character, yards and terrain.
-Stage 14 adds slope-blended scanned rock/soil on decorative mountains:
-client/shaders/terrain_slopes.gdshader, world_visuals terrain material cache,
-world.gd material assignment, terrain_rock maps and fetch_terrain_material.py.
-Forward+ capture passed: artifacts/realism14-forward/gameplay.png.
-Compatibility verification and review recorded in docs/VISUAL_REVIEW.md.
-No collision geometry changed in stage 14. Content ash-valley-19, protocol17.
-Stage13 tests rejected old18 peers/checkpoints and preserved old save files.
-276 collision shapes in artifacts/realism13-world/collision.json match stage11.
+Stage15: low fine Blender grass, patch distribution; 169031 tufts in100 cells.
+Latest actual Forward+ image artifacts/realism15-dense/gameplay.png.
+Compatibility instance checks avoid roads/yards; all276 serialized collisions
+match stage13. Offline smoke passed. See realism15-dense-check.log and smoke.log.
+Headless renderer does not give valid MultiMesh transform readback; use graphics.
+Grass draw cost and distant aliasing need LOD work; construction+checks ~6.6s
+in software environment. Geometry has84 triangles per tuft. Content19 unchanged.
 Full historical changes/evidence are in docs/VISUAL_REVIEW.md; read selectively.
 
 ## Next substantive work
-Improve architectural silhouettes and natural layout, dense ground vegetation,
+Improve architectural silhouettes and natural layout, vegetation LOD/aliasing,
 and realistic equipment. Current screenshot still falls well below reference.
-Stage14 Compatibility capture passed; license and review updated.
+Stage15 is not yet in desktop ZIPs; refresh after further coherent visual work.
 Current desktop packages: artifacts/visual-preview/0f2b9d5f721b/, stages6–14,
 content19. verification.json records both exports, packaged Linux offline/roof
 checks and archive hashes. Rebuild via python3 tools/package_visual_preview.py

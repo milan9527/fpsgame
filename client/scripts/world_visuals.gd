@@ -335,19 +335,23 @@ static func ground_detail(world) -> void:
 	density.frequency = 0.055
 	var exclusions: Array = world.ground_obstacles.duplicate()
 	exclusions.append_array(world.get_meta("hardscape_bounds", []))
-	for attempt in range(40000):
+	# Low, fine blades form patches instead of isolated tall tufts.
+	# Keep the random stream independent of gameplay and all paved areas clear.
+	for attempt in range(480000):
 		var point := Vector2(random.randf_range(-109, 109), random.randf_range(-109, 109))
 		if absf(point.x) < 10 or absf(point.y) < 9: continue
-		if random.randf() > 0.65 + density.get_noise_2d(point.x, point.y): continue
+		var coverage := smoothstep(-0.4, 0.35, density.get_noise_2d(point.x, point.y))
+		if random.randf() > lerpf(0.08, 0.92, coverage): continue
 		var blocked := false
 		for obstacle in exclusions:
 			if obstacle.grow(0.5).has_point(point): blocked = true; break
 		if blocked: continue
 		var cell := Vector2i(floori(point.x / 24), floori(point.y / 24))
 		if not cells.has(cell): cells[cell] = []
-		var scale := random.randf_range(0.65, 1.15)
+		var scale := random.randf_range(0.65, 1.3)
 		var local := Vector3(point.x - cell.x * 24 - 12, 0.01, point.y - cell.y * 24 - 12)
-		cells[cell].append(Transform3D(Basis(Vector3.UP, random.randf() * TAU).scaled(Vector3.ONE * scale), local))
+		var proportions := Vector3(scale, scale * random.randf_range(0.7, 1.2), scale)
+		cells[cell].append(Transform3D(Basis(Vector3.UP, random.randf() * TAU).scaled(proportions), local))
 	for cell in cells:
 		var instances := MultiMesh.new()
 		instances.transform_format = MultiMesh.TRANSFORM_3D

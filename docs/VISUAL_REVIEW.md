@@ -200,3 +200,5 @@ Forward+ 实际截图 `artifacts/realism16-forward/gameplay.png` 和 Compatibili
 两种屋顶的 Compatibility 实景检查位于 `artifacts/realism18-roofs/gable.png`、`shed.png`；Forward+ 单机截图在 `realism18-forward/gameplay.png`。`realism18-roof-collision.log` 通过8处屋顶的三点坡度、射线遮挡及门洞净空检查。两种屋顶的顶面和山墙朝向经过实际截图检查；太阳直射下金属高光较亮，仍需实机和更多光照条件评估。
 
 本轮修复材质分区并增加真实构造，未完成整体环境美术目标。稀疏重复的布局、远景树形和地表层次仍有明显差距，下一步应推进更大尺度的环境改进。
+
+第十八轮本地 Windows/Linux 预览已更新到 `artifacts/visual-preview/3406be77d44d/`，包含第十七轮侧墙及第十八轮屋顶。导出、打包后 Linux 单机/屋顶检查通过，从 `/tmp` 运行的 Forward+ 实际游戏截图也通过，图片位于该目录 `capture/gameplay.png`；哈希和构建提交见 `verification.json`。Windows 仍未实机运行，未推送或部署。

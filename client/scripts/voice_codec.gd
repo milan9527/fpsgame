@@ -35,12 +35,20 @@ static func encode(frames: PackedVector2Array) -> PackedByteArray:
 		var nibble := 8 if delta < 0 else 0
 		delta = absi(delta)
 		var change := step >> 3
-		for bit in [4, 2, 1]:
-			if delta >= step:
-				nibble |= bit
-				delta -= step
-				change += step
-			step >>= 1
+		# Fixed ADPCM bit stages avoid a temporary Array per encoded sample.
+		if delta >= step:
+			nibble |= 4
+			delta -= step
+			change += step
+		step >>= 1
+		if delta >= step:
+			nibble |= 2
+			delta -= step
+			change += step
+		step >>= 1
+		if delta >= step:
+			nibble |= 1
+			change += step
 		predictor = clampi(predictor + (-change if nibble & 8 else change), -32768, 32767)
 		index = clampi(index + INDICES[nibble & 7], 0, 88)
 		var offset := 4 + int((i - 1) / 2)

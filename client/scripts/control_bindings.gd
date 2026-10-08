@@ -3,6 +3,11 @@ const DEFAULTS := {"push_to_talk": KEY_T, "forward": KEY_W, "back": KEY_S, "left
 var keys: Dictionary = DEFAULTS.duplicate()
 var path := "user://bindings.cfg"
 var message := ""
+# apply() owns the runtime keyboard map. HUD prompts read these labels every
+# frame; refresh them with the map rather than allocating event arrays and
+# formatting the same physical key repeatedly.
+static var _applied_labels: Dictionary = {}
+static var applied_revision := 0
 
 func _init(profile_path := "user://bindings.cfg") -> void:
 	path = profile_path
@@ -39,6 +44,8 @@ func load_profile() -> void:
 	keys = candidate
 
 func apply() -> void:
+	applied_revision += 1
+	_applied_labels.clear()
 	for action in keys:
 		if not InputMap.has_action(action):
 			InputMap.add_action(action)
@@ -47,6 +54,7 @@ func apply() -> void:
 		var event := InputEventKey.new()
 		event.physical_keycode = keys[action]
 		InputMap.action_add_event(action, event)
+		_applied_labels[action] = OS.get_keycode_string(event.physical_keycode).to_upper()
 	for action in ["fire", "aim"]:
 		if not InputMap.has_action(action):
 			InputMap.add_action(action)
@@ -86,6 +94,8 @@ func reset_defaults() -> bool:
 	return commit(DEFAULTS.duplicate())
 
 static func key_label(action: String) -> String:
+	if _applied_labels.has(action):
+		return _applied_labels[action]
 	if InputMap.has_action(action):
 		for event in InputMap.action_get_events(action):
 			if event is InputEventKey:

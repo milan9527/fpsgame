@@ -65,6 +65,20 @@ func run() -> void:
 	await create_timer(0.02).timeout
 	game._process(0.016)
 	assert(map.shared_pings.is_empty() and game.ui.team_ping_label.text.is_empty())
+	var future_expiry := Time.get_ticks_msec() + 60000
+	map.shared_pings = [
+		{"id": 1, "point": Vector2.ZERO, "name": "EXPIRED", "expires_at": 0},
+		{"id": 2, "point": Vector2.ZERO, "name": "KEEP", "expires_at": future_expiry},
+		{"id": 3, "point": Vector2.ZERO, "name": "MISSING"},
+		{"id": 4, "point": Vector2.ZERO, "name": "EXPIRED", "expires_at": 0},
+		{"id": 5, "point": Vector2.ZERO, "name": "KEEP", "expires_at": future_expiry},
+		{"id": 6, "point": Vector2.ZERO, "name": "EXPIRED", "expires_at": 0},
+	]
+	game._process(0.016)
+	assert(map.shared_pings.size() == 2)
+	assert(map.shared_pings[0].id == 2 and map.shared_pings[1].id == 5)
+	game._process(0.016)
+	assert(map.shared_pings.size() == 2 and map.shared_pings[1].expires_at == future_expiry)
 	game.online = false
 	game.start_solo()
 	assert(rules.markers.is_empty() and game.team_ping_sequence == 0)

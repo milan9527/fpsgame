@@ -6,6 +6,17 @@ func _initialize() -> void:
 func run() -> void:
 	var directory := OS.get_environment("CHECKPOINT_TEST_ROOT")
 	assert(not directory.is_empty())
+	# Isolate save/restore driving from the changing excavated terrain.
+	# Keep this collision-only test road alive across world reconstruction.
+	var test_road := StaticBody3D.new()
+	test_road.collision_layer = 1
+	var road_shape := CollisionShape3D.new()
+	var road_box := BoxShape3D.new()
+	road_box.size = Vector3(44, 0.2, 44)
+	road_shape.shape = road_box
+	test_road.add_child(road_shape)
+	test_road.position = Vector3(17, -0.1, -17)
+	root.add_child(test_road)
 	var game = load("res://scripts/game.gd").new()
 	root.add_child(game)
 	game.local_profile = null

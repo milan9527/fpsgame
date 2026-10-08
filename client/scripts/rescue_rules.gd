@@ -1,5 +1,11 @@
 extends RefCounted
 
+var access_query := PhysicsRayQueryParameters3D.new()
+
+func _init() -> void:
+	access_query.collision_mask = 5
+	access_query.hit_from_inside = true
+
 func standing_ally(game, actor) -> bool:
 	for other in game.actors.values():
 		if game.teams.friendly(actor.actor_id, other.actor_id) and other.alive and not other.downed:
@@ -9,17 +15,31 @@ func standing_ally(game, actor) -> bool:
 func accessible(game, actor, other) -> bool:
 	if not actor.alive or actor.downed or not other.alive or not other.downed or actor == other or actor.team_id <= 0 or actor.team_id != other.team_id:
 		return false
-	if actor.position.distance_to(other.position) > 2.8:
+	if actor.position.distance_squared_to(other.position) > 2.8 * 2.8:
 		return false
-	var query := PhysicsRayQueryParameters3D.create(actor.position + Vector3.UP * 0.6, other.position + Vector3.UP * 0.6, 5)
-	query.hit_from_inside = true
-	return game.world.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+	# Synchronous queries can reuse parameters across HUD, bot and revive checks.
+	access_query.from = actor.position + Vector3.UP * 0.6
+	access_query.to = other.position + Vector3.UP * 0.6
+	return game.world.get_world_3d().direct_space_state.intersect_ray(access_query).is_empty()
 
 func target(game, actor):
+	# The HUD calls this every frame, including while downed or spectating.
+	# No candidate can be accessible in these states; don't copy the roster.
+	if not actor.alive or actor.downed or actor.team_id <= 0:
+		return null
 	var best = null
-	for other in game.actors.values():
-		if accessible(game, actor, other) and (best == null or actor.position.distance_squared_to(other.position) < actor.position.distance_squared_to(best.position)):
+	var best_distance_squared := INF
+	for actor_id in game.actors:
+		var other = game.actors[actor_id]
+		# Most roster entries cannot be rescued; skip their distance calculation.
+		if other == actor or not other.alive or not other.downed or other.team_id != actor.team_id:
+			continue
+		var distance_squared: float = actor.position.distance_squared_to(other.position)
+		# Only a strictly closer candidate can replace an accessible target.
+		# Avoid a physics query for candidates that cannot change the result.
+		if distance_squared < best_distance_squared and accessible(game, actor, other):
 			best = other
+			best_distance_squared = distance_squared
 	return best
 
 func cancel(actor) -> void:

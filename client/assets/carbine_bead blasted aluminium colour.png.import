@@ -1,0 +1,39 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://cwy0vc4ahf6ts"
+path.s3tc="res://.godot/imported/carbine_bead blasted aluminium colour.png-de2e5beeefd40f27b23a5359ccdcc5a4.s3tc.ctex"
+path.etc2="res://.godot/imported/carbine_bead blasted aluminium colour.png-de2e5beeefd40f27b23a5359ccdcc5a4.etc2.ctex"
+metadata={
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
+}
+generator_parameters={
+"md5": "b374021d2a9b9246f049e6b9e166295b"
+}
+
+[deps]
+
+source_file="res://assets/carbine_bead blasted aluminium colour.png"
+dest_files=["res://.godot/imported/carbine_bead blasted aluminium colour.png-de2e5beeefd40f27b23a5359ccdcc5a4.s3tc.ctex", "res://.godot/imported/carbine_bead blasted aluminium colour.png-de2e5beeefd40f27b23a5359ccdcc5a4.etc2.ctex"]
+
+[params]
+
+compress/mode=2
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=0

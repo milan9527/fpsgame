@@ -1,6 +1,7 @@
 """Run the signed APK on one available Android phone; collect native smoke evidence."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import time
 
@@ -8,7 +9,7 @@ import boto3
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "artifacts/android-build"
+OUT = Path(os.environ.get("ANDROID_BUILD_DIR", str(ROOT / "artifacts/android-build"))).resolve()
 
 
 def main():
@@ -18,7 +19,7 @@ def main():
     client = boto3.client("devicefarm", region_name="us-west-2")
     devices = [d for page in client.get_paginator("list_devices").paginate(
         filters=[{"attribute": "PLATFORM", "operator": "EQUALS", "values": ["ANDROID"]}])
-        for d in page["devices"] if d.get("availability") == "AVAILABLE"]
+        for d in page["devices"] if d.get("availability") in {"AVAILABLE", "HIGHLY_AVAILABLE"}]
     assert devices, "No Android devices currently available"
     devices.sort(key=lambda d: ("Pixel" not in d["name"], d["name"]))
     project = client.create_project(name="IronMeridian-Android", defaultJobTimeoutMinutes=15)["project"]["arn"]
@@ -39,7 +40,7 @@ def main():
         raise TimeoutError("APK processing timeout")
     run = client.schedule_run(projectArn=project, appArn=upload["arn"], devicePoolArn=pool,
         name="Android-native-release-smoke", test={"type": "BUILTIN_FUZZ", "parameters": {
-            "event_count": "300", "event_throttle": "500", "seed": "42"}},
+            "event_count": "600", "throttle": "1000", "seed": "42"}},
         executionConfiguration={"jobTimeoutMinutes": 15, "videoCapture": True, "skipAppResign": True})["run"]
     (OUT / "devicefarm.json").write_text(json.dumps({"project": project, "pool": pool,
         "upload": upload["arn"], "run": run["arn"], "apk_sha256": build["sha256"]}, indent=2))
@@ -57,7 +58,8 @@ def main():
                      for a in page["artifacts"]]
         (OUT / ("devicefarm-" + kind.lower() + ".json")).write_text(json.dumps(artifacts, indent=2))
     assert run["result"] == "PASSED", run["result"]
-    print("Android native smoke test passed on", devices[0]["name"])
+    print("Android fuzz test passed on", devices[0]["name"],
+          "— inspect the video for menu and gameplay before declaring the APK playable.")
 
 
 if __name__ == "__main__":

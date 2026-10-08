@@ -236,7 +236,8 @@
         "tools/build_fir_lod.py"
       ],
       "modification": "Two triangles per needle with surface-area compensation; reduced woody branches/trunk; unused vertex colors removed. Near and distant trees now use variant B."
-    }
+    },
+    "runtime_status": "Historical source retained; fir_full.glb and fir_background.png replaced by original branching_fir in stage113."
   },
   {
     "asset": "kloofendal_48d_partly_cloudy_puresky",
@@ -551,5 +552,30 @@
       }
     },
     "modification": "Original 2K seamless maps for slope-blended background terrain."
+  },
+  {
+    "asset": "branching_fir",
+    "source": "tools/build_branching_fir.py",
+    "authoring": "art/branching_fir.blend",
+    "provenance": "Original deterministic procedural project geometry, seed 113; no external source geometry.",
+    "outputs": [
+      "fir_full.glb",
+      "fir_background.png"
+    ],
+    "height_metres": 9,
+    "middle_distance": {
+      "output": "fir_mid.glb",
+      "builder": "tools/build_fir_mid.py",
+      "source": "fir_full.glb",
+      "triangles": 212950,
+      "modification": "Retain whole hashed needle islands with 1.8x local coverage compensation; decimate woody branches. Original near asset unchanged."
+    },
+    "far_distance": {
+      "output": "fir_far.glb",
+      "builder": "tools/build_fir_mid.py -- --far",
+      "source": "fir_full.glb",
+      "triangles": 60365,
+      "modification": "Retain 1/17 hashed whole needle islands with 3.4x local coverage; decimate woody branches to 12%. Lit volumetric geometry replaces the unshaded distant billboard."
+    }
   }
 ]

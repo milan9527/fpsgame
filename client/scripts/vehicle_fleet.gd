@@ -5,6 +5,7 @@ var vehicles: Dictionary = {}
 var next_id := 1
 var simulation_time := 0.0
 var pair_cooldowns: Dictionary = {}
+var _expired_pairs: Array = []
 var map_spawned := false
 const MAP_SPAWNS := [
 	{"p": Vector3(4.5, 0, 72), "yaw": 0.0},
@@ -77,6 +78,7 @@ func clear() -> void:
 	vehicles.clear()
 	next_id = 1
 	pair_cooldowns.clear()
+	_expired_pairs.clear()
 	simulation_time = 0
 	map_spawned = false
 
@@ -92,17 +94,48 @@ func on_impact(other: Node, closing: float, driver: int, game, vehicle) -> void:
 
 func candidates(actor) -> Array:
 	var choices: Array = []
-	for vehicle in vehicles.values():
+	if vehicles.is_empty() or not actor.alive or actor.downed or actor.is_seated() or actor.revive_target != 0:
+		return choices
+	var actor_position: Vector3 = actor.global_position
+	for vehicle_id in vehicles:
+		var vehicle = vehicles[vehicle_id]
 		if not is_instance_valid(vehicle) or not vehicle.grounded or absf(vehicle.speed) > 2.0:
 			continue
 		for index in range(2):
 			if vehicle.seats.slots[index] != null:
 				continue
-			var distance: float = actor.global_position.distance_to(vehicle.to_global(vehicle.seats.DOORS[index]))
-			if distance <= 2.8 and vehicle.seats.can_enter(actor, index):
-				choices.append({"vehicle": vehicle, "seat": index, "distance": distance})
+			var door: Vector3 = vehicle.to_global(vehicle.seats.DOORS[index])
+			var distance_squared: float = actor_position.distance_squared_to(door)
+			if distance_squared <= 2.8 * 2.8 and vehicle.seats.can_enter(actor, index, door):
+				choices.append({"vehicle": vehicle, "seat": index, "distance": sqrt(distance_squared)})
 	choices.sort_custom(func(a, b): return a.distance < b.distance)
 	return choices
+
+func nearest_seat_index(actor) -> int:
+	# The per-frame HUD only needs the seat type. Avoid building and sorting
+	# interaction choices, and raycast only doors that can improve the result.
+	# These actor-wide conditions also apply to every door. Reject once before
+	# reading native transforms, including while reviving or already seated.
+	if vehicles.is_empty() or not actor.alive or actor.downed or actor.is_seated() or actor.revive_target != 0:
+		return -1
+	var nearest := -1
+	var best_distance_squared := INF
+	var actor_position: Vector3 = actor.global_position
+	for vehicle_id in vehicles:
+		var vehicle = vehicles[vehicle_id]
+		if not is_instance_valid(vehicle) or not vehicle.grounded or absf(vehicle.speed) > 2.0:
+			continue
+		for index in range(2):
+			if vehicle.seats.slots[index] != null:
+				continue
+			var door: Vector3 = vehicle.to_global(vehicle.seats.DOORS[index])
+			var distance_squared: float = actor_position.distance_squared_to(door)
+			if distance_squared > 2.8 * 2.8 or distance_squared >= best_distance_squared:
+				continue
+			if vehicle.seats.can_enter(actor, index, door):
+				best_distance_squared = distance_squared
+				nearest = index
+	return nearest
 
 func interact(actor) -> bool:
 	if actor.is_seated():
@@ -116,7 +149,7 @@ func controls(actor, cmd: Dictionary, live: bool) -> void:
 	if not actor.is_seated():
 		return
 	var vehicle = actor.vehicle_ref.get_ref()
-	if not vehicles.values().has(vehicle):
+	if not is_instance_valid(vehicle) or vehicles.get(vehicle.vehicle_id) != vehicle:
 		return
 	if not live or not actor.alive or actor.downed:
 		if vehicle.driver_id == actor.actor_id:
@@ -131,9 +164,14 @@ func controls(actor, cmd: Dictionary, live: bool) -> void:
 
 func step(dt: float, live: bool) -> void:
 	simulation_time += dt
-	for pair in pair_cooldowns.keys():
+	# Avoid copying every cooldown key on each physics tick. Defer erasure
+	# until iteration ends so simultaneous expirations remain safe.
+	for pair in pair_cooldowns:
 		if pair_cooldowns[pair] <= simulation_time:
-			pair_cooldowns.erase(pair)
+			_expired_pairs.append(pair)
+	for pair in _expired_pairs:
+		pair_cooldowns.erase(pair)
+	_expired_pairs.clear()
 	for id in vehicles.keys():
 		var vehicle = vehicles[id]
 		if not is_instance_valid(vehicle):

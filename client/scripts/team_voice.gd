@@ -3,7 +3,10 @@ extends Node
 var game
 var receiver
 var microphone
-var context := ""
+var context_initialized := false
+var context_online := false
+var context_round_id := ""
+var context_match_mode := ""
 
 func bind(owner_game) -> void:
 	game = owner_game
@@ -23,13 +26,19 @@ func send_packet(sequence: int, packet: PackedByteArray) -> void:
 	if game.online and game.running and game.match_mode == "duo" and not game.network_round_id.is_empty():
 		game.submit_voice.rpc_id(1, game.network_round_id, sequence, packet)
 
+func _sync_round_context() -> void:
+	# Compare existing values without allocating a composite string every frame.
+	if not context_initialized or context_online != game.online or context_round_id != game.network_round_id or context_match_mode != game.match_mode:
+		reset_round()
+		context_online = game.online
+		context_round_id = game.network_round_id
+		context_match_mode = game.match_mode
+		context_initialized = true
+
 func _process(_dt: float) -> void:
 	if game == null:
 		return
-	var current: String = str(game.online) + "/" + game.network_round_id + "/" + game.match_mode
-	if current != context:
-		reset_round()
-		context = current
+	_sync_round_context()
 	receiver.enabled = game.ui.voice_listen
 	receiver.volume = game.ui.voice_volume * game.ui.volume
 	var eligible: bool = game.online and game.running and game.match_mode == "duo" and not game.network_round_id.is_empty()
@@ -46,7 +55,8 @@ func _process(_dt: float) -> void:
 	var testing: bool = setup.visible and game.ui.pause_panel.visible and setup.testing and focused
 	microphone.gain = setup.gain
 	microphone.set_activity(speaking, testing)
-	setup.update_level(microphone.peak, microphone.clipped, testing, microphone.last_signal)
+	if setup.visible:
+		setup.update_level(microphone.peak, microphone.clipped, testing, microphone.last_signal)
 	if not speaking:
 		game.ui.voice_indicator.text = ""
 	elif microphone.clipped:

@@ -1,0 +1,35 @@
+extends SceneTree
+
+func _initialize() -> void:
+	var source := FileAccess.get_file_as_string("res://scripts/game.gd")
+	var start := source.find("\t# Stable client rosters")
+	var end := source.find("\n\tphase = payload.phase", start)
+	assert(start >= 0 and end > start)
+	var script := GDScript.new()
+	script.source_code = "extends Node\nvar actors = {}\nfunc retire(payload):\n" + source.substr(start, end - start)
+	assert(script.reload() == OK)
+	var probe = script.new()
+	probe.retire({"roster": []})
+	var first := Node.new()
+	var survivor := Node.new()
+	var last := Node.new()
+	probe.actors = {1: first, 2: survivor, 3: last}
+	for frame in range(120):
+		probe.retire({"roster": [3, 1, 2]})
+	assert(probe.actors.size() == 3)
+	assert(not first.is_queued_for_deletion() and not last.is_queued_for_deletion())
+	probe.retire({"roster": [2, 4]})
+	assert(first.is_queued_for_deletion() and last.is_queued_for_deletion())
+	assert(probe.actors.size() == 1 and probe.actors[2] == survivor)
+	assert(not survivor.is_queued_for_deletion())
+	var newcomer := Node.new()
+	probe.actors[4] = newcomer
+	probe.retire({"roster": [2, 4]})
+	assert(not newcomer.is_queued_for_deletion())
+	probe.retire({"roster": []})
+	assert(probe.actors.is_empty())
+	assert(survivor.is_queued_for_deletion() and newcomer.is_queued_for_deletion())
+	probe.retire({"roster": []})
+	probe.free()
+	print("NETWORK_ACTOR_RETIREMENT_PASS stable simultaneous_departure survivor newcomer empty")
+	quit()

@@ -12,8 +12,22 @@ from candidate_runtime import candidate_command
 root = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser()
 parser.add_argument("--candidate-dir", type=Path)
+parser.add_argument("--preview", type=Path, help="Local exported executable to test")
+parser.add_argument("--output", type=Path, help="Directory for client/server evidence")
+parser.add_argument("--timeout", type=int, default=50)
 options = parser.parse_args()
+if options.preview and options.candidate_dir:
+    parser.error("--preview and --candidate-dir are mutually exclusive")
+if options.timeout <= 0:
+    parser.error("--timeout must be positive")
+output_dir = (options.output or root / "artifacts").resolve()
+output_dir.mkdir(parents=True, exist_ok=True)
 runtime = [str(root / 'tools/godot'), '--headless', '--path', str(root / 'client')]
+if options.preview:
+    preview = options.preview.resolve()
+    if not preview.is_file() or not preview.with_suffix(".pck").is_file():
+        parser.error("preview executable and PCK must exist")
+    runtime = [str(preview), "--headless", "--path", "/tmp"]
 prefix = ""
 candidate = None
 if options.candidate_dir:
@@ -30,12 +44,12 @@ try:
         name = credentials['username']
         password = credentials['password']
         env = dict(os.environ, TEST_USERNAME=name, TEST_PASSWORD=password, API_URL='http://127.0.0.1:8000', TEST_ROOM_ID=os.getenv('TEST_ROOM_ID', 'room-27015'))
-        log_path = root / 'artifacts' / f'{prefix}online-client-{i}.log'
+        log_path = output_dir / f'{prefix}online-client-{i}.log'
         log = open(log_path, 'w')
         proc = subprocess.Popen(runtime + ['--', '--bot-client'], env=env, stdout=log, stderr=subprocess.STDOUT)
         processes.append((proc, log, log_path))
     for proc, log, path in processes:
-        code = proc.wait(timeout=50)
+        code = proc.wait(timeout=options.timeout)
         log.close()
         output = path.read_text()
         print(output)
@@ -55,7 +69,7 @@ for _ in range(100):
     time.sleep(0.2)
 else:
     raise AssertionError('Server did not confirm both disconnects')
-(root / 'artifacts' / (prefix + 'online-server.log')).write_text(server_output)
+(output_dir / (prefix + 'online-server.log')).write_text(server_output)
 assert 'Unable to send packet' not in server_output, server_output
 assert 'SCRIPT ERROR' not in server_output, server_output
 # Readiness is emitted once at startup, which may precede the two-minute

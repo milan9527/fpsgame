@@ -117,8 +117,13 @@ func run() -> void:
 	for i in range(sound.MAX_VOICES - 1):
 		sound.effect("gun_ar", actor.eye_position(), true, 1, 2)
 	var quiet: Node = sound.effect("step_hard", actor.eye_position())
-	sound.effect("gun_ar", actor.eye_position(), true, 1, 2)
-	assert(not sound.voices.has(quiet), "Higher priority sounds reclaim the quietest-priority voice first")
+	var protected_voices: Array = sound.voices.duplicate()
+	protected_voices.erase(quiet)
+	var replacement: Node = sound.effect("gun_ar", actor.eye_position(), true, 1, 2)
+	assert(replacement != null and replacement.get_meta("effect") == "gun_ar")
+	assert(replacement.get_meta("priority") == 2)
+	for voice in protected_voices:
+		assert(sound.voices.has(voice) and voice != replacement, "Higher priority sounds reclaim the quietest-priority voice first")
 	for i in range(70):
 		sound.effect("gun_ar", actor.eye_position(), true, 1, 2)
 	assert(sound.voices.size() == sound.MAX_VOICES)

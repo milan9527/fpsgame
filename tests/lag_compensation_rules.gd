@@ -27,6 +27,9 @@ func run() -> void:
 	game.local_profile = null
 	await process_frame
 	game.start_solo()
+	await sync()
+	assert(game.elapsed > 0, "Solo simulation advanced")
+	assert(game.hit_history.samples.is_empty(), "Solo simulation needs no server rewind snapshots")
 	game.running = false
 	game.sound.volume = 0
 	game.elapsed = 10.2

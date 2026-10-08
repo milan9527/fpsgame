@@ -46,8 +46,17 @@ func run() -> void:
 	game.network_status.received(Time.get_ticks_msec() - 1500)
 	game.update_network_status()
 	assert(game.ui.network_label.visible and "SERVER UPDATES DELAYED" in game.ui.network_label.text)
+	var displayed: String = game.ui.network_label.text
+	game.network_status.received(Time.get_ticks_msec())
+	game.update_network_status()
+	assert(game.ui.network_label.text == displayed, "HUD refresh is bounded within 100ms")
+	await create_timer(0.12).timeout
+	game.update_network_status()
+	assert("CONNECTED" in game.ui.network_label.text, "Recovery reaches HUD after refresh interval")
 	game.new_round("next")
 	assert(game.network_status.last_snapshot == -1 and game.network_status.rtt == -1)
+	game.update_network_status()
+	assert("SYNCING" in game.ui.network_label.text, "New rounds refresh HUD immediately")
 	game.leave()
 	assert(not game.ui.network_label.visible and game.network_status.describe(Time.get_ticks_msec()).text == "")
 	print("NETWORK_STATUS_RULES_PASS rtt=ok variance=ok initial_grace=ok stall=ok recovery=ok stale_round=ok lifecycle=ok")

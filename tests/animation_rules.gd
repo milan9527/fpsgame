@@ -8,15 +8,13 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
-	var game = load("res://scripts/game.gd").new()
-	root.add_child(game)
-	game.local_profile = null # This fixture must not modify the player's local results.
+	# Exercise the imported skin without building the unrelated full map/navmesh.
+	var scene := Node3D.new()
+	root.add_child(scene)
+	var actor = load("res://scripts/actor.gd").new()
+	actor.mobile_animation = "--mobile-character" in OS.get_cmdline_user_args()
+	scene.add_child(actor)
 	await process_frame
-	game.start_solo()
-	game.running = false
-	await process_frame
-	await process_frame
-	var actor = game.actors[1]
 	var animation = actor.character_animation
 	assert(animation.available, "Imported model must contain real animation and skeleton")
 	print("IMPORTED_CLIPS ", animation.clips.keys(), " bones=", animation.skeleton.get_bone_count())
@@ -27,6 +25,24 @@ func run() -> void:
 	actor.pitch = 0
 	animation.update(actor, 0.01)
 	var skeleton: Skeleton3D = animation.skeleton
+	var level_spine := skeleton.get_bone_global_pose(animation.spine_bone)
+	assert(not animation.spine_override_active, "Level aim uses the sampled pose")
+	actor.pitch = 0.3
+	animation.update(actor, 0.0)
+	skeleton.force_update_all_bone_transforms()
+	assert(animation.spine_override_active)
+	assert(not skeleton.get_bone_global_pose(animation.spine_bone).is_equal_approx(level_spine))
+	actor.pitch = 0.0
+	animation.update(actor, 0.0)
+	skeleton.force_update_all_bone_transforms()
+	assert(not animation.spine_override_active)
+	assert(skeleton.get_bone_global_pose(animation.spine_bone).is_equal_approx(level_spine),
+		"Returning to level must clear the previous aim override")
+	actor.recoil = 0.01
+	animation.update(actor, 0.0)
+	assert(animation.spine_override_active, "Level aim must still apply recoil")
+	actor.recoil = 0.0
+	animation.update(actor, 0.0)
 	var head := skeleton.find_bone("Head")
 	var shin := skeleton.find_bone("Shin.L")
 	var foot := skeleton.find_bone("Foot.L")
@@ -34,7 +50,14 @@ func run() -> void:
 	var meshes: Array = actor.body_mesh.find_children("*", "MeshInstance3D", true, false).filter(func(mesh): return mesh.skin != null)
 	assert(meshes.size() == 1, "Character mesh is merged for bounded draw submissions")
 	var skin: MeshInstance3D = meshes[0]
-	assert(skin.skin != null and skin.mesh.get_surface_count() == 4)
+	# Boots now have separate leather and rubber surfaces.
+	var surface_materials: Array[String] = []
+	for surface in range(skin.mesh.get_surface_count()):
+		surface_materials.append(skin.mesh.surface_get_material(surface).resource_name)
+	print("SKIN_MATERIALS ", surface_materials)
+	assert(skin.skin != null and skin.mesh.get_surface_count() == 6)
+	assert(surface_materials.has("Olive balaclava fabric"))
+	assert(surface_materials.has("Worn olive boot leather"))
 	# Joining differently named Blender UV layers previously left sleeves and
 	# trousers sampling one camouflage texel despite the texture being present.
 	var cloth_triangles := 0

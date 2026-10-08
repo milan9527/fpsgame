@@ -17,7 +17,10 @@ func _ready() -> void:
 	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	get_parent().add_child.call_deferred(backdrop)
 	call_deferred("place_backdrop")
-	visibility_changed.connect(func(): backdrop.visible = visible)
+	visibility_changed.connect(func():
+		backdrop.visible = is_visible_in_tree()
+		set_process_input(is_visible_in_tree())
+	)
 	position = Vector2(450, 200)
 	custom_minimum_size = Vector2(540, 380)
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -67,6 +70,7 @@ func _ready() -> void:
 	box.add_child(back)
 	refresh_devices()
 	hide()
+	set_process_input(false)
 
 func place_backdrop() -> void:
 	get_parent().move_child(backdrop, get_index())
@@ -92,6 +96,7 @@ func refresh_devices() -> void:
 
 func open() -> void:
 	refresh_devices()
+	update_level(0, false, false, 0)
 	show()
 
 func close() -> void:

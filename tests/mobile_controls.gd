@@ -24,6 +24,21 @@ func run() -> void:
 	var pad = game.find_child("MobileControls", true, false)
 	if not check(pad != null, "Mobile controls must be mounted"):
 		return
+	on_request_permissions_result.emit(pad.MICROPHONE_PERMISSION, true)
+	if not check(pad.microphone_permission_granted and not pad.voice_requested,
+			"Permission callbacks must update permission without enabling voice"):
+		return
+	on_request_permissions_result.emit("android.permission.CAMERA", false)
+	if not check(pad.microphone_permission_granted, "Other permissions must not disable microphone"):
+		return
+	on_request_permissions_result.emit(pad.MICROPHONE_PERMISSION, false)
+	if not check(not pad.microphone_permission_granted, "Microphone denial must invalidate permission"):
+		return
+	pad._notification(NOTIFICATION_APPLICATION_RESUMED)
+	if not check(pad.microphone_permission_granted == (not OS.has_feature("android")
+			or pad.MICROPHONE_PERMISSION in OS.get_granted_permissions()),
+			"Resume must refresh permission after a settings change"):
+		return
 	game.start_solo()
 	await process_frame
 	await process_frame
@@ -58,6 +73,9 @@ func run() -> void:
 	await process_frame
 	if not check(game.ui.pause_panel.visible and paused, "Mobile offline menu must pause the game"):
 		return
+	if not check(pad.pause_panel.visible and pad.save_button.visible and Input.emulate_mouse_from_touch,
+			"Opening the pause menu must refresh save eligibility and restore GUI touch input"):
+		return
 	game.ui.set_pause(false)
 	await process_frame
 	touch(pad, 0, pad.buttons.inventory[0].get_center(), true)
@@ -71,5 +89,5 @@ func run() -> void:
 	if DisplayServer.get_name() != "headless":
 		await RenderingServer.frame_post_draw
 		root.get_texture().get_image().save_png(OS.get_environment("CAPTURE_ARTIFACT_DIR") + "/mobile-controls.png")
-	print("MOBILE_CONTROLS_PASS multitouch=ok aim=ok release=ok focus=ok pause=ok inventory=ok")
+	print("MOBILE_CONTROLS_PASS permissions=ok multitouch=ok aim=ok release=ok focus=ok pause=ok inventory=ok")
 	game.request_quit()

@@ -72,6 +72,13 @@ func run() -> void:
 	assert(car.position.z >= -17.72 and car.position.z < -17.5, "Swept collision must stop at wall")
 	assert(absf(car.speed) < 0.1, "Collision must remove speed, not keep stored throttle velocity")
 	assert(not car.can_rotate(0.6), "Steering must not rotate the body through a nearby wall")
+	var rotation_query_id: int = car.rotation_query.get_instance_id()
+	var original_mask: int = car.collision_mask
+	car.collision_mask = 0
+	assert(car.can_rotate(0.6), "Reused steering query must refresh the collision mask")
+	car.collision_mask = original_mask
+	assert(not car.can_rotate(0.6), "Restoring the mask must restore wall collision")
+	assert(car.rotation_query.get_instance_id() == rotation_query_id, "Steering queries must reuse their resource")
 	wall.queue_free()
 	await process_frame
 	var parked = Vehicle.new()

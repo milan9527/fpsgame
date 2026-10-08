@@ -43,7 +43,10 @@ func apply_frame(game, frame: Dictionary, actor_frame: Dictionary) -> bool:
 				desired[id] = {"vehicle": state.id, "seat": index}
 	# Validate all affected poses before mutating anything, including actors
 	# leaving a seat whose vehicle has disappeared from this complete snapshot.
-	for car in game.vehicle_fleet.vehicles.values():
+	# This synchronous validation/detach phase does not mutate fleet membership.
+	# Reuse one values array instead of allocating it again for every rider.
+	var existing_cars: Array = game.vehicle_fleet.vehicles.values()
+	for car in existing_cars:
 		if car.authoritative:
 			return false
 		for index in range(2):
@@ -59,7 +62,7 @@ func apply_frame(game, frame: Dictionary, actor_frame: Dictionary) -> bool:
 			return false
 	for id in desired:
 		var actor = game.actors[id]
-		if actor.is_seated() and not game.vehicle_fleet.vehicles.values().has(actor.vehicle_ref.get_ref()):
+		if actor.is_seated() and not existing_cars.has(actor.vehicle_ref.get_ref()):
 			return false
 		var seat: Dictionary = desired[id]
 		var state: Dictionary = by_id[seat.vehicle]
@@ -67,7 +70,7 @@ func apply_frame(game, frame: Dictionary, actor_frame: Dictionary) -> bool:
 		if positions[id].distance_to(point) > 0.1:
 			return false
 	# Detach changed seats at the paired authoritative actor position.
-	for car in game.vehicle_fleet.vehicles.values():
+	for car in existing_cars:
 		for index in range(2):
 			var actor = car.seats.occupant(index)
 			if actor == null:
@@ -141,12 +144,25 @@ func render(game, dt: float) -> void:
 		if car == null:
 			continue
 		var state: Dictionary = targets[id]
-		car.position = car.position.lerp(state.p, weight)
-		car.rotation.y = lerp_angle(car.rotation.y, state.yaw, weight)
+		# Parked replicas (including wrecks) share the render path with moving
+		# vehicles. Submit transforms only when interpolation changes them.
+		var old_position: Vector3 = car.position
+		var next_position := old_position.lerp(state.p, weight)
+		if old_position != next_position:
+			car.position = next_position
+		var old_yaw: float = car.rotation.y
+		var next_yaw := lerp_angle(old_yaw, state.yaw, weight)
+		if old_yaw != next_yaw:
+			car.rotation.y = next_yaw
 		for index in range(car.wheel_rigs.size()):
 			var wheel: Dictionary = car.wheel_rigs[index]
-			wheel.roll.rotation.x = lerp_angle(wheel.roll.rotation.x, state.wheels[index], weight)
-			wheel.turn.rotation.y = -state.steering if wheel.front else 0.0
+			var old_roll: float = wheel.roll.rotation.x
+			var next_roll := lerp_angle(old_roll, state.wheels[index], weight)
+			if old_roll != next_roll:
+				wheel.roll.rotation.x = next_roll
+			var next_turn: float = -state.steering if wheel.front else 0.0
+			if wheel.turn.rotation.y != next_turn:
+				wheel.turn.rotation.y = next_turn
 		for index in range(2):
 			var actor = car.seats.occupant(index)
 			if actor != null:

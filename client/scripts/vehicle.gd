@@ -33,6 +33,7 @@ var input_sequence := -1
 var distance_travelled := 0.0
 var grounded := false
 var collision_shape: CollisionShape3D
+var rotation_query := PhysicsShapeQueryParameters3D.new()
 var visual: Node3D
 var wheel_rigs: Array[Dictionary] = []
 var seats
@@ -134,22 +135,25 @@ func can_rotate(target_yaw: float) -> bool:
 	var extent := horizontal_extent(target_yaw)
 	if absf(global_position.x) + extent.x > ARENA_LIMIT or absf(global_position.z) + extent.y > ARENA_LIMIT:
 		return false
-	var query := PhysicsShapeQueryParameters3D.new()
-	query.shape = collision_shape.shape
-	query.transform = Transform3D(Basis(Vector3.UP, target_yaw), global_position + Vector3.UP * (BODY_SIZE.y / 2 + 0.04))
-	query.collision_mask = collision_mask
+	# Keep the query resource per vehicle; refresh all live collision inputs.
+	rotation_query.shape = collision_shape.shape
+	rotation_query.transform = Transform3D(Basis(Vector3.UP, target_yaw), global_position + Vector3.UP * (BODY_SIZE.y / 2 + 0.04))
+	rotation_query.collision_mask = collision_mask
 	var excluded: Array[RID] = [get_rid()]
 	for index in range(2):
 		var occupant = seats.occupant(index)
 		if occupant != null:
 			excluded.append(occupant.get_rid())
-	query.exclude = excluded
-	query.margin = 0.001
-	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+	rotation_query.exclude = excluded
+	rotation_query.margin = 0.001
+	return get_world_3d().direct_space_state.intersect_shape(rotation_query, 1).is_empty()
 
 func horizontal_extent(heading: float) -> Vector2:
-	return Vector2(absf(cos(heading)) * BODY_SIZE.x / 2 + absf(sin(heading)) * BODY_SIZE.z / 2,
-		absf(sin(heading)) * BODY_SIZE.x / 2 + absf(cos(heading)) * BODY_SIZE.z / 2)
+	# Both axes use the same heading in every simulation and clearance query.
+	var abs_cos := absf(cos(heading))
+	var abs_sin := absf(sin(heading))
+	return Vector2(abs_cos * BODY_SIZE.x / 2 + abs_sin * BODY_SIZE.z / 2,
+		abs_sin * BODY_SIZE.x / 2 + abs_cos * BODY_SIZE.z / 2)
 
 func simulate(dt: float, engine_enabled := true) -> void:
 	if not authoritative or not is_finite(dt) or dt <= 0 or dt > 0.05:
@@ -212,16 +216,25 @@ func simulate(dt: float, engine_enabled := true) -> void:
 		if other is CharacterBody3D and (other.collision_layer & 2) != 0:
 			# Running into a parked car is not a vehicle run-over.
 			closing = maxf(0, -incoming.dot(collision.get_normal()))
+		# Low-speed contacts do not need a serialized collision identity.
+		if closing <= 4:
+			continue
 		var id := collision_key(other)
-		if closing <= 4 or collision_cooldowns.has(id):
+		if collision_cooldowns.has(id):
 			continue
 		collision_cooldowns[id] = collision_time + 1.0
 		impact.emit(other, closing, impact_driver)
 	distance_travelled += Vector2(global_position.x - before.x, global_position.z - before.z).length()
 	var wheel_angle := -(global_position - before).dot(forward) / 0.43
 	for wheel in wheel_rigs:
-		wheel.turn.rotation.y = -steering if wheel.front else 0.0
-		wheel.roll.rotation.x = wrapf(wheel.roll.rotation.x + wheel_angle, -PI, PI)
+		# Parked cars still simulate. Avoid dirtying their wheel hierarchies
+		# every physics tick when neither steering nor rolling has changed.
+		var turn_angle: float = -steering if wheel.front else 0.0
+		if wheel.turn.rotation.y != turn_angle:
+			wheel.turn.rotation.y = turn_angle
+		var roll_angle: float = wrapf(wheel.roll.rotation.x + wheel_angle, -PI, PI)
+		if wheel.roll.rotation.x != roll_angle:
+			wheel.roll.rotation.x = roll_angle
 	seats.refresh()
 
 func _exit_tree() -> void:

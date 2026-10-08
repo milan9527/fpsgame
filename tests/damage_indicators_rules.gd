@@ -32,6 +32,16 @@ func run() -> void:
 	game.set_physics_process(false)
 	var player = game.actors[1]
 	game._process(0)
+	game.android_profile_enabled = true
+	game.damage(player, 1, -1, true)
+	assert(("cause:%s," % game.actors[-1].NAMES[game.actors[-1].weapon]) in game.android_last_damage,
+		"Weapon damage must not be reported as zone damage")
+	game.damage(player, 1, 0, true)
+	assert("cause:THE ZONE," in game.android_last_damage)
+	game.damage(player, 1, -1, true, false, "FRAG")
+	assert("cause:FRAG," in game.android_last_damage)
+	game.android_profile_enabled = false
+	game.ui.damage_indicators.marks.clear()
 	for offset in [Vector3.FORWARD, Vector3.RIGHT, Vector3.LEFT]:
 		game.damage(player, 1, 0, true, false, "FRAG", player.position + offset * 10)
 	assert(game.ui.damage_indicators.marks.size() == 3)

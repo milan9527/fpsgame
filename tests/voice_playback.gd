@@ -9,6 +9,7 @@ func run() -> void:
 	var buses := AudioServer.bus_count
 	var voice := Voice.new()
 	root.add_child(voice)
+	assert(not voice.is_processing(), "Idle receiver must not run every frame")
 	var capture := AudioEffectCapture.new()
 	capture.buffer_length = 2.0
 	AudioServer.add_bus_effect(AudioServer.get_bus_index(voice.bus_name), capture)
@@ -19,11 +20,23 @@ func run() -> void:
 	voice.receive(7, 0, packet)
 	assert(voice.streams.is_empty(), "Playback defaults to disabled")
 	voice.enabled = true
+	assert(not voice.is_processing(), "Listening without packets stays idle")
 	for sequence in range(30):
 		voice.receive(7, sequence, packet)
 		await create_timer(0.02).timeout
 	assert(voice.streams.has(7))
+	assert(voice.is_processing(), "Incoming packets must resume mixer feeding")
 	assert(voice.streams[7].queued_frames >= 3200)
+	voice.volume = 0.4
+	assert(is_equal_approx(voice.streams[7].player.volume_db, linear_to_db(0.4)))
+	voice.volume = 0.4
+	assert(is_equal_approx(voice.streams[7].player.volume_db, linear_to_db(0.4)))
+	voice.volume = 2.0
+	assert(voice.volume == 1.0 and is_zero_approx(voice.streams[7].player.volume_db))
+	voice.volume = -1.0
+	assert(voice.volume == 0.0)
+	assert(is_equal_approx(voice.streams[7].player.volume_db, linear_to_db(0.00001)))
+	voice.volume = 0.8
 	var output := capture.get_buffer(capture.get_frames_available())
 	var energy := 0.0
 	for frame in output:
@@ -33,6 +46,7 @@ func run() -> void:
 	assert(rms > 0.03 and rms < 0.3, "Actual mixer output must contain the decoded tone")
 	voice.set_muted(7, true)
 	assert(voice.streams.is_empty())
+	assert(not voice.is_processing(), "Muting the last speaker stops processing")
 	voice.receive(7, 30, packet)
 	assert(voice.streams.is_empty())
 	await create_timer(0.2).timeout
@@ -44,11 +58,14 @@ func run() -> void:
 	voice.set_muted(7, false)
 	voice.receive(7, 31, packet)
 	assert(voice.streams.has(7))
+	assert(voice.is_processing(), "Unmuted speech must restart processing")
 	await create_timer(0.6).timeout
 	assert(voice.streams.is_empty(), "Inactive speakers are removed")
+	assert(not voice.is_processing(), "Speaker timeout returns to idle")
 	voice.receive(7, 100, packet)
 	voice.enabled = false
 	assert(voice.streams.is_empty())
+	assert(not voice.is_processing(), "Disabling playback returns to idle")
 	voice.queue_free()
 	await process_frame
 	assert(AudioServer.bus_count == buses, "Voice bus must be released")

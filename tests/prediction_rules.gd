@@ -102,6 +102,22 @@ func run() -> void:
 	client.render_frame(0.001, true, true, false)
 	assert(client.position == collision_position, "Visual smoothing never moves the collision body")
 	assert(client.camera.global_position.z > 22.24, "Camera correction stops before wall")
+	# Alternate correction directions to detect stale endpoints on the reused ray.
+	var correction_query = client.camera_correction_query
+	assert(correction_query != server.camera_correction_query)
+	for offset in [Vector3(0, 0, -0.5), Vector3(0.3, 0, 0.5), Vector3.ZERO, Vector3(0, 0, -0.7)]:
+		client.camera_error = offset
+		client.render_frame(0.001, true, true, false)
+		assert(client.camera_correction_query == correction_query)
+		var origin: Vector3 = client.camera.get_parent().to_global(Vector3.ZERO)
+		var expected: Vector3 = origin + client.camera_error
+		if client.camera_error.length_squared() > 0.000001:
+			var reference := PhysicsRayQueryParameters3D.create(origin, expected, 5)
+			var hit := stage.get_world_3d().direct_space_state.intersect_ray(reference)
+			if not hit.is_empty():
+				expected = origin + client.camera_error.normalized() * maxf(0, origin.distance_to(hit.position) - 0.12)
+		assert(client.camera.global_position.is_equal_approx(expected), "Reused camera query matches fresh ray")
+		assert(client.position == collision_position)
 	# A prolonged outage must not cause unbounded memory or stale replay.
 	for tick in range(125):
 		await physics_frame

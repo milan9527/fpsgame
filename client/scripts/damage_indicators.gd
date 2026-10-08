@@ -7,12 +7,16 @@ func clear() -> void:
 	marks.clear()
 
 func prune(now: int) -> void:
-	marks = marks.filter(func(mark): return mark.until > now)
+	# HUD redraws call this even with no damage. Retain the bounded array
+	# instead of allocating a filter result and invoking a callable per mark.
+	for index in range(marks.size() - 1, -1, -1):
+		if marks[index].until <= now:
+			marks.remove_at(index)
 
 func record(origin: Vector3, receiver: Vector3, now: int) -> void:
 	prune(now)
 	var offset := Vector2(origin.x - receiver.x, origin.z - receiver.z)
-	if not offset.is_finite() or offset.length() <= 0.5:
+	if not offset.is_finite() or offset.length_squared() <= 0.25:
 		return
 	var bearing := atan2(-offset.x, -offset.y)
 	for mark in marks:

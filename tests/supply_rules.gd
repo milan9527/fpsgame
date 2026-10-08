@@ -25,7 +25,11 @@ func run() -> void:
 	game.loot = {7: {"p": Vector3(0, 0.1, 18.3), "kind": 0}}
 	await sync()
 	actor.reserve = 300
+	var unused_ray_endpoint := Vector3(999, 999, 999)
+	game.supply_query.to = unused_ray_endpoint
 	assert(not game.pickup(actor) and game.loot.has(7), "Full inventory preserves the item")
+	assert(game.supply_query.to == unused_ray_endpoint, "Automatic full inventory pickup skips visibility queries")
+	assert(game.supply_target(actor).id == 7, "HUD still locates full inventory supplies")
 	actor.reserve = 295
 	var before_hash: int = game.loot.hash()
 	assert(game.pickup(actor) and actor.reserve == 300)
@@ -50,6 +54,7 @@ func run() -> void:
 	actor.medkits = 0
 	game.loot = {7: {"p": Vector3(0, 0.1, 18.3), "kind": 0}, 8: {"p": Vector3(0.8, 0.1, 18.0), "kind": 1}}
 	assert(game.supply_target(actor).id == 8, "Full nearby ammo does not hide usable medicine")
+	assert(game.supply_target(actor, true).id == 8, "Automatic search preserves usable priority")
 	actor.pitch = -0.45
 	other.position = Vector3(10, 0.02, 20)
 	game._process(0.016)
@@ -75,6 +80,8 @@ func run() -> void:
 	var wall = game.world.block(Vector3(0, 1.5, 19.2), Vector3(4, 3, 0.2), "465a61")
 	await sync()
 	assert(game.supply_target(actor).is_empty() and not game.pickup(actor, 8), "Cannot collect through a wall")
+	actor.medkits = 0
+	assert(not game.pickup(actor) and actor.medkits == 0, "Automatic usable search cannot collect through a wall")
 	wall.queue_free()
 	await sync()
 	actor.position.z = 25

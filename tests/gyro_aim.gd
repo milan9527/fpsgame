@@ -49,6 +49,17 @@ func run() -> void:
 	var touch_yaw: float = actor.yaw
 	pad.apply_gyro(Vector3(0, 1, 0), 0.02)
 	if not check(not is_equal_approx(yaw, touch_yaw) and is_equal_approx(actor.yaw, touch_yaw + 0.03), "touch and gyro additive"): return
+	for gated_mode in [Gyro.Mode.OFF, Gyro.Mode.ADS]:
+		Input.action_release("aim")
+		pad.gyro.mode = gated_mode
+		pad.gyro_readings_seen = false
+		yaw = actor.yaw
+		pad.apply_gyro(Vector3(0, 2, 0), 0.02)
+		if not check(is_equal_approx(yaw, actor.yaw) and pad.gyro_readings_seen
+				and not pad.gyro.initialized, "gated mode preserves camera and sensor detection, resets smoothing"): return
+		pad.gyro.mode = Gyro.Mode.ALWAYS
+		pad.apply_gyro(Vector3(0, -1, 0), 0.02)
+		if not check(is_equal_approx(actor.yaw, yaw - 0.03), "reactivation discards old smoothing"): return
 	for blocked in ["settings", "pause", "focus", "background", "downed"]:
 		if blocked == "settings": pad.show_gyro_settings(true)
 		if blocked == "pause": game.ui.set_pause(true)

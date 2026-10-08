@@ -43,8 +43,14 @@ func candidates(actors: Dictionary) -> Array:
 	ids.sort()
 	return ids
 
+func is_candidate(id: int, actors: Dictionary) -> bool:
+	if not actors.has(id):
+		return false
+	var actor = actors[id]
+	return actor.alive and (team_filter == 0 or actor.team_id == team_filter)
+
 func select(id: int, actors: Dictionary) -> void:
-	if id not in candidates(actors):
+	if not is_candidate(id, actors):
 		return
 	target_id = id
 	var target = actors[id]
@@ -80,7 +86,7 @@ func update_view(actors: Dictionary, local_id: int, phase: String) -> void:
 		position = local.position + Vector3.UP * 1.6
 		local.body_mesh.visible = true
 	camera.current = true
-	if target_id not in candidates(actors):
+	if not is_candidate(target_id, actors):
 		cycle(actors, 1)
 	arm.clear_excluded_objects()
 	if target_id != 0:

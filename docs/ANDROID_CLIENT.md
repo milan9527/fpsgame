@@ -1,8 +1,8 @@
 # Android 客户端
 
-下载：https://d3j1sc8stx5n1c.cloudfront.net/downloads/IronMeridian-Android.apk
+下载：https://d3j1sc8stx5n1c.cloudfront.net/downloads/IronMeridian-Android-0.52.7-20260925.apk
 
-这是可直接安装的签名 APK（约 50 MiB），不是 Google Play 上架版本。安装时允许浏览器安装应用，完成后打开 Iron Meridian；无需 Godot、终端或启动脚本。支持 ARM64 / x86_64，要求 OpenGL ES 3.0。离线模式无需账号，联网在游戏内注册或登录，默认连接现有 AWS 服务。
+这是可直接安装的签名 APK（约 320 MiB），不是 Google Play 上架版本。安装时允许浏览器安装应用，完成后打开 Iron Meridian；无需 Godot、终端或启动脚本。支持 ARM64 / x86_64，要求 OpenGL ES 3.0。离线模式无需账号，联网在游戏内注册或登录，默认连接现有 AWS 服务。
 
 ## 触屏操作
 
@@ -13,18 +13,29 @@
 使用 Python 3.12、项目 `.venv`、Godot 4.4.1 Android 导出模板、Java 17、Android SDK platform/build-tools 34（签名验证用 build-tools 35）及 Xvfb。
 
 ```sh
+export ANDROID_BUILD_DIR=artifacts/android-latest-20260925-r10
 .venv/bin/python tools/package_android.py
 .venv/bin/python tools/test_android_ui.py
 .venv/bin/python tools/test_android_source_network.py
 .venv/bin/python tools/test_android_devicefarm.py
+.venv/bin/python tools/schedule_android_walkthrough.py
+# 等待原生操作测试完成，采集并人工审阅截图，生成对应 APK 的审阅记录后发布。
 .venv/bin/python tools/publish_android.py
 ```
 
-打包器从与线上服务器兼容的 Git 提交 `484d98d958a0973d5dc630ce6474dcdcba950035` 提取客户端，仅加入 Android 触屏界面、图标和默认 API 地址。重复构建前保存并移走 `artifacts/android-build/source`。APK、构建记录、测试证据在 `artifacts/`，不提交 Git。
+当前 0.52.7-android.20260925 使用最新工作区源码快照，包含最新场景、武器、移动端加载优化，并修复 Android 场景导出时草丛实例及颜色数据丢失（Android 部分草丛仍偏暗），协议 17 / ash-valley-19，version code 20260929；构建和验证记录位于 artifacts/android-latest-20260925-r10。旧协议客户端与新版服务器不兼容。构建脚本默认参数可能指向历史版本，复现本版必须使用该目录 build.json 记录的源码快照及版本参数。
 
 签名密钥保存在 `artifacts/android-signing/release.keystore`，密码文件同目录、权限 0600。后续升级必须保留同一密钥并递增 version code；不要把该目录放进公开下载桶或源码仓库。请将此目录纳入受控的加密备份。
 
 发布脚本要求 APK 签名有效、当前触屏源码与构建哈希一致、触屏回归通过、源码在线单人/双人检查通过，以及 AWS Device Farm 原生 APK 测试通过。使用已有私有 S3 + CloudFront OAC 发布，核对公开下载哈希和无网页登录表单；不部署 CloudFormation，不修改 ECS 网络。
+
+## 2026-09-25 验证
+
+最新版包含场景、武器、触屏、陀螺仪和移动加载优化。Android 真机通过安装、启动、单机、开火和视角拖动；对应源码验证 AWS 单人/双人联网及登录记忆。原生 Android 联网、物理陀螺仪手感和帧率尚未完成实测。首次加载需要等待。Android 截图中部分路边草丛仍偏黑，桌面草色改善不代表 Android 画面已达到相同效果。
+
+0.52.7 已发布，下载页面与二维码均指向新版；公网 APK 的 SHA-256 与测试包一致。单排、双排 ECS revision 5 使用当前协议资源，并调整 ENet throttle，避免延迟波动造成分片快照主动丢弃。两种模式各两客户端通过联网检查，四个客户端配置通过登录记忆检查。网站没有登录表单，账号操作仍在游戏内进行。
+
+以下为历史版本验证记录。
 
 ## 验证范围
 

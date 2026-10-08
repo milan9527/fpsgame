@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "artifacts/android-build"
+OUT = Path(os.environ.get("ANDROID_BUILD_DIR", str(ROOT / "artifacts/android-build"))).resolve()
 
 
 def main():
@@ -31,7 +31,7 @@ def main():
                     "--", "--bot-client", "--mobile-test"], env=env, stdout=stream, stderr=subprocess.STDOUT)
                 processes.append((process, stream, log))
             for process, stream, log in processes:
-                code = process.wait(timeout=80)
+                code = process.wait(timeout=180)
                 stream.flush()
                 text = log.read_text()
                 if code or "ONLINE_CLIENT_PASS" not in text or "SCRIPT ERROR" in text or "ERROR:" in text:

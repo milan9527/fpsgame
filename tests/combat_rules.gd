@@ -68,6 +68,23 @@ func run() -> void:
 	assert(game.ui.hit_until > Time.get_ticks_msec(), "Actual server damage generates hit confirmation")
 	barricade.queue_free()
 	await physics_sync()
+	# Alternating shooters must replace exclusions, including after a rewind.
+	game.hit_history.clear()
+	game.hit_history.record(game.elapsed - 0.1, game.actors)
+	for iteration in range(4):
+		var forward: Dictionary = game.trace_shot(player, player.eye_position(), target.aim_position() - player.eye_position(), 0)
+		assert(forward.get("collider") == target, "Live shot hits the current target")
+		var reverse: Dictionary = game.trace_shot(target, target.eye_position(), player.aim_position() - target.eye_position(), 0)
+		assert(reverse.get("collider") == player, "Previous shooter must no longer be excluded")
+		var historical: Dictionary = game.trace_shot(player, player.eye_position(), target.aim_position() - player.eye_position(), 0.1)
+		assert(historical.get("collider") == target, "Historical actor hit survives alternating live queries")
+	var rewind_cover = game.world.block(Vector3(0, 1.0, 15), Vector3(5, 3, 1), "465a61")
+	await physics_sync()
+	var covered: Dictionary = game.trace_shot(player, player.eye_position(), target.aim_position() - player.eye_position(), 0.1)
+	assert(covered.get("collider") == rewind_cover.get_child(0), "Present cover must still block a historical actor")
+	rewind_cover.queue_free()
+	game.hit_history.clear()
+	await physics_sync()
 	# Head hit threshold must follow the victim's stance, not a fixed world height.
 	target.crouch = true
 	target.update_stance()

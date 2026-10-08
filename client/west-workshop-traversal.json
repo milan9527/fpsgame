@@ -1,0 +1,376 @@
+{
+	"passed": true,
+	"rays": [
+		{
+			"hit": "(-32.53, 0.86, 29.0)",
+			"parts_rack_shelf": true,
+			"passed": true
+		},
+		{
+			"hit": "(-31.5, 3.943242, 31.0)",
+			"passed": true,
+			"sample_x": -31.5,
+			"side": -1.0,
+			"skylight_z": 31.0
+		},
+		{
+			"hit": "(-31.5, 3.978496, 31.0)",
+			"passed": true,
+			"sample_x": -31.5,
+			"side": 1.0,
+			"skylight_z": 31.0
+		},
+		{
+			"hit": "(-28.5, 3.581504, 31.0)",
+			"passed": true,
+			"sample_x": -28.5,
+			"side": -1.0,
+			"skylight_z": 31.0
+		},
+		{
+			"hit": "(-28.5, 3.616758, 31.0)",
+			"passed": true,
+			"sample_x": -28.5,
+			"side": 1.0,
+			"skylight_z": 31.0
+		},
+		{
+			"hit": "(-31.5, 3.943242, 36.8)",
+			"passed": true,
+			"sample_x": -31.5,
+			"side": -1.0,
+			"skylight_z": 36.8
+		},
+		{
+			"hit": "(-31.5, 3.978496, 36.8)",
+			"passed": true,
+			"sample_x": -31.5,
+			"side": 1.0,
+			"skylight_z": 36.8
+		},
+		{
+			"hit": "(-28.5, 3.581504, 36.8)",
+			"passed": true,
+			"sample_x": -28.5,
+			"side": -1.0,
+			"skylight_z": 36.8
+		},
+		{
+			"hit": "(-28.5, 3.616758, 36.8)",
+			"passed": true,
+			"sample_x": -28.5,
+			"side": 1.0,
+			"skylight_z": 36.8
+		},
+		{
+			"hit": "(-30.0, 3.464, 35.0)",
+			"passed": true,
+			"service_bay_from": "(-30.0, 3.0, 35.0)",
+			"to": "(-30.0, 4.5, 35.0)"
+		},
+		{
+			"hit": "(-25.99, 1.5, 27.0)",
+			"passed": true,
+			"service_bay_from": "(-25.0, 1.5, 27.0)",
+			"to": "(-26.15, 1.5, 27.0)"
+		},
+		{
+			"hit": "(-25.8925, 3.32, 35.0)",
+			"passed": true,
+			"service_bay_from": "(-25.0, 3.32, 35.0)",
+			"to": "(-26.15, 3.32, 35.0)"
+		},
+		{
+			"hit": "(-46.9, 0.92, 28.505)",
+			"passed": true,
+			"workbench_front": true
+		},
+		{
+			"facade_sample": "(-49.72, 1.65, 41.36)",
+			"hit": "(-49.72, 1.65, 41.36)",
+			"passed": true
+		},
+		{
+			"facade_sample": "(-34.28, 1.65, 41.36)",
+			"hit": "(-34.28, 1.65, 41.36)",
+			"passed": true
+		},
+		{
+			"facade_sample": "(-49.48, 2.22, 41.35)",
+			"hit": "(-49.48, 2.22, 41.35)",
+			"passed": true
+		},
+		{
+			"facade_sample": "(-44.52, 2.22, 41.35)",
+			"hit": "(-44.52, 2.22, 41.35)",
+			"passed": true
+		},
+		{
+			"facade_sample": "(-39.48, 2.22, 41.35)",
+			"hit": "(-39.48, 2.22, 41.35)",
+			"passed": true
+		},
+		{
+			"facade_sample": "(-34.52, 2.22, 41.35)",
+			"hit": "(-34.52, 2.22, 41.35)",
+			"passed": true
+		},
+		{
+			"hit": "(-46.4, 2.6, 41.11)",
+			"passed": true,
+			"window_pane_x": -46.4
+		},
+		{
+			"hit": "(-36.4, 2.6, 41.11)",
+			"passed": true,
+			"window_pane_x": -36.4
+		},
+		{
+			"downpipe_x": -49.55,
+			"hit": "(-49.55, 1.5, 45.53)",
+			"passed": true
+		},
+		{
+			"downpipe_x": -34.45,
+			"hit": "(-34.45, 1.5, 45.53)",
+			"passed": true
+		},
+		{
+			"electrical_cabinet": true,
+			"hit": "(-44.65, 1.55, 41.3)",
+			"passed": true
+		},
+		{
+			"hit": "(-37.45, 1.25, 29.25)",
+			"parts_rack": true,
+			"passed": true
+		},
+		{
+			"brick_front_x": -46.85,
+			"hit": "(-46.85, 0.65, 41.03)",
+			"passed": true
+		},
+		{
+			"brick_front_x": -37.15,
+			"hit": "(-37.15, 0.65, 41.03)",
+			"passed": true
+		},
+		{
+			"from": "(-38.0, 1.0, 45.0)",
+			"hit": "(-39.135, 1.0, 45.0)",
+			"passed": true,
+			"to": "(-40.0, 1.0, 45.0)"
+		},
+		{
+			"from": "(-42.0, 2.0, 43.0)",
+			"hit": "(-42.0, 3.584707, 43.0)",
+			"passed": true,
+			"to": "(-42.0, 5.0, 43.0)"
+		},
+		{
+			"hit": "(-42.0, 3.152698, 41.55671)",
+			"passed": true,
+			"rainhood_local_sample": "(0.0, 0.0, 0.0)",
+			"side": -1.0
+		},
+		{
+			"hit": "(-42.0, 3.207302, 41.5633)",
+			"passed": true,
+			"rainhood_local_sample": "(0.0, 0.0, 0.0)",
+			"side": 1.0
+		},
+		{
+			"hit": "(-44.15, 3.152698, 41.55671)",
+			"passed": true,
+			"rainhood_local_sample": "(-2.15, 0.0, 0.0)",
+			"side": -1.0
+		},
+		{
+			"hit": "(-44.15, 3.207302, 41.5633)",
+			"passed": true,
+			"rainhood_local_sample": "(-2.15, 0.0, 0.0)",
+			"side": 1.0
+		},
+		{
+			"hit": "(-39.85, 3.152698, 41.55671)",
+			"passed": true,
+			"rainhood_local_sample": "(2.15, 0.0, 0.0)",
+			"side": -1.0
+		},
+		{
+			"hit": "(-39.85, 3.207302, 41.5633)",
+			"passed": true,
+			"rainhood_local_sample": "(2.15, 0.0, 0.0)",
+			"side": 1.0
+		},
+		{
+			"hit": "(-42.0, 3.206568, 41.10995)",
+			"passed": true,
+			"rainhood_local_sample": "(0.0, 0.0, -0.45)",
+			"side": -1.0
+		},
+		{
+			"hit": "(-42.0, 3.261173, 41.11653)",
+			"passed": true,
+			"rainhood_local_sample": "(0.0, 0.0, -0.45)",
+			"side": 1.0
+		},
+		{
+			"hit": "(-42.0, 3.098828, 42.00347)",
+			"passed": true,
+			"rainhood_local_sample": "(0.0, 0.0, 0.45)",
+			"side": -1.0
+		},
+		{
+			"hit": "(-42.0, 3.153432, 42.01006)",
+			"passed": true,
+			"rainhood_local_sample": "(0.0, 0.0, 0.45)",
+			"side": 1.0
+		},
+		{
+			"hit": "(-42.97499, 7.645938, 34.35)",
+			"monitor_building_x": -42.0,
+			"passed": true,
+			"slope_side": -1.0
+		},
+		{
+			"hit": "(-41.025, 7.645938, 34.35)",
+			"monitor_building_x": -42.0,
+			"passed": true,
+			"slope_side": 1.0
+		},
+		{
+			"hit": "(34.025, 7.645936, 34.35)",
+			"monitor_building_x": 35.0,
+			"passed": true,
+			"slope_side": -1.0
+		},
+		{
+			"hit": "(35.975, 7.645937, 34.35)",
+			"monitor_building_x": 35.0,
+			"passed": true,
+			"slope_side": 1.0
+		}
+	],
+	"routes": [
+		{
+			"direction": -1.0,
+			"end": "(-42.0, 0.00061, 20.45285)",
+			"passed": true,
+			"start": "(-42.0, 0.000103, 48.0)"
+		},
+		{
+			"direction": 1.0,
+			"end": "(-42.0, 0.000936, 47.54679)",
+			"passed": true,
+			"start": "(-42.0, 0.000103, 20.0)"
+		},
+		{
+			"crouched_edge_x": -43.2,
+			"direction": -1.0,
+			"end": "(-43.2, 0.200148, 38.16048)",
+			"passed": true
+		},
+		{
+			"crouched_edge_x": -43.2,
+			"direction": 1.0,
+			"end": "(-43.2, 0.000858, 43.83569)",
+			"passed": true
+		},
+		{
+			"crouched_edge_x": -40.8,
+			"direction": -1.0,
+			"end": "(-40.8, 0.200158, 38.16079)",
+			"passed": true
+		},
+		{
+			"crouched_edge_x": -40.8,
+			"direction": 1.0,
+			"end": "(-40.8, 0.000858, 43.83599)",
+			"passed": true
+		},
+		{
+			"column_stops_actor": true,
+			"end": "(-39.2, 0.000738, 45.48273)"
+		},
+		{
+			"end": "(-37.45, 0.200024, 29.63044)",
+			"parts_rack_stops_actor": true
+		},
+		{
+			"end": "(-46.9, 0.200827, 28.88544)",
+			"workbench_stops_actor": true
+		},
+		{
+			"end": "(-29.0, 0.00084, 28.41658)",
+			"passed": true,
+			"service_bay_direction": -1.0
+		},
+		{
+			"end": "(-29.0, 0.00084, 43.58343)",
+			"passed": true,
+			"service_bay_direction": 1.0
+		},
+		{
+			"crouched": false,
+			"direction": -1.0,
+			"drain_crossing_z": 30.5,
+			"end": "(-29.58337, 0.000936, 30.5)",
+			"passed": true
+		},
+		{
+			"crouched": false,
+			"direction": 1.0,
+			"drain_crossing_z": 30.5,
+			"end": "(-23.21663, 0.000936, 30.5)",
+			"passed": true
+		},
+		{
+			"crouched": false,
+			"direction": -1.0,
+			"drain_crossing_z": 36.5,
+			"end": "(-29.58337, 0.000936, 36.5)",
+			"passed": true
+		},
+		{
+			"crouched": false,
+			"direction": 1.0,
+			"drain_crossing_z": 36.5,
+			"end": "(-23.21663, 0.000936, 36.5)",
+			"passed": true
+		},
+		{
+			"crouched": true,
+			"direction": -1.0,
+			"drain_crossing_z": 30.5,
+			"end": "(-29.52006, 0.000941, 30.50001)",
+			"passed": true
+		},
+		{
+			"crouched": true,
+			"direction": 1.0,
+			"drain_crossing_z": 30.5,
+			"end": "(-23.27993, 0.000936, 30.5)",
+			"passed": true
+		},
+		{
+			"crouched": true,
+			"direction": -1.0,
+			"drain_crossing_z": 36.5,
+			"end": "(-29.52006, 0.000938, 36.5)",
+			"passed": true
+		},
+		{
+			"crouched": true,
+			"direction": 1.0,
+			"drain_crossing_z": 36.5,
+			"end": "(-23.27992, 0.000938, 36.5)",
+			"passed": true
+		},
+		{
+			"end": "(-32.14978, 0.000059, 29.0)",
+			"parts_rack_capsule": true,
+			"passed": true
+		}
+	]
+}

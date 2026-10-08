@@ -26,17 +26,28 @@ func run() -> void:
 	game.token_origin = "http://test.invalid"
 	game.api_url = game.token_origin
 	var lobby = game.ui.party_lobby
+	assert(not lobby.is_processing())
 	if "--capture-party-ui" in OS.get_cmdline_user_args():
 		await process_frame
 		await process_frame
 		await RenderingServer.frame_post_draw
 		root.get_texture().get_image().save_png(ProjectSettings.globalize_path("res://../artifacts/party-lobby-menu.png"))
 	lobby.open(game, "a")
+	assert(lobby.is_processing())
 	assert(not game.ui.menu.visible)
 	assert(lobby.visible and not lobby.create_button.disabled and lobby.start_button.disabled)
 	lobby.code.text = "short"
 	lobby.accept_button.pressed.emit()
 	assert("complete invitation" in lobby.status.text and game.calls.size() == 1)
+	var polling_calls := game.calls.size()
+	lobby._process(2.1)
+	assert(game.calls.size() == polling_calls + 1)
+	# Ancestor visibility must suspend polling too, then restore it.
+	var lobby_parent = lobby.get_parent()
+	lobby_parent.hide()
+	assert(not lobby.is_processing())
+	lobby_parent.show()
+	assert(lobby.is_processing())
 	var party := {"id": "p", "status": "forming", "leader": "a",
 		"members": [{"uid": "a", "username": "ALPHA"}], "invitation": "synthetic-invitation-for-ui-testing-only"}
 	game.reply.body = party
@@ -75,11 +86,13 @@ func run() -> void:
 	game.reply.body.admission = {"ticket": "synthetic-ticket"}
 	lobby.start_button.pressed.emit()
 	assert(not lobby.visible and game.admitted_calls.size() == 1)
+	assert(not lobby.is_processing())
 	assert(game.admitted_calls[0][1] == "http://test.invalid" and game.admitted_calls[0][2] == "fake-token")
 	assert(game.admitted_calls[0][3] == "duo")
 	game.reply = {"code": 200, "body": party}
 	game.reply.body.erase("admission")
 	lobby.open(game, "b")
+	assert(lobby.is_processing())
 	assert(lobby.start_button.disabled and lobby.copy_button.disabled)
 	game.reply.body.status = "reserved"
 	game.reply.body.reservation_id = "old-group"
@@ -97,6 +110,7 @@ func run() -> void:
 	var previous_calls := game.calls.size()
 	lobby.return_button.pressed.emit()
 	assert(not lobby.visible and game.ui.menu.visible and game.calls.size() == previous_calls)
+	assert(not lobby.is_processing())
 	lobby.open(game, "b")
 	game.reply = {"code": 200, "body": {}}
 	lobby.back_button.pressed.emit()
@@ -108,10 +122,11 @@ func run() -> void:
 	await process_frame
 	await process_frame
 	assert(not lobby.visible and game.admitted_calls.size() == 1)
+	assert(not lobby.is_processing())
 	game.reply = {"code": 401, "body": {}}
 	lobby.open(game, "b")
 	assert(not lobby.visible and game.token.is_empty() and game.ui.logout_button.disabled)
 	game.queue_free()
 	await process_frame
-	print("PARTY_LOBBY_RULES_PASS invite=ok roles=ok retry=ok own_admission=ok leave=ok stale=ok expired_login=ok")
+	print("PARTY_LOBBY_RULES_PASS invite=ok roles=ok retry=ok own_admission=ok leave=ok stale=ok expired_login=ok idle_processing=ok polling=ok")
 	quit()

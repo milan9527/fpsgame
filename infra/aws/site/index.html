@@ -9,24 +9,30 @@
   <p class="eyebrow">IRON MERIDIAN / 铁境行动</p>
   <h1>进入灰谷，<br>争夺最后的生存席位。</h1>
   <p class="lead">原创战术生存射击游戏。单机机器人对战与在线单人、双人模式，一场完整的搜集、交战与撤离终局。</p>
-  <a class="download" href="/downloads/IronMeridian-Windows-x86_64.zip">下载 Windows 游戏 · 0.38 瞄准修复版</a>
-  <a class="download secondary" href="/downloads/IronMeridian-Linux-x86_64.tar.gz">下载 Linux 游戏 · 0.38</a>
-  <a class="download secondary" href="/downloads/IronMeridian-Android.apk">下载 Android 游戏 · 0.38.0-android.4</a>
-  <p class="muted">Android 64 位 · APK 约 50 MiB · 需要 OpenGL ES 3.0<br>Windows 10/11 64 位 · ZIP 约 33 MiB ｜ Linux x86_64 · 约 60 MiB<br>需要支持 OpenGL 3.3 的显卡驱动；暂不提供 macOS 版本。</p>
-  <p class="muted">Windows / Android 更新：开镜瞄准点固定在弹道中心，修复开镜过渡和枪模后坐动画造成的红点偏移；支持记住登录账号。</p>
-  <p class="muted">Android 新增陀螺仪瞄准：在 GYROSCOPE 中选择仅开镜或始终开启，可独立调整灵敏度。默认关闭，需要手机具备陀螺仪。</p>
-  <section class="android-qr" aria-labelledby="android-qr-title">
-    <a href="/downloads/IronMeridian-Android.apk" aria-label="下载 Android APK"><img src="/android-download-qr.png" width="225" height="225" alt="Android 客户端 APK 下载二维码"></a>
-    <div><h2 id="android-qr-title">手机扫码下载 Android 版</h2><p>使用 Android 手机相机或浏览器扫码，下载 APK 后安装即可游玩。</p><p class="muted">如果微信内无法下载，请选择“在浏览器中打开”。</p><a href="/android-download-qr.png" download="IronMeridian-Android-QR.png">保存二维码</a></div>
-  </section>
+<section class="start" id="android-release" style="border:2px solid #7eb49b;padding:24px;margin:24px 0">
+<h2>Android 优化试用版 · 2026-10-08</h2>
+<p>版本 0.52.188-android.20261008：包含本版已打包的画面与 Android 性能优化，保留建筑、植被、武器资源以及单机和联网功能，支持陀螺仪瞄准与记住登录。</p>
+<p><a class="download" href="/downloads/IronMeridian-Android-0.52.188-20261008.apk">下载 Android 单机 / 联网试用版 · 260 MiB</a></p>
+<p>安装后打开 Iron Meridian 即可游玩。支持 ARM64 / x86_64，要求 OpenGL ES 3.0。单机无需账号；在线单人及双人模式在游戏内登录。</p>
+<p class="muted">本版供先行体验最新 Android 优化。已进行真机短时运行测试，但长时间单机、联网和发热后的流畅度验收尚未完成，暂不承诺掉帧问题完全解决。首次启动需要等待资源预热；低分辨率下画面清晰度会降低。</p>
+<section class="android-qr"><a href="/downloads/IronMeridian-Android-0.52.188-20261008.apk"><img src="/android-download-qr.png?v=0.52.188" width="225" height="225" alt="Android 0.52.188 试用版下载二维码"></a><div><h3>手机扫码下载安装</h3><p>使用手机浏览器下载；允许浏览器安装此 APK。陀螺仪默认关闭，可在 GYROSCOPE 中开启。</p><a href="/android-download-qr.png?v=0.52.188" download>保存二维码</a></div></section>
+</section>
+<section class="start" id="visual-preview">
+<h2>电脑单机画面体验版</h2>
+<a class="download" href="/downloads/IronMeridian-Windows-Realism193-x86_64.zip">Windows 画面体验版 · 202 MiB</a>
+<a class="download secondary" href="/downloads/IronMeridian-Linux-Realism193-x86_64.zip">Linux 画面体验版 · 230 MiB</a>
+<p>Windows 全部解压后双击 IronMeridian.exe；Linux 解压后执行 ./IronMeridian。选择 SOLO / OFFLINE 单机试玩。</p>
+<p><strong>现有电脑包与此次更新的联网服务器版本不兼容，仅供单机体验，联网版待更新。</strong></p>
+<p class="muted">Windows 10/11 x86_64，建议支持 Vulkan 的独立显卡；尚未完成 Windows 实机验证，Windows 包未签名。</p>
+</section>
   <section class="features"><article><h2>16 名参战者</h2><p>单人混战或双人队伍，空位由机器人补齐。</p></article><article><h2>争夺生存空间</h2><p>搜集武器、护甲与医疗物资，跟随安全区转移。</p></article><article><h2>协同作战</h2><p>邀请队友、驾驶载具、救援倒地队友，争取最终排名。</p></article></section>
   <section class="start"><h2>下载后开始游戏</h2><ol>
     <li>Windows：右键 ZIP 选择“全部解压”，打开文件夹，双击 <code>IronMeridian.exe</code>。无需安装 Godot 或运行脚本。</li>
     <li>Android：下载 APK，允许浏览器安装此应用，安装后打开“铁境行动”。横屏使用触屏摇杆和按钮，无需运行脚本。新版登录成功后自动记住账号密码，可用 FORGET LOGIN 清除。</li>
-    <li>Linux：解压安装包，在游戏目录执行 <code>./play.sh --max-fps 60</code>。</li>
+    <li>Linux：解压画面体验包，在游戏目录执行 <code>./IronMeridian</code>。</li>
     <li>单机直接选择离线模式，无需账号。</li>
-    <li>联网时在游戏内创建账号或登录。Windows 和 Android 客户端已预填以下服务器地址；Linux 客户端请填写：</li>
+    <li>最新 Android 联网时在游戏内创建账号或登录，已预填以下服务器地址：</li>
   </ol><code id="api">正在获取服务器地址…</code><p>账号操作全部在安装后的游戏内完成，本网站不收集用户名或密码。联网无需 SSH 转发。</p></section>
-  <details><summary>安装包校验与版本说明</summary><p>Windows ZIP · SHA-256</p><code class="hash">d588cafa455f2a1175337809b7bf9314c25968f5eaec2488c84e7743dddc79d5</code><p>Android APK · SHA-256</p><code class="hash">77b45b8e0152b235c46d9acf5b07e20e1f5440c5f9d35c5003356cb8b5591811</code><p>Linux TAR.GZ · SHA-256</p><code class="hash">e2a94bca580253e22f4df38d9fc3ec145d4d8fc139e874ece5aa9297212bcb69</code><p>当前提供可运行开发版，包含一张地图和核心生存对战玩法；不是商业级百人游戏。Windows 版尚未进行代码签名，系统可能显示发布者未知。</p></details>
+<details><summary>Android 安装包校验与版本说明</summary><p>SHA-256</p><code class="hash">824041022c4b7fc37fa0badeb6d8ca14e8de7e793415d99e2b5f9593b033ab7e</code><p>当前为核心玩法开发版，包含一张地图和单机、联机生存对战，尚未达到商业游戏的画面及性能水平。</p></details>
   <footer>Godot + Blender · 原创游戏资源</footer>
 </main></body></html>

@@ -1,0 +1,222 @@
+{
+	"passed": true,
+	"samples": [
+		{
+			"gait": "Walk",
+			"leg_rotation_error_radians": 0.00543727679178119,
+			"passed": true,
+			"phase_error": 0.0,
+			"reload_frames": 37,
+			"weapon": 0
+		},
+		{
+			"gait": "Walk",
+			"leg_rotation_error_radians": 0.00525895599275827,
+			"passed": true,
+			"phase_error": 0.0,
+			"reload_frames": 61,
+			"weapon": 0
+		},
+		{
+			"gait": "Walk",
+			"leg_rotation_error_radians": 0.00468343356624246,
+			"passed": true,
+			"phase_error": 0.0,
+			"reload_frames": 89,
+			"weapon": 0
+		},
+		{
+			"gait": "Run",
+			"leg_rotation_error_radians": 0.00138106802478433,
+			"passed": true,
+			"phase_error": 0.000000000000000256739074444567,
+			"reload_frames": 37,
+			"weapon": 0
+		},
+		{
+			"gait": "Run",
+			"leg_rotation_error_radians": 0.00507437298074365,
+			"passed": true,
+			"phase_error": 0.000000000000000444089209850063,
+			"reload_frames": 61,
+			"weapon": 0
+		},
+		{
+			"gait": "Run",
+			"leg_rotation_error_radians": 0.00169145606923848,
+			"passed": true,
+			"phase_error": 0.0000000000000000555111512312578,
+			"reload_frames": 89,
+			"weapon": 0
+		},
+		{
+			"gait": "CrouchWalk",
+			"leg_rotation_error_radians": 0.0009765625,
+			"passed": true,
+			"phase_error": 0.000000000000000111022302462516,
+			"reload_frames": 37,
+			"weapon": 0
+		},
+		{
+			"gait": "CrouchWalk",
+			"leg_rotation_error_radians": 0.0044215782545507,
+			"passed": true,
+			"phase_error": 0.00000000000000077715611723761,
+			"reload_frames": 61,
+			"weapon": 0
+		},
+		{
+			"gait": "CrouchWalk",
+			"leg_rotation_error_radians": 0.00390625232830644,
+			"passed": true,
+			"phase_error": 0.000000000000000111022302462516,
+			"reload_frames": 89,
+			"weapon": 0
+		},
+		{
+			"gait": "Walk",
+			"leg_rotation_error_radians": 0.00543727679178119,
+			"passed": true,
+			"phase_error": 0.0,
+			"reload_frames": 37,
+			"weapon": 1
+		},
+		{
+			"gait": "Walk",
+			"leg_rotation_error_radians": 0.00525895599275827,
+			"passed": true,
+			"phase_error": 0.0,
+			"reload_frames": 61,
+			"weapon": 1
+		},
+		{
+			"gait": "Walk",
+			"leg_rotation_error_radians": 0.00468343356624246,
+			"passed": true,
+			"phase_error": 0.0,
+			"reload_frames": 89,
+			"weapon": 1
+		},
+		{
+			"gait": "Run",
+			"leg_rotation_error_radians": 0.00138106802478433,
+			"passed": true,
+			"phase_error": 0.000000000000000256739074444567,
+			"reload_frames": 37,
+			"weapon": 1
+		},
+		{
+			"gait": "Run",
+			"leg_rotation_error_radians": 0.00507437298074365,
+			"passed": true,
+			"phase_error": 0.000000000000000444089209850063,
+			"reload_frames": 61,
+			"weapon": 1
+		},
+		{
+			"gait": "Run",
+			"leg_rotation_error_radians": 0.00169145606923848,
+			"passed": true,
+			"phase_error": 0.0000000000000000555111512312578,
+			"reload_frames": 89,
+			"weapon": 1
+		},
+		{
+			"gait": "CrouchWalk",
+			"leg_rotation_error_radians": 0.0009765625,
+			"passed": true,
+			"phase_error": 0.000000000000000111022302462516,
+			"reload_frames": 37,
+			"weapon": 1
+		},
+		{
+			"gait": "CrouchWalk",
+			"leg_rotation_error_radians": 0.0044215782545507,
+			"passed": true,
+			"phase_error": 0.00000000000000077715611723761,
+			"reload_frames": 61,
+			"weapon": 1
+		},
+		{
+			"gait": "CrouchWalk",
+			"leg_rotation_error_radians": 0.00390625232830644,
+			"passed": true,
+			"phase_error": 0.000000000000000111022302462516,
+			"reload_frames": 89,
+			"weapon": 1
+		},
+		{
+			"gait": "Walk",
+			"leg_rotation_error_radians": 0.00543727679178119,
+			"passed": true,
+			"phase_error": 0.0,
+			"reload_frames": 37,
+			"weapon": 2
+		},
+		{
+			"gait": "Walk",
+			"leg_rotation_error_radians": 0.00525895599275827,
+			"passed": true,
+			"phase_error": 0.0,
+			"reload_frames": 61,
+			"weapon": 2
+		},
+		{
+			"gait": "Walk",
+			"leg_rotation_error_radians": 0.00468343356624246,
+			"passed": true,
+			"phase_error": 0.0,
+			"reload_frames": 89,
+			"weapon": 2
+		},
+		{
+			"gait": "Run",
+			"leg_rotation_error_radians": 0.00138106802478433,
+			"passed": true,
+			"phase_error": 0.000000000000000256739074444567,
+			"reload_frames": 37,
+			"weapon": 2
+		},
+		{
+			"gait": "Run",
+			"leg_rotation_error_radians": 0.00507437298074365,
+			"passed": true,
+			"phase_error": 0.000000000000000444089209850063,
+			"reload_frames": 61,
+			"weapon": 2
+		},
+		{
+			"gait": "Run",
+			"leg_rotation_error_radians": 0.00169145606923848,
+			"passed": true,
+			"phase_error": 0.0000000000000000555111512312578,
+			"reload_frames": 89,
+			"weapon": 2
+		},
+		{
+			"gait": "CrouchWalk",
+			"leg_rotation_error_radians": 0.0009765625,
+			"passed": true,
+			"phase_error": 0.000000000000000111022302462516,
+			"reload_frames": 37,
+			"weapon": 2
+		},
+		{
+			"gait": "CrouchWalk",
+			"leg_rotation_error_radians": 0.0044215782545507,
+			"passed": true,
+			"phase_error": 0.00000000000000077715611723761,
+			"reload_frames": 61,
+			"weapon": 2
+		},
+		{
+			"gait": "CrouchWalk",
+			"leg_rotation_error_radians": 0.00390625232830644,
+			"passed": true,
+			"phase_error": 0.000000000000000111022302462516,
+			"reload_frames": 89,
+			"weapon": 2
+		}
+	],
+	"scope": "27 prescribed-velocity reload exits, ten consecutive evaluated frames each. Does not verify physical foot planting or natural rendered movement."
+}

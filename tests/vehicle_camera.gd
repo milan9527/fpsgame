@@ -93,6 +93,18 @@ func run() -> void:
 	blocker.queue_free()
 	await physics_frame
 	await physics_frame
+	var passenger = load("res://scripts/actor.gd").new()
+	passenger.actor_id = 12
+	root.add_child(passenger)
+	passenger.global_position = car.global_position
+	assert(car.seats.enter(passenger, 1))
+	actor.render_frame(0.016, false, true, false)
+	assert(view.query.exclude.has(passenger.get_rid()))
+	assert(car.seats.exit(passenger))
+	passenger.position = Vector3(15, 0, 15)
+	actor.render_frame(0.016, false, true, false)
+	assert(not view.query.exclude.has(passenger.get_rid()))
+	passenger.queue_free()
 	assert(car.seats.exit(actor))
 	actor.render_frame(0.1, false, true, false)
 	assert(not view.active and not actor.body_mesh.visible and actor.gun.visible)

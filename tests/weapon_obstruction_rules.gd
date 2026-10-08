@@ -27,6 +27,17 @@ func run() -> void:
 	actor.grounded = true
 	var wall = game.world.block(Vector3(0, 1.5, 19.4), Vector3(3, 3, 0.2), "465a61")
 	await sync()
+	# A broad frontal wall must block both swept barrel segments regardless of
+	# whether the upright shortcut or rolled eye/barrel path is selected.
+	for crouched in [false, true]:
+		actor.crouched = crouched
+		for lean in [-1.0, -0.001, 0.0, 0.001, 1.0]:
+			actor.lean = lean
+			for weapon in range(3):
+				actor.weapon = weapon
+				assert(actor.weapon_obstructed(true) and actor.weapon_obstructed(false), "Frontal cover blocks upright and leaned stances")
+	actor.crouched = false
+	actor.lean = 0.0
 	for weapon in range(3):
 		actor.switch_weapon(weapon)
 		actor.fire_left = 0

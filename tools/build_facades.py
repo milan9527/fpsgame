@@ -45,12 +45,49 @@ def box(name, at, size, mat, bevel=0.008):
     return obj
 
 
+def pipe(name, start, end, radius, mat):
+    """Round architectural members authored in the same Godot coordinates."""
+    from mathutils import Vector
+    a = Vector((start[0], -start[2], start[1]))
+    b = Vector((end[0], -end[2], end[1]))
+    direction = b - a
+    bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=radius,
+                                       depth=direction.length, location=(a + b) / 2)
+    obj = bpy.context.object
+    obj.name = name
+    obj.rotation_euler = direction.to_track_quat('Z', 'Y').to_euler()
+    obj.data.materials.append(mat)
+    for face in obj.data.polygons:
+        face.use_smooth = len(face.vertices) == 4
+    return obj
+
+
 for style in range(3):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     concrete = material('FacadeConcrete', (0.34, 0.35, 0.32))
     steel = material('FacadeSteel', [(0.15, 0.19, 0.20), (0.23, 0.28, 0.26), (0.21, 0.22, 0.20)][style], 0.45)
     dark = material('FacadeVentBack', (0.028, 0.032, 0.030))
     for side in [-1, 1]:
+        # Open metal gutter with a rounded lip and a recessed dark channel.
+        # Keep fittings shallow against the opaque walls and clear of doors.
+        gutter_x = side * 8.40
+        box('Gutter bottom', (gutter_x, 3.94, 0), (0.25, 0.022, 13.25), steel)
+        box('Gutter outer edge', (side * 8.525, 4.0, 0), (0.022, 0.14, 13.25), steel)
+        box('Gutter channel', (gutter_x, 3.955, 0), (0.20, 0.008, 13.20), dark, 0)
+        pipe('Rolled gutter lip', (side * 8.53, 4.07, -6.625),
+             (side * 8.53, 4.07, 6.625), 0.018, steel)
+        for z in [-6.1, 6.1]:
+            pipe('Rainwater downpipe', (side * 8.44, 0.48, z),
+                 (side * 8.44, 3.90, z), 0.062, steel)
+            pipe('Drain outlet elbow', (side * 8.44, 0.48, z),
+                 (side * 8.57, 0.28, z), 0.062, steel)
+            for y in [0.65, 1.80, 3.1]:
+                pipe('Downpipe collar', (side * 8.44, y - 0.028, z),
+                     (side * 8.44, y + 0.028, z), 0.071, dark)
+                box('Pipe mounting bracket', (side * 8.34, y, z),
+                    (0.17, 0.055, 0.14), steel)
+        for z in [-5.4, -3.6, -1.8, 0, 1.8, 3.6, 5.4]:
+            box('Gutter strap', (gutter_x, 3.927, z), (0.26, 0.03, 0.045), dark)
         wall_x = side * 8.285
         for z in [-6.30, -2.1, 2.1, 6.30]:
             box('Concrete pier', (wall_x, 2.0, z), (0.10, 3.8, 0.28), concrete)
@@ -97,6 +134,35 @@ for style in range(3):
                     slat = box('Louver blade', (side * 8.345, y - height/2 + (i + 0.5)*height/8, center_z),
                                (0.018, height/8 * 0.72, width - 0.06), steel, 0.002)
                     slat.rotation_euler.y = radians(side * 32)
+    for side in [-1, 1]:
+        # Deep entrance reveal and folded rain hood. Inner edges remain outside
+        # the existing four metre opening; no decorative threshold across it.
+        for x in [-2.16, 2.16]:
+            box('Portal concrete return', (x, 1.8, side * 6.52),
+                (0.30, 3.2, 0.68), concrete, 0.025)
+            box('Door guide channel', (x / abs(x) * 2.045, 1.8, side * 6.54),
+                (0.07, 3.2, 0.48), steel, 0.006)
+            box('Guide recessed seam', (x / abs(x) * 2.083, 1.8, side * 6.795),
+                (0.025, 3.13, 0.012), dark, 0.002)
+        box('Roller shutter housing', (0, 3.66, side * 6.85),
+            (4.48, 0.45, 0.48), steel, 0.09)
+        box('Housing underside slot', (0, 3.425, side * 6.82),
+            (4.05, 0.018, 0.13), dark, 0.002)
+        for x in [-2.26, 2.26]:
+            box('Housing end cap', (x, 3.66, side * 6.85),
+                (0.028, 0.40, 0.42), dark, 0.04)
+        box('Entrance rain hood', (0, 3.98, side * 7.30),
+            (5.20, 0.08, 1.10), steel, 0.008)
+        box('Hood folded drip edge', (0, 3.93, side * 7.85),
+            (5.20, 0.18, 0.025), steel, 0.004)
+        for x in [-2.57, 2.57]:
+            box('Hood folded side', (x, 3.94, side * 7.30),
+                (0.025, 0.16, 1.10), steel, 0.004)
+            pipe('Canopy diagonal brace', (x, 3.45, side * 6.79),
+                 (x, 3.92, side * 7.69), 0.035, steel)
+        for x in [-1.8, -0.6, 0.6, 1.8]:
+            box('Hood standing seam', (x, 4.033, side * 7.30),
+                (0.024, 0.035, 1.05), steel, 0.003)
     # Combine by material to keep three or fewer draw surfaces per warehouse.
     for mat in [concrete, steel, dark]:
         objects = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o.data.materials[0] == mat]

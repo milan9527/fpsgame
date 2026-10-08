@@ -1,5 +1,31 @@
 extends CanvasLayer
 
+class TeamMemberTextCache:
+	extends RefCounted
+	# The normal HP range is shared by every HUD slot. Build once, rather than
+	# format the same integer again on each damage/healing update.
+	static var health_suffixes: PackedStringArray = make_health_suffixes()
+
+	static func make_health_suffixes() -> PackedStringArray:
+		var result := PackedStringArray()
+		for hp in 101:
+			result.append("%d HP  /  " % hp)
+		return result
+
+	var values := Vector2i(-1, -1)
+	var timer := -1.0
+	var member_name := ""
+	var name_line := "\n\n"
+	var prefix := ""
+	var distance := -1
+	var line := ""
+
+# Fixed pixel offsets: retain these arrays across combat HUD redraws.
+const CROSSHAIR_STARTS = [Vector2(0, -5), Vector2(0, 5), Vector2(-5, 0), Vector2(5, 0)]
+const CROSSHAIR_ENDS = [Vector2(0, -12), Vector2(0, 12), Vector2(-12, 0), Vector2(12, 0)]
+const HIT_MARKER_STARTS = [Vector2(-10, -10), Vector2(10, -10), Vector2(-10, 10), Vector2(10, 10)]
+const HIT_MARKER_ENDS = [Vector2(-17, -17), Vector2(17, -17), Vector2(-17, 17), Vector2(17, 17)]
+
 signal leaderboard_requested(endpoint: String)
 signal training_requested
 var training_label: Label
@@ -39,6 +65,15 @@ var pause_panel: Control
 var status: Label
 var headline: Label
 var stats: Label
+var hud_stats_valid := false
+var hud_stats_values := Vector4i.ZERO
+var hud_headline_valid := false
+var hud_headline_phase := ""
+var hud_headline_circle := Vector3i.ZERO
+var hud_weapon_name := ""
+var hud_weapon_values := Vector4i(-1, -1, -1, -1)
+var hud_weapon_text := ""
+var hud_events: Array = []
 var weapon: Label
 var prompt: Label
 var feed: Label
@@ -54,6 +89,8 @@ var health_bar: ProgressBar
 var loadout_label: Label
 var armor_bar: ProgressBar
 var radar: Control
+var radar_next_arc = preload("res://scripts/radar_arc.gd").new()
+var radar_current_arc = preload("res://scripts/radar_arc.gd").new()
 var local_position := Vector3.ZERO
 var team_label: Label
 var team_ping_label: Label
@@ -95,6 +132,12 @@ var sight_aiming := false
 var vehicle_view := false
 var weapon_blocked := false
 var supply_prompt := ""
+var hud_loadout_values := Vector3i(-1, -1, -1)
+var hud_supply_values := Vector3i(-1, -1, -1)
+var hud_loadout_revision := -1
+var hud_supply_revision := -1
+var hud_loadout_text := ""
+var hud_supply_text := ""
 var spectator_label: Label
 const INK := Color("0c1721")
 const ACCENT := Color("e2b875")
@@ -599,26 +642,33 @@ func draw_hud() -> void:
 		hud.draw_circle(center, 3.5, Color(0.03, 0.03, 0.03, 0.9))
 		hud.draw_circle(center, 2.0, Color("ff4035"))
 	elif not spectating and not vehicle_view:
-		for direction in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
-			hud.draw_line(center + direction * 5, center + direction * 12, white, 2)
+		for i in 4:
+			hud.draw_line(center + CROSSHAIR_STARTS[i], center + CROSSHAIR_ENDS[i], white, 2)
 	var now := feedback_pause_time if feedback_pause_time >= 0 else Time.get_ticks_msec()
 	if now < hit_until:
-		for direction in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
-			hud.draw_line(center + direction * 10, center + direction * 17, hit_color, 2)
+		for i in 4:
+			hud.draw_line(center + HIT_MARKER_STARTS[i], center + HIT_MARKER_ENDS[i], hit_color, 2)
 	else:
 		hit_text.text = ""
 	if now < damage_until:
 		var opacity := float(damage_until - now) / 600.0
 		hud.draw_rect(Rect2(Vector2.ZERO, hud.size), Color(0.85, 0.1, 0.05, opacity * 0.5), false, 12)
-	for mark in damage_indicators.visible_marks(local_yaw, now):
+	damage_indicators.prune(now)
+	for mark in damage_indicators.marks:
+		# Draw from the retained records; avoid a temporary array and a
+		# dictionary per visible direction on every combat HUD redraw.
+		var angle: float = -PI / 2 - mark.bearing + local_yaw
+		var alpha := clampf(float(mark.until - now) / damage_indicators.LIFETIME, 0, 1)
 		# A dark outline keeps the direction legible against bright sky and smoke.
-		hud.draw_arc(center, 66, mark.angle - 0.25, mark.angle + 0.25, 16, Color(0.08, 0.02, 0.01, mark.opacity), 9, true)
-		hud.draw_arc(center, 66, mark.angle - 0.25, mark.angle + 0.25, 16, Color(1, 0.25, 0.12, mark.opacity), 5, true)
+		hud.draw_arc(center, 66, angle - 0.25, angle + 0.25, 16, Color(0.08, 0.02, 0.01, alpha), 9, true)
+		hud.draw_arc(center, 66, angle - 0.25, angle + 0.25, 16, Color(1, 0.25, 0.12, alpha), 5, true)
 	var radar_center := Vector2(hud.size.x - 120, 120)
 	hud.draw_circle(radar_center, 88, Color(0.03, 0.08, 0.11, 0.85))
-	hud.draw_arc(radar_center + zone_info.get("center", Vector2.ZERO) * 0.72, radius * 0.72, 0, TAU, 64, Color("72bbd9"), 2)
+	hud.draw_polyline(radar_current_arc.points(radar_center + zone_info.get("center", Vector2.ZERO) * 0.72, radius * 0.72), Color("72bbd9"), 2)
 	if not zone_info.is_empty():
-		hud.draw_arc(radar_center + zone_info.next_center * 0.72, zone_info.next_radius * 0.72, 0, TAU, 64, Color.WHITE, 1)
+		# Cache the fixed next zone; keep native generation for the shrinking
+		# current zone above to avoid rebuilding its points in GDScript.
+		hud.draw_polyline(radar_next_arc.points(radar_center + zone_info.next_center * 0.72, zone_info.next_radius * 0.72), Color.WHITE, 1)
 	hud.draw_line(radar_center + Vector2(-80, 0), radar_center + Vector2(80, 0), Color("49606a"), 7)
 	hud.draw_line(radar_center + Vector2(0, -80), radar_center + Vector2(0, 80), Color("49606a"), 7)
 	var p := radar_center + Vector2(local_position.x, local_position.z) * 0.72
@@ -640,82 +690,205 @@ func draw_hud() -> void:
 		hud.draw_circle(target, 5, tactical_map.MARKER, false, 2)
 
 func update_team(actors: Dictionary, local_id: int) -> void:
-	team_markers.clear()
-	team_label.text = ""
-	team_ping_label.text = ""
-	team_label.self_modulate = Color("77c9b0")
+	var marker_count := 0
+	var team_text := ""
+	var ping_text := ""
+	var team_color := Color("77c9b0")
 	var local = actors.get(local_id)
 	if local != null and local.team_id > 0:
 		for ping in tactical_map.shared_pings:
-			team_ping_label.text += "%s / PING %dm\n" % [ping.name, roundi(Vector2(local.position.x, local.position.z).distance_to(ping.point))]
-		team_label.text = "TEAM %d" % local.team_id
-		for member in actors.values():
+			ping_text += "%s / PING %dm\n" % [ping.name, roundi(Vector2(local.position.x, local.position.z).distance_to(ping.point))]
+		team_text = "TEAM %d" % local.team_id
+		for actor_id in actors:
+			var member = actors[actor_id]
 			if member.actor_id == local_id or member.team_id != local.team_id:
 				continue
-			team_markers.append({"id": member.actor_id, "name": member.display_name, "position": member.position, "alive": member.alive, "downed": member.downed})
-			var state := "%d HP" % ceili(member.health)
-			if not member.alive:
-				state = "ELIMINATED"
-			elif member.downed:
-				state = "DOWNED / %.0fs" % member.bleed_left
-				team_label.self_modulate = Color("f6a77a")
-			elif member.revive_target != 0:
-				state = "REVIVING / %.1fs" % member.revive_left
-			team_label.text += "\n%s\n%s  /  %dm" % [member.display_name, state, roundi(local.position.distance_to(member.position))]
-		if team_markers.is_empty():
-			team_label.text += "\nTEAMMATE UNAVAILABLE"
-	team_label.visible = not team_label.text.is_empty()
-	tactical_map.teammates = team_markers.duplicate(true)
-	tactical_map.queue_redraw()
+			# Reuse marker dictionaries during movement instead of allocating every frame.
+			if marker_count == team_markers.size():
+				team_markers.append({"text_cache": TeamMemberTextCache.new()})
+			var marker: Dictionary = team_markers[marker_count]
+			marker["id"] = member.actor_id
+			marker["name"] = member.display_name
+			marker["position"] = member.position
+			marker["alive"] = member.alive
+			marker["downed"] = member.downed
+			marker_count += 1
+			if member.alive and member.downed:
+				team_color = Color("f6a77a")
+			team_text += team_member_text(member, local.position, marker.text_cache)
+		if marker_count == 0:
+			team_text += "\nTEAMMATE UNAVAILABLE"
+	if team_markers.size() != marker_count:
+		team_markers.resize(marker_count)
+	# Submit the final color once: downed teammates must not toggle it twice per frame.
+	if team_label.self_modulate != team_color:
+		team_label.self_modulate = team_color
+	if team_label.text != team_text:
+		team_label.text = team_text
+	if team_ping_label.text != ping_text:
+		team_ping_label.text = ping_text
+	var team_visible := not team_text.is_empty()
+	if team_label.visible != team_visible:
+		team_label.visible = team_visible
+	# Both HUD views read these markers on the main thread; only update_team writes them.
+	tactical_map.teammates = team_markers
+	if tactical_map.is_visible_in_tree():
+		tactical_map.queue_redraw()
+
+func team_member_text(member, viewer_position: Vector3, cache: TeamMemberTextCache) -> String:
+	# Radar positions remain current every frame, but text usually changes only
+	# at metre/health boundaries. Keep each slot's formatted line across frames.
+	var mode := 0
+	var timer := 0.0
+	var health := 0
+	if not member.alive:
+		mode = 1
+	elif member.downed:
+		mode = 2
+		timer = member.bleed_left
+	elif member.revive_target != 0:
+		mode = 3
+		timer = member.revive_left
+	else:
+		health = ceili(member.health)
+	var values := Vector2i(mode, health)
+	var distance := roundi(viewer_position.distance_to(member.position))
+	# Health and revive timers change without renaming the teammate. Reuse the
+	# name line even when the status prefix needs rebuilding.
+	var name_changed: bool = cache.member_name != member.display_name
+	if name_changed:
+		cache.member_name = member.display_name
+		cache.name_line = "\n" + cache.member_name + "\n"
+	var state_changed: bool = cache.values != values or cache.timer != timer or name_changed
+	if state_changed:
+		var state: String
+		if mode == 1:
+			state = "ELIMINATED"
+		elif mode == 2:
+			state = "DOWNED / %.0fs" % timer
+		elif mode == 3:
+			state = "REVIVING / %.1fs" % timer
+		else:
+			state = ""
+		cache.values = values
+		cache.timer = timer
+		if mode == 0:
+			var suffix: String = TeamMemberTextCache.health_suffixes[health] if health >= 0 and health <= 100 else "%d HP  /  " % health
+			cache.prefix = cache.name_line + suffix
+		else:
+			cache.prefix = cache.name_line + state + "  /  "
+	if state_changed or cache.distance != distance:
+		cache.distance = distance
+		cache.line = cache.prefix + str(distance) + "m"
+	return cache.line
+
+func foot_weapon_text(actor) -> String:
+	# Cache displayed state rather than actor identity: firing, reloads and
+	# spectator switches update immediately, while aim/lean animation does not
+	# allocate the same formatted text on every render frame.
+	var weapon_name: String = actor.NAMES[actor.weapon]
+	var lean_side := 0 if absf(actor.lean) <= 0.05 else (-1 if actor.lean < 0 else 1)
+	var values := Vector4i(actor.ammo, actor.reserve, int(actor.crouched), lean_side)
+	if weapon_name != hud_weapon_name or values != hud_weapon_values:
+		hud_weapon_name = weapon_name
+		hud_weapon_values = values
+		hud_weapon_text = "%s    %02d / %03d" % [weapon_name, values.x, values.y]
+		if actor.crouched:
+			hud_weapon_text += "  [CROUCHED]"
+		if lean_side != 0:
+			hud_weapon_text += "  [LEAN L]" if lean_side < 0 else "  [LEAN R]"
+	return hud_weapon_text
+
+func foot_loadout_text(actor) -> String:
+	# Counts and applied controls fully determine the text, including when the
+	# viewed actor changes. Avoid formatting arrays/strings during steady play.
+	var values := Vector3i(actor.magazines[0], actor.magazines[1], actor.magazines[2])
+	if values != hud_loadout_values or hud_loadout_revision != Bindings.applied_revision:
+		hud_loadout_values = values
+		hud_loadout_revision = Bindings.applied_revision
+		hud_loadout_text = "%s  AR %02d   |   %s  SG %02d   |   %s  SR %02d" % [Bindings.key_label("weapon1"), values.x, Bindings.key_label("weapon2"), values.y, Bindings.key_label("weapon3"), values.z]
+	return hud_loadout_text
+
+func foot_supply_text(actor) -> String:
+	var values := Vector3i(actor.medkits, actor.grenades, actor.smokes)
+	if values != hud_supply_values or hud_supply_revision != Bindings.applied_revision:
+		hud_supply_values = values
+		hud_supply_revision = Bindings.applied_revision
+		hud_supply_text = "%s  Medkit ×%d   |   %s  Frag ×%d   |   %s  Smoke ×%d" % [Bindings.key_label("heal"), values.x, Bindings.key_label("throw"), values.y, Bindings.key_label("smoke_throw"), values.z]
+	return hud_supply_text
 
 func update_hud(actor, alive_count: int, phase: String, time_left: float, zone: float, events: Array, message: String, circle: Dictionary = {}) -> void:
 	vehicle_view = actor.is_seated()
 	weapon_blocked = actor.weapon_blocked
-	headline.text = "ASH VALLEY   /   " + phase.to_upper()
-	stats.text = "%02d ALIVE    •    %02d ELIMINATIONS    •    ZONE %dm    •    %02d:%02d" % [alive_count, actor.kills, zone, int(time_left) / 60, int(time_left) % 60]
+	# Compare displayed integers, not continuously changing simulation values.
+	# This also updates immediately when a new round or spectator changes them.
+	var stats_values := Vector4i(alive_count, actor.kills, int(zone), int(time_left))
+	if not hud_stats_valid or stats_values != hud_stats_values:
+		hud_stats_valid = true
+		hud_stats_values = stats_values
+		stats.text = "%02d ALIVE    •    %02d ELIMINATIONS    •    ZONE %dm    •    %02d:%02d" % [alive_count, actor.kills, stats_values.z, stats_values.w / 60, stats_values.w % 60]
+	var headline_circle := Vector3i(-1, 0, 0)
 	if not circle.is_empty() and phase == "live":
-		headline.text += "   /   ZONE %d · %s %ds" % [circle.stage, "SHRINKING" if circle.moving else "CLOSES IN", ceili(circle.remaining)]
-	weapon.text = "%s    %02d / %03d" % [actor.NAMES[actor.weapon], actor.ammo, actor.reserve]
-	loadout_label.text = "%s  AR %02d   |   %s  SG %02d   |   %s  SR %02d" % [Bindings.key_label("weapon1"), actor.magazines[0], Bindings.key_label("weapon2"), actor.magazines[1], Bindings.key_label("weapon3"), actor.magazines[2]]
-	if actor.crouched:
-		weapon.text += "  [CROUCHED]"
-	if absf(actor.lean) > 0.05:
-		weapon.text += "  [LEAN L]" if actor.lean < 0 else "  [LEAN R]"
-	health_bar.value = actor.health
+		headline_circle = Vector3i(circle.stage, int(circle.moving), ceili(circle.remaining))
+	if not hud_headline_valid or phase != hud_headline_phase or headline_circle != hud_headline_circle:
+		hud_headline_valid = true
+		hud_headline_phase = phase
+		hud_headline_circle = headline_circle
+		var headline_text = "ASH VALLEY   /   " + phase.to_upper()
+		if not circle.is_empty() and phase == "live":
+			headline_text += "   /   ZONE %d · %s %ds" % [headline_circle.x, "SHRINKING" if headline_circle.y else "CLOSES IN", headline_circle.z]
+		headline.text = headline_text
+	var weapon_text: String
+	var loadout_text: String
+	# Resolve downed health before submitting: avoid resetting the bar to normal
+	# health and back on every frame while waiting for a revive.
+	var displayed_health: float = actor.down_health if actor.downed else actor.health
+	if health_bar.value != displayed_health:
+		health_bar.value = displayed_health
 	armor_bar.value = actor.armor
-	prompt.text = ("%s  Medkit ×%d   |   %s  Frag ×%d   |   %s  Smoke ×%d" % [Bindings.key_label("heal"), actor.medkits, Bindings.key_label("throw"), actor.grenades, Bindings.key_label("smoke_throw"), actor.smokes]) if supply_prompt == "" else supply_prompt
+	var prompt_text: String
 	if vehicle_view:
 		var vehicle = actor.vehicle_ref.get_ref()
-		weapon.text = "BUGGY / %s   %03d km/h" % ["DRIVER" if actor.vehicle_seat == 0 else "PASSENGER", roundi(absf(vehicle.speed) * 3.6)]
-		weapon.text += "   HULL %d%%   FUEL %d%%" % [ceili(vehicle.health / vehicle.MAX_HEALTH * 100), ceili(vehicle.fuel)]
-		loadout_label.text = "%s/%s THROTTLE   %s/%s STEER   %s BRAKE" % [Bindings.key_label("forward"), Bindings.key_label("back"), Bindings.key_label("left"), Bindings.key_label("right"), Bindings.key_label("jump")] if actor.vehicle_seat == 0 else "MOUSE LOOK / WHEEL ZOOM"
-		prompt.text = Bindings.key_label("loot") + ("  EXIT VEHICLE" if vehicle.grounded and absf(vehicle.speed) <= 2 else "  SLOW TO EXIT")
+		weapon_text = "BUGGY / %s   %03d km/h" % ["DRIVER" if actor.vehicle_seat == 0 else "PASSENGER", roundi(absf(vehicle.speed) * 3.6)]
+		weapon_text += "   HULL %d%%   FUEL %d%%" % [ceili(vehicle.health / vehicle.MAX_HEALTH * 100), ceili(vehicle.fuel)]
+		loadout_text = "%s/%s THROTTLE   %s/%s STEER   %s BRAKE" % [Bindings.key_label("forward"), Bindings.key_label("back"), Bindings.key_label("left"), Bindings.key_label("right"), Bindings.key_label("jump")] if actor.vehicle_seat == 0 else "MOUSE LOOK / WHEEL ZOOM"
+		prompt_text = Bindings.key_label("loot") + ("  EXIT VEHICLE" if vehicle.grounded and absf(vehicle.speed) <= 2 else "  SLOW TO EXIT")
 		if vehicle.grounded and absf(vehicle.speed) <= 2 and vehicle.seats.find_exit(actor) == null:
-			prompt.text = "EXIT BLOCKED / MOVE TO CLEAR GROUND"
+			prompt_text = "EXIT BLOCKED / MOVE TO CLEAR GROUND"
 		if vehicle.destroyed:
-			prompt.text = "VEHICLE DISABLED / EXIT WHEN CLEAR"
+			prompt_text = "VEHICLE DISABLED / EXIT WHEN CLEAR"
 		elif vehicle.fuel <= 0:
-			prompt.text = "OUT OF FUEL / " + prompt.text
+			prompt_text = "OUT OF FUEL / " + prompt_text
+	else:
+		# Build only the active HUD mode; vehicle text replaces all of these.
+		weapon_text = foot_weapon_text(actor)
+		loadout_text = foot_loadout_text(actor)
+		prompt_text = foot_supply_text(actor) if supply_prompt == "" else supply_prompt
 	if actor.throw_left > 0:
-		prompt.text = "THROWING GRENADE"
+		prompt_text = "THROWING GRENADE"
 	elif actor.reload_left > 0:
-		prompt.text = "RELOADING   %.1fs" % actor.reload_left
+		prompt_text = "RELOADING   %.1fs" % actor.reload_left
 	elif actor.heal_left > 0:
-		prompt.text = "APPLYING MEDKIT   %.1fs   /   %s CANCEL" % [actor.heal_left, Bindings.key_label("heal")]
+		prompt_text = "APPLYING MEDKIT   %.1fs   /   %s CANCEL" % [actor.heal_left, Bindings.key_label("heal")]
 	elif Vector2(actor.position.x, actor.position.z).distance_to(circle.get("center", Vector2.ZERO)) > zone:
-		prompt.text = "WARNING  /  RETURN TO THE SAFE ZONE"
+		prompt_text = "WARNING  /  RETURN TO THE SAFE ZONE"
 	elif actor.weapon_blocked and not spectating and not vehicle_view:
-		prompt.text = "MUZZLE BLOCKED / STEP BACK OR REPOSITION"
+		prompt_text = "MUZZLE BLOCKED / STEP BACK OR REPOSITION"
 	elif actor.ammo == 0 and not spectating and not vehicle_view:
-		prompt.text = Bindings.key_label("reload") + "  RELOAD / EMPTY MAGAZINE" if actor.reserve > 0 else "NO RESERVE AMMUNITION / FIND SUPPLIES"
+		prompt_text = Bindings.key_label("reload") + "  RELOAD / EMPTY MAGAZINE" if actor.reserve > 0 else "NO RESERVE AMMUNITION / FIND SUPPLIES"
 	if grenade_warning_distance < 9:
-		prompt.text = "FRAG NEARBY / %dm — MOVE TO COVER" % ceili(grenade_warning_distance)
+		prompt_text = "FRAG NEARBY / %dm — MOVE TO COVER" % ceili(grenade_warning_distance)
 	if actor.downed:
-		prompt.text = "DOWNED  /  BLEED OUT %.1fs  /  WAIT FOR TEAMMATE" % actor.bleed_left
-		health_bar.value = actor.down_health
+		prompt_text = "DOWNED  /  BLEED OUT %.1fs  /  WAIT FOR TEAMMATE" % actor.bleed_left
 	elif actor.revive_target != 0:
-		prompt.text = "REVIVING  %.1fs  /  %s CANCEL" % [actor.revive_left, Bindings.key_label("loot")]
-	feed.text = "\n".join(events)
+		prompt_text = "REVIVING  %.1fs  /  %s CANCEL" % [actor.revive_left, Bindings.key_label("loot")]
+	weapon.text = weapon_text
+	loadout_label.text = loadout_text
+	prompt.text = prompt_text
+	if events != hud_events:
+		# The caller mutates its event array in place; retain a value snapshot.
+		hud_events = events.duplicate()
+		feed.text = "\n".join(events)
 	result_label.text = message
 	local_position = actor.position
 	local_yaw = actor.yaw

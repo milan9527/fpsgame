@@ -71,7 +71,12 @@ func _ready() -> void:
 		dismiss()
 		game.ui.show_menu("Lobby closed. Any existing team remains active until left or expired.")
 	)
+	visibility_changed.connect(_sync_processing)
 	hide()
+	_sync_processing()
+
+func _sync_processing() -> void:
+	set_process(is_visible_in_tree())
 
 func add_label(parent: Node, text: String, size: int) -> Label:
 	var label := Label.new()

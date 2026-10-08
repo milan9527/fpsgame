@@ -4,7 +4,10 @@ const Codec = preload("res://scripts/voice_codec.gd")
 const Jitter = preload("res://scripts/voice_jitter.gd")
 const MAX_SPEAKERS := 2
 var game
-var context := ""
+var context_initialized := false
+var context_online := false
+var context_round_id := ""
+var context_match_mode := ""
 var streams: Dictionary = {}
 var muted: Dictionary = {}
 var bus_name := ""
@@ -15,11 +18,16 @@ var enabled := false:
 			reset()
 var volume := 0.8:
 	set(value):
-		volume = clampf(value, 0, 1)
+		var next_volume := clampf(value, 0, 1)
+		if next_volume == volume:
+			return
+		volume = next_volume
+		var volume_db := linear_to_db(maxf(0.00001, volume))
 		for stream in streams.values():
-			stream.player.volume_db = linear_to_db(maxf(0.00001, volume))
+			stream.player.volume_db = volume_db
 
 func _ready() -> void:
+	set_process(not streams.is_empty())
 	bus_name = "TeamVoice_" + str(get_instance_id())
 	AudioServer.add_bus()
 	var index := AudioServer.bus_count - 1
@@ -36,10 +44,12 @@ func bind(owner_game) -> void:
 func valid_context() -> bool:
 	if game == null:
 		return true
-	var current: String = str(game.online) + "/" + game.network_round_id + "/" + game.match_mode
-	if current != context:
+	if not context_initialized or context_online != game.online or context_round_id != game.network_round_id or context_match_mode != game.match_mode:
 		reset()
-		context = current
+		context_online = game.online
+		context_round_id = game.network_round_id
+		context_match_mode = game.match_mode
+		context_initialized = true
 	return game.online and game.running and game.match_mode == "duo" and not game.network_round_id.is_empty()
 
 func receive(sender: int, sequence: int, packet: PackedByteArray) -> void:
@@ -57,6 +67,7 @@ func receive(sender: int, sequence: int, packet: PackedByteArray) -> void:
 		player.volume_db = linear_to_db(maxf(0.00001, volume))
 		add_child(player)
 		streams[sender] = {"player": player, "jitter": Jitter.new(), "last": Time.get_ticks_msec(), "queued_frames": 0}
+		set_process(true)
 	var stream: Dictionary = streams[sender]
 	var now := Time.get_ticks_msec()
 	if stream.jitter.push(sequence, packet, now):
@@ -75,6 +86,8 @@ func remove_stream(sender: int) -> void:
 		player.stop()
 		player.queue_free()
 		streams.erase(sender)
+		if streams.is_empty():
+			set_process(false)
 
 func reset() -> void:
 	for sender in streams.keys():

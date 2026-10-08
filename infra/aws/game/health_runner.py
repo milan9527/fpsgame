@@ -22,7 +22,8 @@ if __name__ == "__main__":
     # Single-task rooms stop before replacement; let the old Redis lease expire.
     time.sleep(15)
     process = subprocess.Popen(
-        ["/app/IronMeridian", "--headless", "--main-pack", "/app/IronMeridian.pck", "--", "--server"],
+        ["/app/IronMeridian", "--headless", "--main-pack", "/app/IronMeridian.pck",
+         "--script", "/app/network_bootstrap.gd", "--", "--server"],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
     signal.signal(signal.SIGTERM, lambda *_: process.terminate())
     signal.signal(signal.SIGINT, lambda *_: process.terminate())

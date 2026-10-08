@@ -1,0 +1,30 @@
+extends SceneTree
+
+func _initialize() -> void:
+	var source := FileAccess.get_file_as_string("res://scripts/game.gd")
+	var start := source.find("\t# Most snapshots retain all grenades.")
+	var end := source.find('\n@rpc', start)
+	assert(start >= 0 and end > start)
+	var script := GDScript.new()
+	script.source_code = "extends Node\nvar grenades = {}\nfunc retire(data):\n" + source.substr(start, end - start)
+	assert(script.reload() == OK)
+	var probe = script.new()
+	probe.retire({"ids": []})
+	var first := Node.new()
+	var survivor := Node.new()
+	var last := Node.new()
+	probe.grenades = {1: first, 2: survivor, 3: last}
+	for sample in range(120):
+		probe.retire({"ids": [1, 2, 3]})
+	assert(probe.grenades.size() == 3)
+	assert(not first.is_queued_for_deletion() and not survivor.is_queued_for_deletion())
+	probe.retire({"ids": [2]})
+	assert(first.is_queued_for_deletion() and last.is_queued_for_deletion())
+	assert(probe.grenades.size() == 1 and probe.grenades[2] == survivor)
+	assert(not survivor.is_queued_for_deletion())
+	probe.retire({"ids": []})
+	assert(probe.grenades.is_empty() and survivor.is_queued_for_deletion())
+	probe.retire({"ids": []})
+	probe.free()
+	print("GRENADE_SNAPSHOT_RETIREMENT_PASS stable simultaneous_removal survivor empty")
+	quit()

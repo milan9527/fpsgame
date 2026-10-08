@@ -47,7 +47,19 @@ func run() -> void:
 			assert(actor.gun_model.scene_file_path == actor.WEAPON_MODELS[weapon])
 			assert(remote.third_person_gun.scene_file_path == actor.WEAPON_MODELS[weapon])
 			assert(remote.gun_model == null and remote.first_person.model == null, "Remote actors allocate no hidden first-person gun")
-			assert(actor.gun_model.find_children("*", "MeshInstance3D", true, false).size() == 4, "Static parts are merged; magazine and hidden stocks remain separate")
+			assert(actor.gun.find_children("ScopeLens", "MeshInstance3D", false, false).size() == (1 if weapon == 2 else 0), "Only the marksman carries an ocular surface")
+			if weapon == 2:
+				assert(actor.first_person.scope_lens.visible)
+				assert(actor.first_person.scope_lens.position.distance_to(actor.first_person.sight_position) < 0.001, "Lens stays centered on the imported optic")
+			for stock in actor.gun_model.find_children("*Butt*", "MeshInstance3D", true, false):
+				assert(stock.visible, "First-person stocks must remain visible")
+			var weapon_meshes: Array = actor.gun_model.find_children("*", "MeshInstance3D", true, false)
+			var replacement = actor.first_person.replacement_magazine
+			assert(replacement != null and replacement in weapon_meshes,
+				"Reload replacement remains attached to the weapon")
+			assert(not replacement.visible, "Spare magazine stays hidden during hip fire and aiming")
+			weapon_meshes.erase(replacement)
+			assert(weapon_meshes.size() == 4, "Static parts are merged; magazine and visible stocks remain separate")
 			var sight = actor.gun_model.find_child("SightAnchor", true, false)
 			var muzzle = actor.gun_model.find_child("MuzzleAnchor", true, false)
 			assert(sight != null and muzzle != null)
@@ -75,6 +87,13 @@ func run() -> void:
 		remote.render_frame(0.02, false, false, false)
 	assert(muzzle_positions[2] < muzzle_positions[1] and muzzle_positions[1] < muzzle_positions[0], "Distinct barrel lengths drive muzzle effects")
 	assert(actor.total_ammunition() == 163, "Weapon switching preserves total ammunition")
+	actor.throw_left = 0.5
+	actor.render_frame(1.0 / 60, false, true, false)
+	assert(not actor.first_person.scope_lens.visible, "Hidden weapon must not leave floating glass during throw")
+	actor.throw_left = 0
+	actor.switch_weapon(0)
+	actor.render_frame(1.0 / 60, false, true, false)
+	assert(actor.gun.find_children("ScopeLens", "MeshInstance3D", false, false).is_empty(), "Switching away removes ocular surface")
 	print("WEAPON_VISUALS_RULES_PASS models=3 local=ok remote_snapshot=ok anchors=ok optic_alignment=ok zoom=ok bone_attachment=ok bounded_meshes=ok inventory_unchanged=ok")
 	game.queue_free()
 	await process_frame

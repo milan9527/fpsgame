@@ -122,7 +122,7 @@ def client(args):
     ) + " --relay"
     command = ["ssh", "-T", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=15",
                "-o", "ServerAliveCountMax=3", "-p", str(args.ssh_port),
-               "-L", f"127.0.0.1:{args.api_port}:127.0.0.1:8000"]
+               "-L", f"127.0.0.1:{args.api_port}:127.0.0.1:{args.remote_api_port}"]
     if args.identity:
         command += ["-i", args.identity]
     if args.known_hosts:
@@ -209,6 +209,8 @@ def main():
     parser.add_argument("-i", "--identity", help="SSH private key path (stays on your computer)")
     parser.add_argument("--ssh-port", type=int, default=22)
     parser.add_argument("--api-port", type=int, default=8000)
+    parser.add_argument("--remote-api-port", type=int, default=8000,
+                        help="API port on the SSH server (current development server: 8002)")
     parser.add_argument("--solo-port", type=int, default=27015, help="Local UDP port; normal game requires 27015")
     parser.add_argument("--duo-port", type=int, default=27022, help="Local UDP port; normal game requires 27022")
     parser.add_argument("--known-hosts", help="Optional existing SSH known_hosts file")

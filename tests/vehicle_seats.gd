@@ -45,17 +45,45 @@ func run() -> void:
 	var b = actor_at(12, Vector3(2, 0, 0.1))
 	var far = actor_at(13, Vector3(20, 0, 0))
 	await sync_space()
+	var fleet = load("res://scripts/vehicle_fleet.gd").new()
+	assert(fleet.nearest_seat_index(a) == -1)
+	fleet.vehicles[1] = car
+	assert(fleet.nearest_seat_index(a) == 0)
+	assert(fleet.nearest_seat_index(b) == 1)
+	assert(fleet.nearest_seat_index(far) == -1)
+	# Door reuse must follow each transform immediately, without waiting for
+	# another frame or retaining a previous search's coordinates.
+	for heading in [-1.0, 0.7, PI]:
+		car.rotation.y = heading
+		for subject in [a, b, far]:
+			for seat in range(2):
+				var door: Vector3 = car.to_global(car.seats.DOORS[seat])
+				assert(car.seats.can_enter(subject, seat, door) == car.seats.can_enter(subject, seat))
+			var choices: Array = fleet.candidates(subject)
+			assert(fleet.nearest_seat_index(subject) == (-1 if choices.is_empty() else choices[0].seat))
+	car.rotation.y = 0
 	assert(not car.seats.enter(far, 0))
 	assert(not car.seats.enter(a, 2))
 	a.downed = true
+	assert(fleet.nearest_seat_index(a) == -1)
+	assert(fleet.candidates(a).is_empty())
 	assert(not car.seats.enter(a, 0))
 	a.downed = false
+	a.alive = false
+	assert(fleet.nearest_seat_index(a) == -1 and fleet.candidates(a).is_empty())
+	a.alive = true
+	a.revive_target = b.actor_id
+	assert(fleet.nearest_seat_index(a) == -1 and fleet.candidates(a).is_empty())
+	a.revive_target = 0
+	assert(fleet.nearest_seat_index(a) == 0 and not fleet.candidates(a).is_empty())
 	car.speed = 3
+	assert(fleet.nearest_seat_index(a) == -1)
 	assert(not car.seats.enter(a, 0))
 	car.speed = 0
 	var wall := obstacle(Vector3(-1.8, 1, 0.1), Vector3(0.1, 2, 1))
 	await sync_space()
 	assert(not car.seats.enter(a, 0), "Entry must not cross walls")
+	assert(fleet.nearest_seat_index(a) == -1, "HUD must respect entry walls")
 	wall.queue_free()
 	await process_frame
 	await sync_space()
@@ -66,6 +94,8 @@ func run() -> void:
 	var ammo: int = a.total_ammunition()
 	var meds: int = a.medkits
 	assert(car.seats.enter(a, 0))
+	assert(fleet.nearest_seat_index(a) == -1, "Seated actors have no entry prompt")
+	assert(fleet.nearest_seat_index(b) == 1, "Occupied driver seat must not hide passenger prompt")
 	assert(a.is_seated() and a.vehicle_seat == 0 and a.collision_mask == 0 and a.collision_layer == 2)
 	assert(a.reload_left == 0 and a.heal_left == 0 and a.total_ammunition() == ammo and a.medkits == meds)
 	var initial_epoch: int = car.seats.epoch

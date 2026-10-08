@@ -2,6 +2,31 @@ extends SceneTree
 func _initialize() -> void:
 	call_deferred("run")
 func run() -> void:
+	var hazards_script = load("res://scripts/bot_hazards.gd")
+	var clearance_probe = hazards_script.new()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 44820260929
+	for sample in range(2000):
+		var at := Vector3(rng.randf_range(-500, 500), rng.randf_range(-5, 5), rng.randf_range(-500, 500))
+		var threats: Array = []
+		for threat_index in range(sample % 5):
+			threats.append(at + Vector3(rng.randf_range(-14, 14), rng.randf_range(-2, 2), rng.randf_range(-14, 14)))
+		assert(clearance_probe.clearance(at, threats) == reference_clearance(at, threats))
+	for reach in [0.0, 0.499999, 0.5, 8.999999, 9.0, 10.0, 10.000001, INF, NAN]:
+		var threats: Array = [Vector3(reach, 1.2, 0)]
+		assert(clearance_probe.clearance(Vector3.ZERO, threats) == reference_clearance(Vector3.ZERO, threats))
+	print("HAZARD_CLEARANCE_EQUIVALENCE_PASS randomized=2000 boundaries=9")
+	assert(hazards_script.search_offsets.size() == 24)
+	for sample in range(100):
+		var origin := Vector3(sample * 0.73 - 36, sample * 0.013, sample * -1.17 + 60)
+		var offset_index := 0
+		for radius in [6.0, 10.0]:
+			for index in range(12):
+				var angle := index * TAU / 12
+				var original: Vector3 = origin + Vector3(cos(angle), 0, sin(angle)) * radius
+				assert(original == origin + hazards_script.search_offsets[offset_index], "Cached candidates retain exact positions and order")
+				offset_index += 1
+	print("HAZARD_CANDIDATE_EQUIVALENCE_PASS positions=2400")
 	var game = load("res://scripts/game.gd").new()
 	root.add_child(game)
 	game.local_profile = null
@@ -59,6 +84,25 @@ func run() -> void:
 	escape = hazard.select(game, actor, 1)
 	assert(escape.is_finite() and hazard.planned[100] == grenade.position, "Moving threats invalidate a cached route")
 	assert(Vector2(escape.x, escape.z).length() <= game.zone - 1)
+	for scan in range(3):
+		assert(hazard.select(game, actor, 1) == escape, "Repeated scans retain the same route")
+		assert(hazard.tracked == [100, 101], "Scratch buffers must not erase tracked IDs")
+	# Force the same search after the candidate list has been sorted. Reused
+	# dictionaries must not alias another slot or retain a previous score.
+	var pool_size: int = hazard.candidate_pool.size()
+	for search in range(3):
+		hazard.point = Vector3.INF
+		assert(hazard.select(game, actor, 1) == escape, "Rebuilt searches retain the same route")
+		assert(hazard.candidate_pool.size() == pool_size, "Identical searches reuse candidate storage")
+		for index in range(hazard.candidates.size()):
+			for other in range(index):
+				assert(not is_same(hazard.candidates[index], hazard.candidates[other]), "Candidate slots must be distinct")
+	second.kind = 1
+	assert(hazard.select(game, actor, 1).is_finite())
+	assert(hazard.tracked == [100] and not hazard.planned.has(101), "Removed threats cannot linger in reused buffers")
+	second.kind = 0
+	escape = hazard.select(game, actor, 1)
+	assert(escape.is_finite() and hazard.tracked == [100, 101], "Threat buffers can grow again after shrinking")
 	actor.navigator.utilities.smoke_hold = 8
 	actor.navigator.goal = Vector3(0, 0, -20)
 	actor.navigator.repath_left = 10
@@ -83,5 +127,17 @@ func run() -> void:
 	assert(actor.alive and actor.health == 100, "Actor physically escaped the blast without invulnerability")
 	assert(actor.position.distance_to(start) > 6)
 	assert(not hazard.select(game, actor, 1).is_finite(), "Escape state clears after detonation")
+	assert(hazard.tracked.is_empty() and hazard.planned.is_empty(), "No-grenade scans release all cached threats")
 	print("BOT_HAZARDS_RULES_PASS smoke_ignored=ok detection_range=ok blast_cover=ok navigation=ok zone_limit=ok hold_interrupt=ok physical_escape=ok damage=zero cleanup=ok")
 	game.request_quit()
+
+func reference_clearance(at: Vector3, threats: Array) -> float:
+	var margin_squared := INF
+	var sample := at + Vector3.UP * 1.2
+	var nearest := Vector3.INF
+	for threat in threats:
+		var distance_squared := sample.distance_squared_to(threat)
+		if distance_squared < margin_squared:
+			margin_squared = distance_squared
+			nearest = threat
+	return sample.distance_to(nearest) if margin_squared < INF else INF

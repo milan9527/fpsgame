@@ -1,6 +1,8 @@
 """Publish a verified Android APK through the existing private S3/OAC site."""
 import hashlib
 import json
+import os
+import re
 from pathlib import Path
 import time
 import uuid
@@ -11,24 +13,46 @@ import httpx
 from test_aws_public import Forms
 
 ROOT = Path(__file__).resolve().parents[1]
+OUT = Path(os.environ.get("ANDROID_BUILD_DIR", str(ROOT / "artifacts/android-build"))).resolve()
 
 
 def verify_build(build):
-    network = json.loads((ROOT / "artifacts/android-build/source-network.json").read_text())
-    native = json.loads((ROOT / "artifacts/android-build/devicefarm-result.json").read_text())
-    memory = json.loads((ROOT / "artifacts/android-build/login-memory-auth.json").read_text())
+    network = json.loads((OUT / "source-network.json").read_text())
+    native = json.loads((OUT / "devicefarm-result.json").read_text())
+    memory = json.loads((OUT / "login-memory-auth.json").read_text())
     assert memory["status"] == "passed" and memory["apk_sha256"] == build["sha256"]
     assert network["apk_sha256"] == build["sha256"]
     for evidence, marker in [("login-memory-test.log", "REMEMBERED_LOGIN_PASS"),
                              ("login-memory-ui.log", "LOGIN_MEMORY_UI_PASS"),
                              ("aim-alignment.log", "AIM_ALIGNMENT_PASS"),
                              ("gyro-aim.log", "GYRO_AIM_PASS")]:
-        assert marker in (ROOT / "artifacts/android-build" / evidence).read_text()
+        assert marker in (OUT / evidence).read_text()
     assert network["status"] == "passed" and set(network["checks"]) == {"solo", "duo"}
-    native_build = json.loads((ROOT / "artifacts/android-build/devicefarm.json").read_text())
+    native_build = json.loads((OUT / "devicefarm.json").read_text())
     assert native_build["apk_sha256"] == build["sha256"] and native_build["run"] == native["arn"]
     assert native["result"] == "PASSED", "Native Device Farm test must pass"
-    assert "MOBILE_CONTROLS_PASS" in (ROOT / "artifacts/android-build/final-touch-test.log").read_text()
+    walkthrough = json.loads((OUT / "native-walkthrough-reviewed.json").read_text())
+    walkthrough_run = json.loads((OUT / "native-walkthrough-run.json").read_text())
+    assert walkthrough["apk_sha256"] == build["sha256"] == walkthrough_run["apk_sha256"]
+    assert walkthrough["run"] == walkthrough_run["run"]
+    assert walkthrough["status"] == "passed" and walkthrough["result"] == "PASSED"
+    assert {"03-fire.png", "04-look.png"} <= set(walkthrough["reviewed_screenshots"])
+    performance_files = list((OUT / "native-walkthrough-artifacts").rglob("gameplay-performance.json"))
+    assert performance_files, "Measured native gameplay performance is required"
+    for performance_file in performance_files:
+        samples = json.loads(performance_file.read_text())["samples"]
+        assert len(samples) >= 4, "Insufficient native gameplay samples"
+        assert min(sample["fps"] for sample in samples) >= 24, "Native gameplay below 24 FPS"
+        assert max(sample["p95_ms"] for sample in samples) <= 75, "Native gameplay frame-time spikes"
+        # Validate the measured section, after startup/menu telemetry, directly
+        # from the archived native logs as well as the reviewed report.
+        native_log = performance_file.with_name("native-walkthrough.logcat").read_text()
+        states = re.findall(r"ANDROID_GAMEPLAY phase=(\w+) alive=(\w+)", native_log)
+        measured_states = states[-len(samples):]
+        assert len(measured_states) == len(samples) and all(
+            phase == "live" and alive == "true" for phase, alive in measured_states
+        ), "Measured samples must represent a living player in combat"
+    assert "MOBILE_CONTROLS_PASS" in (OUT / "final-touch-test.log").read_text()
     assert hashlib.sha256((ROOT / "client/scripts/mobile_controls.gd").read_bytes()).hexdigest() == build["touch_source_sha256"]
     assert hashlib.sha256((ROOT / "client/scripts/gyro_aim.gd").read_bytes()).hexdigest() == build["gyro_source_sha256"]
     import subprocess
@@ -37,7 +61,7 @@ def verify_build(build):
 
 
 def main():
-    build = json.loads((ROOT / "artifacts/android-build/build.json").read_text())
+    build = json.loads((OUT / "build.json").read_text())
     verify_build(build)
     archive = Path(build["apk"])
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == build["sha256"]
@@ -87,7 +111,7 @@ def main():
     report = {"status": "passed", "website": base, "download": base + "/" + key,
               "sha256": build["sha256"], "public_download_matches_tested_archive": True,
               "website_has_login_form": False}
-    (ROOT / "artifacts/android-build/publication.json").write_text(json.dumps(report, indent=2) + "\n")
+    (OUT / "publication.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
 
 

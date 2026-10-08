@@ -25,6 +25,10 @@ func _ready() -> void:
 	close.text = "RETURN TO OPERATION"
 	close.pressed.connect(func(): close_requested.emit())
 	add_child(close)
+	visibility_changed.connect(func():
+		if is_visible_in_tree():
+			queue_redraw()
+	)
 	hide()
 
 func world_to_map(point: Vector2) -> Vector2:
@@ -46,7 +50,10 @@ func refresh(at: Vector3, yaw: float, zone: float, remaining: float, circle: Dic
 	zone_radius = zone
 	zone_info = circle
 	time_left = remaining
-	queue_redraw()
+	# Keep navigation state current for the HUD while the full map is closed.
+	# Opening the map invalidates it once through visibility_changed.
+	if is_visible_in_tree():
+		queue_redraw()
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and MAP_RECT.has_point(event.position):

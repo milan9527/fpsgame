@@ -74,6 +74,8 @@ func run() -> void:
 	grenade = fixture(game, 100, Vector3(0, 0.2, -3), 1)
 	grenade.fuse = 0.2
 	await sync_physics()
+	assert(game.explosion_visible(grenade.position, exposed), "Open blast sample is visible")
+	assert(not game.explosion_visible(grenade.position, covered), "All shielded samples remain invisible")
 	game.advance_grenades(0.1)
 	assert(game.grenades.has(100) and exposed.health == 100, "Fuse does not explode early")
 	game.advance_grenades(0.11)
@@ -89,6 +91,7 @@ func run() -> void:
 	await sync_physics()
 	var exposure: float = game.explosion_exposure(Vector3(0, 0.16, 0), partial)
 	assert(exposure > 0 and exposure < 1, "Partial cover reduces exposure")
+	assert(game.explosion_visible(Vector3(0, 0.16, 0), partial), "Awareness checks later samples behind partial cover")
 	wall.queue_free()
 	await sync_physics()
 	# Preserve kill attribution when a thrower disconnects before detonation.

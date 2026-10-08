@@ -24,19 +24,24 @@ func steer(actor, world, destination: Vector3, dt: float, goal_tolerance := 1.5)
 	jump_left = maxf(0, jump_left - dt)
 	if previous_position.is_finite() and not finished:
 		var displacement: Vector3 = actor.position - previous_position
-		stuck_time = stuck_time + dt if Vector2(displacement.x, displacement.z).length() < 0.012 else 0.0
+		stuck_time = stuck_time + dt if Vector2(displacement.x, displacement.z).length_squared() < 0.012 * 0.012 else 0.0
 	previous_position = actor.position
-	if repath_left <= 0 and (goal.distance_to(destination) > goal_tolerance or path.is_empty() or stuck_time > 1.2):
+	# Compare squared distances without computing roots for every bot tick.
+	# Retain the existing comparison behavior for negative tolerances.
+	if repath_left <= 0 and (goal_tolerance < 0 or goal.distance_squared_to(destination) > goal_tolerance * goal_tolerance or path.is_empty() or stuck_time > 1.2):
 		goal = destination
 		var projected: Vector3 = world.navigation_point(destination)
 		path = NavigationServer3D.map_get_path(world.get_world_3d().navigation_map, actor.position, projected, true)
 		index = 0
 		repaths += 1
 		repath_left = 0.6 + float(absi(actor.actor_id) % 5) * 0.07
-		reachable = not path.is_empty() and path[-1].distance_to(projected) < 1
+		reachable = not path.is_empty() and path[-1].distance_squared_to(projected) < 1
 	while index < path.size():
 		var offset: Vector3 = path[index] - actor.position
-		if Vector2(offset.x, offset.z).length() > 0.55:
+		# Navigation projection already offsets destinations on slopes. Keep the
+		# final waypoint tighter than intermediate corners for precise goals.
+		var waypoint_tolerance := minf(0.55, goal_tolerance * 0.5) if index == path.size() - 1 else 0.55
+		if waypoint_tolerance < 0 or Vector2(offset.x, offset.z).length_squared() > waypoint_tolerance * waypoint_tolerance:
 			break
 		index += 1
 	finished = index >= path.size()

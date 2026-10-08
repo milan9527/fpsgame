@@ -19,6 +19,7 @@ var last_input := 0
 var last_tick := 0
 
 func _ready() -> void:
+	set_process(false)
 	bus_name = "Microphone_" + str(get_instance_id())
 	AudioServer.add_bus()
 	var index := AudioServer.bus_count - 1
@@ -42,6 +43,7 @@ func set_activity(send: bool, monitor: bool) -> void:
 		return
 	transmitting = send
 	monitoring = monitor
+	set_process(transmitting or monitoring)
 	peak = 0
 	clipped = false
 	last_signal = 0
@@ -79,15 +81,24 @@ func feed(frames: PackedVector2Array) -> void:
 		last_signal = 0
 		return
 	var adjusted := PackedVector2Array()
+	# The input count is known; allocate once rather than growing per sample.
+	if transmitting:
+		adjusted.resize(frames.size())
 	last_input = Time.get_ticks_msec()
 	peak = 0
 	clipped = false
-	for frame in frames:
+	# Gain is constant for this synchronous buffer. Monitoring needs only the
+	# meter, so it must not allocate/fill the resampler's stereo input.
+	var buffer_gain := clampf(gain, 0.25, 4.0)
+	for frame_index in range(frames.size()):
+		var frame := frames[frame_index]
 		var value := (frame.x + frame.y) * 0.5
-		value = value * clampf(gain, 0.25, 4.0) if is_finite(value) else 0.0
-		peak = maxf(peak, absf(value))
-		clipped = clipped or absf(value) >= 0.99
-		adjusted.append(Vector2.ONE * clampf(value, -1.0, 1.0))
+		value = value * buffer_gain if is_finite(value) else 0.0
+		var magnitude := absf(value)
+		peak = maxf(peak, magnitude)
+		clipped = clipped or magnitude >= 0.99
+		if transmitting:
+			adjusted[frame_index] = Vector2.ONE * clampf(value, -1.0, 1.0)
 	peak = minf(peak, 1.0)
 	if peak > 0.005:
 		last_signal = Time.get_ticks_msec()

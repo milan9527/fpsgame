@@ -8,8 +8,26 @@ var fuse := 2.6
 var target_position := Vector3.ZERO
 const RADIUS := 9.0
 const MAX_DAMAGE := 180.0
+static var _physics_material: PhysicsMaterial
+static var _sphere: SphereShape3D
+static var _models: Array[PackedScene] = []
+
+static func warm_resources() -> void:
+	if _physics_material != null:
+		return
+	_physics_material = PhysicsMaterial.new()
+	_physics_material.bounce = 0.48
+	_physics_material.friction = 0.7
+	_sphere = SphereShape3D.new()
+	_sphere.radius = 0.12
+	for path in ["res://assets/grenade.glb", "res://assets/smoke_grenade.glb"]:
+		_models.append(load(path) as PackedScene if ResourceLoader.exists(path) else null)
 
 func _ready() -> void:
+	# Authority uses rigid-body physics; only network replicas interpolate
+	# during rendered frames. Avoid scheduling an empty callback per grenade.
+	set_process(not authoritative)
+	warm_resources()
 	mass = 0.4
 	collision_layer = 8 if authoritative else 0
 	collision_mask = 1 | 4 if authoritative else 0
@@ -17,18 +35,14 @@ func _ready() -> void:
 	continuous_cd = true
 	linear_damp = 0.35
 	angular_damp = 0.4
-	var physics_material := PhysicsMaterial.new()
-	physics_material.bounce = 0.48
-	physics_material.friction = 0.7
-	physics_material_override = physics_material
+	# These resources are immutable; each body and collider remains independent.
+	physics_material_override = _physics_material
 	var collider := CollisionShape3D.new()
-	var sphere := SphereShape3D.new()
-	sphere.radius = 0.12
-	collider.shape = sphere
+	collider.shape = _sphere
 	add_child(collider)
-	var model_path := "res://assets/smoke_grenade.glb" if kind == 1 else "res://assets/grenade.glb"
-	if ResourceLoader.exists(model_path):
-		add_child(load(model_path).instantiate())
+	var model_scene := _models[1 if kind == 1 else 0]
+	if model_scene != null:
+		add_child(model_scene.instantiate())
 		return
 	var mesh := MeshInstance3D.new()
 	var model := SphereMesh.new()

@@ -10,7 +10,7 @@ func run() -> void:
 	var buses := AudioServer.bus_count
 	var source := Capture.new()
 	root.add_child(source)
-	source.set_process(false)
+	assert(not source.is_processing(), "Idle capture must not schedule frame callbacks")
 	source.packet_ready.connect(func(sequence, packet): packets.append([sequence, packet]))
 	assert(not source.transmitting and not source.player.playing)
 	assert(AudioServer.is_bus_mute(AudioServer.get_bus_index(source.bus_name)))
@@ -58,6 +58,21 @@ func run() -> void:
 	assert(source.peak == 0 and not source.clipped)
 	source.reset_round()
 	assert(not source.monitoring and source.peak == 0)
+	# Exercise public mode transitions as well as synthetic packet injection.
+	# A generated stream exercises player lifecycle without microphone hardware.
+	source.player.stream = AudioStreamGenerator.new()
+	source.set_activity(false, true)
+	assert(source.is_processing() and source.monitoring and not source.transmitting)
+	source.feed(loud)
+	assert(packets.size() == 8 and source.peak > 0)
+	source.set_activity(true, false)
+	assert(source.is_processing() and source.transmitting and not source.monitoring)
+	source.feed(frames)
+	assert(packets.size() == 12 and packets[8][0] == 0)
+	source.set_activity(true, false)
+	assert(source.is_processing(), "Repeated PTT state must keep capture active")
+	source.reset_round()
+	assert(not source.is_processing() and not source.player.playing)
 	source.queue_free()
 	await process_frame
 	assert(AudioServer.bus_count == buses)

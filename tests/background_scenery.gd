@@ -13,6 +13,12 @@ func run() -> void:
 	# Production scenery remains non-colliding and does not affect gameplay.
 	for node in world.get_children():
 		if not node.has_meta("ridge"): continue
+		var arrays: Array = node.mesh.surface_get_arrays(0)
+		var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		assert(not normals.is_empty())
+		for normal in normals:
+			assert(normal.is_finite() and absf(normal.length() - 1.0) < 0.002 and normal.y > 0.0,
+				"Ridge normals must remain finite, unit length and upward-facing")
 		var body := StaticBody3D.new()
 		body.collision_layer = 1 << 24
 		body.collision_mask = 0
@@ -36,12 +42,15 @@ func run() -> void:
 		var hit: Dictionary = world.get_world_3d().direct_space_state.intersect_ray(ray)
 		var surface := -0.2
 		if not hit.is_empty(): surface = maxf(surface, hit.position.y)
-		var burial := 0.05 if scale < 0.5 else 0.15
-		if scale < 0.5: seedlings += 1
-		var root_height := position.y - 4.5 * scale + burial
-		var error := absf(root_height - surface)
+		# Stunted adult trees now overlap seedling sizes. Validate both supported
+		# root burial depths against the rendered terrain, independently of size.
+		if scale < 0.4: seedlings += 1
+		var root_height := position.y - 4.5 * scale
+		var error := minf(absf(root_height + 0.05 - surface),
+			absf(root_height + 0.15 - surface))
 		maximum_error = maxf(maximum_error, error)
-		assert(error < 0.015, "Tree root does not match rendered terrain triangles")
+		assert(error < 0.015, "Tree %d scale=%.4f root error=%.6f exceeds terrain tolerance" %
+			[index, scale, error])
 	assert(ridge_count == 18 and seedlings > 0)
 	print("BACKGROUND_SCENERY_PASS ridges=%d trees=%d seedlings=%d max_root_error=%.6f" %
 		[ridge_count, grove.multimesh.instance_count, seedlings, maximum_error])

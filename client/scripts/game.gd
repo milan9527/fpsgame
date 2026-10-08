@@ -25,6 +25,105 @@ var local_profile
 var local_outbox: Array[Dictionary] = []
 var local_recorded_id := ""
 var actors: Dictionary = {}
+var android_profile_enabled := "--profile-game" in OS.get_cmdline_user_args()
+var android_section_started := 0
+var android_section_totals: Dictionary = {}
+var android_profile_due := 0
+var android_slow_sections: Array[Dictionary] = []
+var android_slow_sections_omitted := 0
+
+func record_profile_section(section: String, started: int, ended: int = -1) -> void:
+	if not android_profile_enabled:
+		return
+	if ended < 0:
+		ended = Time.get_ticks_usec()
+	var milliseconds := (ended - started) / 1000.0
+	# Dictionary.get evaluates its default even when the key already exists.
+	# Allocate the accumulator only once per section/reporting window.
+	if not android_section_totals.has(section):
+		android_section_totals[section] = [0.0, 0, 0.0]
+	var sample: Array = android_section_totals[section]
+	sample[0] += milliseconds
+	sample[1] += 1
+	sample[2] = maxf(sample[2], milliseconds)
+	record_slow_section(section, milliseconds, ended)
+
+func flush_profile_sections() -> void:
+	if not android_profile_enabled or Time.get_ticks_msec() < android_profile_due:
+		return
+	android_profile_due = Time.get_ticks_msec() + 5000
+	for section in android_section_totals:
+		var sample: Array = android_section_totals[section]
+		print("ANDROID_SECTION name=", section, " mean_ms=", snappedf(sample[0] / sample[1], 0.01),
+			" peak_ms=", snappedf(sample[2], 0.01), " count=", sample[1])
+	android_section_totals.clear()
+	for sample in android_slow_sections:
+		print("ANDROID_SLOW_SECTION section=", sample.section,
+			" ms=", snappedf(sample.ms, 0.1), " end_ticks_usec=", sample.end_ticks_usec)
+	if android_slow_sections_omitted > 0:
+		print("ANDROID_SLOW_SECTION_OMITTED count=", android_slow_sections_omitted)
+	android_slow_sections.clear()
+	android_slow_sections_omitted = 0
+
+func record_slow_section(section: String, milliseconds: float, ended_usec: int) -> void:
+	if not android_profile_enabled or milliseconds < 50.0:
+		return
+	# Keep log I/O out of measured sections and bound diagnostic work during
+	# sustained stalls. Emit timestamps in the same clock as render stalls.
+	if android_slow_sections.size() >= 8:
+		android_slow_sections_omitted += 1
+		return
+	android_slow_sections.append({"section": section, "ms": milliseconds,
+		"end_ticks_usec": ended_usec})
+
+func android_profile_section(section: String) -> void:
+	if not android_profile_enabled:
+		return
+	var now := Time.get_ticks_usec()
+	if android_section_started != 0:
+		record_profile_section(section, android_section_started, now)
+	android_section_started = now
+
+var android_last_damage := "none"
+
+func android_gameplay_state() -> String:
+	var actor = actors.get(local_id)
+	var state := "phase=%s alive=%s" % [phase, actor != null and actor.alive and not actor.downed]
+	if actor != null:
+		state += " health=%.1f armor=%.1f ammo=%d reserve=%d position=%s" % [actor.health, actor.armor, actor.ammo, actor.reserve, actor.position]
+	state += " last_damage=" + android_last_damage
+	if actor != null:
+		# Sample only when emitting gameplay diagnostics. The last physics
+		# slide distinguishes blocked movement from missing touch commands.
+		var contacts: Array = []
+		for index in range(actor.get_slide_collision_count()):
+			var contact = actor.get_slide_collision(index)
+			var collider = contact.get_collider()
+			contacts.append({"collider": str(collider.get_path()) if collider is Node else str(contact.get_collider_id()),
+				"normal": [contact.get_normal().x, contact.get_normal().y, contact.get_normal().z]})
+		var actual: Vector3 = actor.get_real_velocity()
+		state += " movement_json=" + JSON.stringify({"input": [actor.move_input.x, actor.move_input.y],
+			"velocity": [actual.x, actual.y, actual.z], "grounded": actor.grounded,
+			"seated": actor.is_seated(), "contacts": contacts})
+	return state
+
+func android_route_state() -> String:
+	# Emit independently: collision paths can push gameplay logs beyond Android's
+	# per-message limit and truncate the JSON required by the touch driver.
+	var actor = actors.get(local_id)
+	if actor == null:
+		return JSON.stringify({"alive": false})
+	var walls: Array = []
+	for index in range(mini(actor.get_slide_collision_count(), 8)):
+		var normal: Vector3 = actor.get_slide_collision(index).get_normal()
+		if absf(normal.y) < 0.25:
+			walls.append([normal.x, normal.z])
+	var actual: Vector3 = actor.get_real_velocity()
+	# Expose the existing player-visible warning to the diagnostic touch driver.
+	# Do not provide hidden grenade positions/fuses or change combat behavior.
+	var frag_warning: bool = ui != null and ui.grenade_warning_distance < 9.0
+	return JSON.stringify({"x": actor.position.x, "z": actor.position.z, "yaw": actor.yaw, "center_x": zone_center.x, "center_z": zone_center.y, "radius": zone, "alive": actor.alive and not actor.downed, "health": actor.health, "medkits": actor.medkits, "heal_left": actor.heal_left, "reload_left": actor.reload_left, "ammo": actor.ammo, "reserve": actor.reserve, "frag_warning": frag_warning, "wall_normals_xz": walls, "planar_speed": Vector2(actual.x, actual.z).length()})
+
 var vehicle_fleet = preload("res://scripts/vehicle_fleet.gd").new()
 var vehicle_frames = preload("res://scripts/vehicle_frame_pair.gd").new()
 var vehicle_replica = preload("res://scripts/vehicle_replica.gd").new()
@@ -38,6 +137,22 @@ var reconnect_grace_seconds := 0.0
 var pending: Dictionary = {}
 var participants: Dictionary = {}
 var loot: Dictionary = {}
+var supply_query := PhysicsRayQueryParameters3D.create(Vector3.ZERO, Vector3.ZERO, 5)
+# Synchronous main-thread traces can reuse parameters. Separate masks keep
+# historical cover queries independent of the current shooter's exclusions.
+var shot_query := PhysicsRayQueryParameters3D.create(Vector3.ZERO, Vector3.ZERO, 1 | 2 | 16)
+var shot_cover_query := PhysicsRayQueryParameters3D.create(Vector3.ZERO, Vector3.ZERO, 1 | 16)
+var explosion_query := PhysicsRayQueryParameters3D.create(Vector3.ZERO, Vector3.ZERO, 5)
+var grenade_spawn_query := make_grenade_spawn_query()
+
+static func make_grenade_spawn_query() -> PhysicsShapeQueryParameters3D:
+	var shape := SphereShape3D.new()
+	shape.radius = 0.13
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.collision_mask = 5
+	return query
+
 var next_loot_id := 48
 const Bindings = preload("res://scripts/control_bindings.gd")
 var bindings = Bindings.new()
@@ -57,6 +172,7 @@ var rescue = preload("res://scripts/rescue_rules.gd").new()
 var teams = preload("res://scripts/team_rules.gd").new()
 var network_status = preload("res://scripts/network_status.gd").new()
 var network_sample_due := 0
+var network_display_due := 0
 var last_eliminated_name := ""
 var dedicated := false
 var online := false
@@ -153,14 +269,52 @@ func _ready() -> void:
 	server_key = OS.get_environment("SERVER_SECRET")
 	setup_input()
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	var loading: CanvasLayer
+	if OS.has_feature("android"):
+		preload("res://scripts/mobile_performance.gd").configure_window(get_window())
+		loading = CanvasLayer.new()
+		loading.layer = 100
+		add_child(loading)
+		var background := ColorRect.new()
+		background.color = Color("17242e")
+		background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		loading.add_child(background)
+		var label := Label.new()
+		label.text = "IRON MERIDIAN\nLoading terrain and buildings…\nFirst launch may take a moment."
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.add_theme_font_size_override("font_size", 28)
+		label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		loading.add_child(label)
+		await get_tree().process_frame
+		await get_tree().process_frame
 	world = World.new()
 	world.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(world)
+	if not world.construction_complete:
+		await world.construction_finished
+	print("ANDROID_STARTUP: world ready")
+	var mobile_profile: Node
+	if OS.has_feature("android"):
+		print("ANDROID_QUALITY ", preload("res://scripts/mobile_performance.gd").configure_world(world))
+		if android_profile_enabled and "--profile-ground-materials" in OS.get_cmdline_user_args():
+			print("ANDROID_GROUND_MATERIAL_DIAGNOSTIC ", JSON.stringify(
+				preload("res://scripts/mobile_performance.gd").profile_ground_materials(world)))
+		mobile_profile = preload("res://scripts/mobile_performance.gd").new()
+		# Shader/resource warmup stalls are not sustained gameplay GPU load.
+		mobile_profile.set_resolution_warmup(true)
+		add_child(mobile_profile)
 	lobby_camera = Camera3D.new()
 	add_child(lobby_camera)
 	lobby_camera.position = Vector3(0, 60, 80)
 	lobby_camera.look_at(Vector3.ZERO)
 	lobby_camera.current = true
+	if OS.has_feature("android"):
+		await preload("res://scripts/mobile_performance.gd").warm_world(lobby_camera, mobile_profile)
+		await preload("res://scripts/mobile_performance.gd").warm_combat(lobby_camera)
+		mobile_profile.set_resolution_warmup(false)
+		if ProjectSettings.get_setting("application/diagnostics/render_baseline", false) or "--render-baseline" in OS.get_cmdline_user_args():
+			await preload("res://scripts/mobile_performance.gd").profile_render_baseline(lobby_camera)
 	multiplayer.peer_connected.connect(peer_connected)
 	multiplayer.peer_disconnected.connect(peer_disconnected)
 	multiplayer.connected_to_server.connect(connected)
@@ -186,6 +340,9 @@ func _ready() -> void:
 		ui = Interface.new()
 		ui.bindings = bindings
 		add_child(ui)
+		if loading != null:
+			loading.queue_free()
+		print("ANDROID_STARTUP: interface ready")
 		team_voice = preload("res://scripts/team_voice.gd").new()
 		add_child(team_voice)
 		team_voice.bind(self)
@@ -481,6 +638,7 @@ func clear_actors() -> void:
 		ui.update_team(actors, local_id)
 
 func reset_round() -> void:
+	android_last_damage = "none"
 	clear_actors()
 	participants.clear()
 	events.clear()
@@ -589,6 +747,7 @@ func new_round(id: String, mode := "solo") -> void:
 	match_mode = mode
 	network_round_id = id
 	network_status.begin(Time.get_ticks_msec())
+	network_display_due = 0
 	clear_actors()
 	ui.result_label.text = ""
 	ui.show_game()
@@ -774,6 +933,14 @@ func receive_drop(actor, round_id: String, seq, kind, count) -> bool:
 	return true
 
 func _physics_process(dt: float) -> void:
+	# Keep a separate clock from _process markers. Include early-return paths
+	# (notably online prediction) and timestamp stalls for presentation alignment.
+	var started := Time.get_ticks_usec() if android_profile_enabled else 0
+	step_physics(dt)
+	if android_profile_enabled:
+		record_profile_section("physics_tick", started)
+
+func step_physics(dt: float) -> void:
 	if not running or get_tree().paused:
 		return
 	if not dedicated and actors.has(local_id):
@@ -879,29 +1046,51 @@ func _physics_process(dt: float) -> void:
 			zone_center = zone_state.center
 		world.set_zone(zone, zone_center)
 		zone_tick += dt
-		for actor in actors.values():
+		# Membership is stable during this synchronous simulation/fire/zone
+		# sequence. Reuse one snapshot instead of allocating for each pass.
+		var tick_actors := actors.values()
+		for actor in tick_actors:
+			var bot_started := Time.get_ticks_usec() if android_profile_enabled else 0
 			if actor.is_bot and training == null:
 				bot_input(actor, dt)
+			if android_profile_enabled:
+				record_profile_section("bot_input_per_actor", bot_started)
 			if dedicated and not actor.is_bot:
 				expire_held_input(actor, Time.get_ticks_msec())
-			actor.simulate(dt)
+			var simulation_started := Time.get_ticks_usec() if android_profile_enabled else 0
+			if android_profile_enabled:
+				actor.simulate(dt, record_profile_section)
+			else:
+				actor.simulate(dt)
+			var landing_started := Time.get_ticks_usec() if android_profile_enabled else 0
 			apply_landing(actor)
-		# Capture all actors at the same simulation boundary before resolving fire.
-		hit_history.record(elapsed, actors)
-		for actor in actors.values():
+			if android_profile_enabled:
+				record_profile_section("apply_landing_per_actor", landing_started)
+				record_profile_section("simulate_per_actor", simulation_started)
+		# Only the server rewinds shots; solo uses current physics poses.
+		# Capture all server actors at the same boundary before resolving fire.
+		if dedicated:
+			hit_history.record(elapsed, actors)
+		var fire_started := Time.get_ticks_usec() if android_profile_enabled else 0
+		for actor in tick_actors:
 			if actor.shooting:
 				shoot(actor)
+		if android_profile_enabled:
+			record_profile_section("fire_and_damage", fire_started)
+		var aftermath_started := Time.get_ticks_usec() if android_profile_enabled else 0
 		if zone_tick >= 1 and training == null:
 			zone_tick = 0
-			for actor in actors.values():
+			for actor in tick_actors:
 				if Vector2(actor.position.x, actor.position.z).distance_to(zone_center) > zone:
 					damage(actor, 5 + elapsed / 24, 0)
 		advance_grenades(dt)
 		rescue.update(self, dt)
 		if training != null:
 			training.update(self)
-		elif (teams.living(actors).size() <= 1 if match_mode == "duo" else alive_count() <= 1) or elapsed >= ROUND_SECONDS:
+		elif not round_has_competition() or elapsed >= ROUND_SECONDS:
 			finish_round()
+		if android_profile_enabled:
+			record_profile_section("zone_grenades_round", aftermath_started)
 	elif phase == "finished":
 		phase_time -= dt
 		if phase_time <= 0 and dedicated:
@@ -1179,17 +1368,24 @@ func bot_input(actor, dt: float) -> void:
 	actor.bot_think -= dt
 	actor.bot_patrol_left -= dt
 	actor.bot_memory_left = maxf(0, actor.bot_memory_left - dt)
+	var observed_target_id := 0
+	var observed_origin := Vector3.INF
 	if actor.bot_think <= 0:
 		actor.bot_think = rng.randf_range(0.3, 0.65)
-		var best := 70.0
+		var best_squared := 70.0 * 70.0
 		actor.target_id = 0
-		for other in actors.values():
+		for other_id in actors:
+			var other = actors[other_id]
 			if other == actor or not other.alive or teams.friendly(actor.actor_id, other.actor_id):
 				continue
-			var distance: float = actor.position.distance_to(other.position)
-			if distance < best and visible_target(actor, other):
-				best = distance
+			# Only ordering and range matter here; avoid a square root for
+			# every candidate in every bot's target scan.
+			var distance_squared: float = actor.position.distance_squared_to(other.position)
+			if distance_squared < best_squared and visible_target(actor, other):
+				best_squared = distance_squared
 				actor.target_id = other.actor_id
+				observed_target_id = other.actor_id
+				observed_origin = actor.eye_position()
 	actor.shooting = false
 	var destination: Vector3 = actor.bot_destination
 	if actors.has(actor.target_id) and actors[actor.target_id].alive:
@@ -1197,16 +1393,22 @@ func bot_input(actor, dt: float) -> void:
 		var aim: Vector3 = target.aim_position() - actor.eye_position()
 		actor.yaw = atan2(-aim.x, -aim.z)
 		actor.pitch = atan2(aim.y, Vector2(aim.x, aim.z).length())
-		actor.shooting = visible_target(actor, target)
+		# The selection above already traced this target synchronously. Turning
+		# can move a leaning actor's eye, so only reuse an identical ray origin.
+		# Keep this local: moving cover/smoke must be checked again next tick.
+		actor.shooting = (observed_target_id == actor.target_id and observed_origin == actor.eye_position()) or visible_target(actor, target)
 		if actor.shooting:
 			actor.bot_last_seen = target.position
 			actor.bot_memory_left = 3.0
 		destination = actor.bot_last_seen
-		if actor.shooting and aim.length() < 24:
+		# Movement only compares ranges; keep the aim distance squared.
+		# Occluded targets still use remembered positions without strafing.
+		var combat_distance_squared: float = aim.length_squared() if actor.shooting else INF
+		if combat_distance_squared < 24.0 * 24.0:
 			var outward: Vector3 = actor.position - target.position
 			outward.y = 0
 			outward = outward.normalized()
-			if aim.length() < 12:
+			if combat_distance_squared < 12.0 * 12.0:
 				destination = actor.position + outward * 8
 			else:
 				var side := 1.0 if sin(elapsed * 0.35 + actor.actor_id) > 0 else -1.0
@@ -1219,18 +1421,33 @@ func bot_input(actor, dt: float) -> void:
 			var angle := rng.randf() * TAU
 			var radius := sqrt(rng.randf()) * maxf(4, zone - 12)
 			actor.bot_destination = Vector3(zone_center.x + cos(angle) * radius, 0, zone_center.y + sin(angle) * radius)
-			var nearest := 35.0
-			for supply in loot.values():
-				if Vector2(supply.p.x, supply.p.z).distance_to(zone_center) > maxf(4, zone - 7):
-					continue
-				var wanted: bool = (supply.kind == 0 and actor.reserve < 45) or (supply.kind == 1 and actor.medkits == 0) or (supply.kind == 2 and actor.armor < 25) or (supply.kind == 4 and actor.smokes == 0 and actor.medkits > 0)
-				var distance: float = actor.position.distance_to(supply.p)
-				if wanted and distance < nearest:
-					nearest = distance
-					actor.bot_destination = supply.p
+			var wants_ammo: bool = actor.reserve < 45
+			var wants_medkit: bool = actor.medkits == 0
+			var wants_armor: bool = actor.armor < 25
+			var wants_smoke: bool = actor.smokes == 0 and actor.medkits > 0
+			if wants_ammo or wants_medkit or wants_armor or wants_smoke:
+				var nearest_squared := 35.0 * 35.0
+				var supply_zone_radius := maxf(4, zone - 7)
+				var supply_zone_radius_squared := supply_zone_radius * supply_zone_radius
+				var supply_scan_origin: Vector3 = actor.position
+				# This read-only scan preserves dictionary order without a values array.
+				for supply_id in loot:
+					var supply: Dictionary = loot[supply_id]
+					var wanted: bool = (supply.kind == 0 and wants_ammo) or (supply.kind == 1 and wants_medkit) or (supply.kind == 2 and wants_armor) or (supply.kind == 4 and wants_smoke)
+					if not wanted:
+						continue
+					if Vector2(supply.p.x, supply.p.z).distance_squared_to(zone_center) > supply_zone_radius_squared:
+						continue
+					var distance_squared: float = supply_scan_origin.distance_squared_to(supply.p)
+					if distance_squared < nearest_squared:
+						nearest_squared = distance_squared
+						actor.bot_destination = supply.p
 		destination = actor.bot_destination
 	var needs_cover: bool = actor.health < 65 or actor.ammo == 0 or actor.reload_left > 0
+	var cover_started := Time.get_ticks_usec() if android_profile_enabled else 0
 	var cover_point: Vector3 = actor.navigator.cover.select(actor, world, actor.bot_last_seen, zone_center, zone, needs_cover, actor.bot_memory_left > 0, dt)
+	if android_profile_enabled:
+		record_profile_section("bot_cover", cover_started)
 	actor.crouch = false
 	if cover_point.is_finite():
 		destination = cover_point
@@ -1241,7 +1458,8 @@ func bot_input(actor, dt: float) -> void:
 				actor.heal()
 			actor.reload_weapon()
 	var radial := Vector2(actor.position.x, actor.position.z) - zone_center
-	actor.sprint = radial.length() > maxf(4, zone - 7)
+	var sprint_radius := maxf(4, zone - 7)
+	actor.sprint = radial.length_squared() > sprint_radius * sprint_radius
 	if actor.sprint:
 		var safe := zone_center + radial.normalized() * maxf(0, zone - 14)
 		destination = Vector3(safe.x, 0, safe.y)
@@ -1252,12 +1470,16 @@ func bot_input(actor, dt: float) -> void:
 		var next_radius: float = zone_state.next_radius
 		var next_offset := Vector2(actor.position.x, actor.position.z) - next_center
 		var travel := maxf(0, next_offset.length() - next_radius)
-		var safe := next_center + next_offset.normalized() * maxf(0, next_radius - 7)
-		var early_transport: bool = travel > 25 and actor.navigator.driver.early_transport_available(self, actor, Vector3(safe.x, 0, safe.y))
-		if travel > 0 and (early_transport or zone_state.moving or zone_state.remaining <= travel / 4.0 + 8.0):
-			destination = Vector3(safe.x, 0, safe.y)
-			actor.sprint = true
+		if travel > 0:
+			var safe := next_center + next_offset.normalized() * maxf(0, next_radius - 7)
+			var early_transport: bool = travel > 25 and actor.navigator.driver.early_transport_available(self, actor, Vector3(safe.x, 0, safe.y))
+			if early_transport or zone_state.moving or zone_state.remaining <= travel / 4.0 + 8.0:
+				destination = Vector3(safe.x, 0, safe.y)
+				actor.sprint = true
+	var hazards_started := Time.get_ticks_usec() if android_profile_enabled else 0
 	var escape: Vector3 = actor.navigator.hazards.select(self, actor, dt)
+	if android_profile_enabled:
+		record_profile_section("bot_hazards", hazards_started)
 	if escape.is_finite():
 		destination = escape
 		actor.sprint = true
@@ -1269,19 +1491,37 @@ func bot_input(actor, dt: float) -> void:
 	if actor.sprint:
 		actor.navigator.cover.clear()
 		actor.crouch = false
-	if actor.navigator.driver.board_teammate(self, actor, not actor.shooting and actor.bot_memory_left <= 0 and not escape.is_finite()):
+	var driver_started := Time.get_ticks_usec() if android_profile_enabled else 0
+	var boarded: bool = actor.navigator.driver.board_teammate(self, actor, not actor.shooting and actor.bot_memory_left <= 0 and not escape.is_finite())
+	if boarded:
+		if android_profile_enabled:
+			record_profile_section("bot_driver", driver_started)
 		return
 	destination = actor.navigator.driver.approach(self, actor, destination, dt, actor.sprint and not actor.shooting and actor.bot_memory_left <= 0 and not escape.is_finite())
+	if android_profile_enabled:
+		record_profile_section("bot_driver", driver_started)
 	if actor.is_seated():
 		return
+	var steer_started := Time.get_ticks_usec() if android_profile_enabled else 0
 	var direction: Vector3 = actor.navigator.steer(actor, world, destination, dt, 0.1 if escape.is_finite() or (cover_point.is_finite() and not actor.sprint) else 1.5)
+	if android_profile_enabled:
+		record_profile_section("bot_steer", steer_started)
+	var separation_started := Time.get_ticks_usec() if android_profile_enabled else 0
 	# Short-range separation supplements global paths around static geometry.
 	if direction.length_squared() > 0:
-		for other in actors.values():
+		# Steering has finished; this synchronous scan cannot move the actor.
+		# Avoid allocating a values array for every moving bot every tick.
+		var separation_origin: Vector3 = actor.position
+		for other_id in actors:
+			var other = actors[other_id]
 			if other == actor or not other.alive:
 				continue
-			var away: Vector3 = actor.position - other.position
+			var away: Vector3 = separation_origin - other.position
 			away.y = 0
+			# Most actors are outside the separation radius. Keep a margin above
+			# 1.2 squared so the original near-boundary calculation stays intact.
+			if away.length_squared() > 1.45:
+				continue
 			var gap := away.length()
 			if gap > 0.01 and gap < 1.2:
 				direction += away / gap * (1.2 - gap)
@@ -1292,7 +1532,10 @@ func bot_input(actor, dt: float) -> void:
 		actor.pitch = 0
 	var local_direction: Vector3 = Basis(Vector3.UP, -actor.yaw) * direction
 	actor.move_input = Vector2(local_direction.x, local_direction.z).limit_length()
+	if android_profile_enabled:
+		record_profile_section("bot_separation", separation_started)
 
+	var supplies_started := Time.get_ticks_usec() if android_profile_enabled else 0
 	actor.navigator.utilities.update(self, actor, dt, cover_point.is_finite(), actor.sprint)
 	if actor.ammo == 0:
 		actor.reload_weapon()
@@ -1301,13 +1544,17 @@ func bot_input(actor, dt: float) -> void:
 	pickup(actor)
 	if actor.grips > 0 and actor.grip_slots[actor.weapon] == 0:
 		actor.change_grip(actor.weapon, true)
+	if android_profile_enabled:
+		record_profile_section("bot_supplies", supplies_started)
 
 func visible_target(actor, other) -> bool:
 	if teams.friendly(actor.actor_id, other.actor_id):
 		return false
-	if smoke_blocks(actor.eye_position(), other.aim_position()):
+	var origin: Vector3 = actor.eye_position()
+	var destination: Vector3 = other.aim_position()
+	if smoke_blocks(origin, destination):
 		return false
-	var hit := trace_shot(actor, actor.eye_position(), other.aim_position() - actor.eye_position(), 0)
+	var hit := trace_shot(actor, origin, destination - origin, 0)
 	return not hit.is_empty() and hit.collider == other
 
 func shot_rewind_age(actor) -> float:
@@ -1323,15 +1570,27 @@ func trace_shot(actor, origin: Vector3, direction: Vector3, rewind: float) -> Di
 	rewind = clampf(rewind, 0, HitHistory.MAX_REWIND) if is_finite(rewind) else 0
 	if rewind <= 0 or hit_history.poses_at(elapsed - rewind).is_empty():
 		var excluded: Array[RID] = [actor.get_rid()]
-		for target in actors.values():
+		# Capture only current seated candidates during the exclusion scan.
+		# Keep this local so seat entry/exit cannot leave a stale cached list.
+		# Most visibility rays have no seated opponents. Allocate their list
+		# only on demand, without retaining actors across traces or seat changes.
+		var seated_targets = null
+		for target_id in actors:
+			var target = actors[target_id]
 			if target.is_seated():
 				excluded.append(target.get_rid())
-		var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 1 | 2 | 16, excluded)
-		var result: Dictionary = preload("res://scripts/vehicle_ballistics.gd").resolve(get_world_3d().direct_space_state.intersect_ray(query))
+				if target != actor and target.alive:
+					if seated_targets == null:
+						seated_targets = []
+					seated_targets.append(target)
+		shot_query.from = origin
+		shot_query.to = origin + direction * 180
+		shot_query.exclude = excluded
+		var result: Dictionary = preload("res://scripts/vehicle_ballistics.gd").resolve(get_world_3d().direct_space_state.intersect_ray(shot_query))
+		if seated_targets == null:
+			return result
 		var limit: float = 180 if result.is_empty() else origin.distance_to(result.position)
-		for target in actors.values():
-			if target == actor or not target.alive or not target.is_seated():
-				continue
+		for target in seated_targets:
 			var hit: Dictionary = HitHistory.SeatedPose.trace(HitHistory.SeatedPose.capture(target), origin, direction, limit)
 			if not hit.is_empty():
 				limit = hit.distance
@@ -1339,8 +1598,9 @@ func trace_shot(actor, origin: Vector3, direction: Vector3, rewind: float) -> Di
 				result.collider = target
 		return result
 	# Present-time terrain and mesh cover bound analytic historical actor hits.
-	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 180, 1 | 16)
-	var wall: Dictionary = preload("res://scripts/vehicle_ballistics.gd").resolve(get_world_3d().direct_space_state.intersect_ray(query))
+	shot_cover_query.from = origin
+	shot_cover_query.to = origin + direction * 180
+	var wall: Dictionary = preload("res://scripts/vehicle_ballistics.gd").resolve(get_world_3d().direct_space_state.intersect_ray(shot_cover_query))
 	var limit: float = 180 if wall.is_empty() else origin.distance_to(wall.position)
 	var hit: Dictionary = hit_history.trace(elapsed - rewind, origin, direction, limit, actor.actor_id, actors)
 	return wall if hit.is_empty() else hit
@@ -1375,7 +1635,7 @@ func shoot(actor) -> void:
 			hit.collider.take_damage(vehicle_damage, actor.actor_id)
 		if not hit.is_empty() and hit.collider is Actor:
 			var target = hit.collider
-			var headshot: bool = hit.get("headshot", target.is_headshot(hit.position))
+			var headshot: bool = bool(hit["headshot"]) if hit.has("headshot") else target.is_headshot(hit.position)
 			var amount: float = actor.DAMAGE[actor.weapon] * (1.65 if headshot else 1.0)
 			if actor.weapon == 1:
 				amount *= clampf(1 - origin.distance_to(hit.position) / 60, 0.15, 1)
@@ -1396,19 +1656,17 @@ func shot_fx(id: int, origin: Vector3, end: Vector3, kind: int) -> void:
 		actors[id].flash_left = 0.05
 		actors[id].weapon_kick = 1.0
 	sound.shot(origin, kind)
-	var line := MeshInstance3D.new()
-	var mesh := ImmediateMesh.new()
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.albedo_color = Color("ffe3a0")
-	mesh.surface_begin(Mesh.PRIMITIVE_LINES, m)
 	var visual_origin := origin
 	if id == local_id and actors.has(id):
 		visual_origin = actors[id].muzzle.global_position
-	mesh.surface_add_vertex(visual_origin)
-	mesh.surface_add_vertex(end)
-	mesh.surface_end()
-	line.mesh = mesh
+	var segment := end - visual_origin
+	if segment.is_zero_approx():
+		return
+	# Share GPU geometry as well as material; endpoints become an instance transform.
+	var line := preload("res://scripts/tracer_effect.gd").create()
+	var orientation := Basis(Quaternion(Vector3.BACK, segment.normalized()))
+	orientation.z = segment
+	line.transform = Transform3D(orientation, visual_origin)
 	add_child(line)
 	get_tree().create_timer(0.065, false).timeout.connect(line.queue_free)
 
@@ -1431,6 +1689,12 @@ func damage(target, amount: float, attacker_id: int, bypass_protection := false,
 		target.knock_attacker = attacker_id
 		add_event(target.display_name + "  DOWNED")
 	var actual_damage: float = down_before - target.down_health if was_downed else before - target.health - target.armor
+	# Keep rare damage events observable without enabling per-frame profiling.
+	if target.actor_id == local_id and (OS.has_feature("android") or android_profile_enabled):
+		var diagnostic_cause: String = cause
+		if cause == "THE ZONE" and actors.has(attacker_id):
+			diagnostic_cause = actors[attacker_id].NAMES[actors[attacker_id].weapon]
+		android_last_damage = "elapsed:%.2f,attacker:%d,cause:%s,amount:%.1f,health_before:%.1f,armor_before:%.1f" % [elapsed, attacker_id, diagnostic_cause, actual_damage, health_before, armor_before]
 	if actors.has(attacker_id) and attacker_id != target.actor_id:
 		deliver_feedback(attacker_id, 0, actual_damage, headshot, not target.alive, target.position)
 	var source_position: Vector3 = actors[attacker_id].position if actors.has(attacker_id) else target.position
@@ -1502,38 +1766,89 @@ func drop_inventory(actor) -> void:
 	actor.grip_slots.fill(0)
 
 func supply_accessible(actor, item: Dictionary) -> bool:
-	if actor.position.distance_to(item.p) >= SupplyRules.RANGE:
+	if actor.position.distance_squared_to(item.p) >= SupplyRules.RANGE * SupplyRules.RANGE:
 		return false
-	var query := PhysicsRayQueryParameters3D.create(actor.eye_position(), item.p + Vector3.UP * 0.35, 5)
-	query.hit_from_inside = true
-	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+	return supply_unobstructed(actor, item)
 
-func supply_target(actor) -> Dictionary:
-	if not actor.alive or actor.downed or phase != "live":
+func supply_unobstructed(actor, item: Dictionary) -> bool:
+	# Bot supply searches run every simulation tick. The synchronous ray query
+	# can reuse parameters; overwrite both endpoints for each actor/item pair.
+	supply_query.from = actor.eye_position()
+	supply_query.to = item.p + Vector3.UP * 0.35
+	supply_query.hit_from_inside = true
+	return get_world_3d().direct_space_state.intersect_ray(supply_query).is_empty()
+
+func supply_target(actor, usable_only := false) -> Dictionary:
+	var best_id := supply_target_id(actor, usable_only)
+	if best_id < 0:
 		return {}
-	var best := {}
+	var best: Dictionary = loot[best_id]
+	return {"id": best_id, "kind": best.kind, "amount": SupplyRules.amount(best), "usable": SupplyRules.capacity(actor, int(best.kind)) > 0}
+
+func supply_target_id(actor, usable_only := false) -> int:
+	# Automatic pickup only needs the ID. Keep its per-bot simulation path
+	# free of temporary HUD result dictionaries (including empty results).
+	if not actor.alive or actor.downed or phase != "live":
+		return -1
+	# Bots and the HUD continue polling after the last supply is collected.
+	# Avoid native transform reads and search setup when nothing remains.
+	if loot.is_empty():
+		return -1
+	var best_id := -1
 	var best_distance := INF
 	var best_usable := false
+	# No actor movement occurs during this synchronous search. Read the native
+	# Node3D property once rather than once for every supply, for every bot tick.
+	var actor_position: Vector3 = actor.position
+	# Capacity cannot change during this synchronous search. Corpse stacks can
+	# contain many supplies of the same kind; read each inventory field once.
+	var checked_kinds := 0
+	var usable_kinds := 0
+	var supply_space: PhysicsDirectSpaceState3D = null
 	for id in loot:
 		var item: Dictionary = loot[id]
-		var distance: float = actor.position.distance_to(item.p)
-		var usable := SupplyRules.capacity(actor, int(item.kind)) > 0
+		# Bots call this every simulation tick. Reject remote supplies before
+		# inventory checks and ray queries; squared distance preserves ranking.
+		var distance: float = actor_position.distance_squared_to(item.p)
+		if distance >= SupplyRules.RANGE * SupplyRules.RANGE:
+			continue
+		var kind_bit: int = 1 << int(item.kind)
+		if (checked_kinds & kind_bit) == 0:
+			checked_kinds |= kind_bit
+			if SupplyRules.capacity(actor, int(item.kind)) > 0:
+				usable_kinds |= kind_bit
+		var usable := (usable_kinds & kind_bit) != 0
+		# Automatic pickup cannot transfer full inventory supplies. Reject them
+		# before visibility rays; the HUD still searches them for its full prompt.
+		if usable_only and not usable:
+			continue
 		if (best_usable and not usable) or (usable == best_usable and distance >= best_distance):
 			continue
-		if not supply_accessible(actor, item):
+		# Resolve the shared ray origin/space only when a candidate needs a ray.
+		# No movement or inventory mutation occurs inside this synchronous loop.
+		if supply_space == null:
+			supply_space = get_world_3d().direct_space_state
+			supply_query.from = actor.eye_position()
+			supply_query.hit_from_inside = true
+		supply_query.to = item.p + Vector3.UP * 0.35
+		if not supply_space.intersect_ray(supply_query).is_empty():
 			continue
-		best = {"id": id, "kind": item.kind, "amount": SupplyRules.amount(item), "usable": usable}
+		best_id = id
 		best_distance = distance
 		best_usable = usable
-	return best
+	return best_id
 
 func pickup(actor, requested_id := -1) -> bool:
 	if not actor.alive or actor.downed or phase != "live":
 		return false
 	var id := requested_id
 	if id < 0:
-		id = int(supply_target(actor).get("id", -1))
-	if not loot.has(id) or not supply_accessible(actor, loot[id]):
+		id = supply_target_id(actor, true)
+		# The synchronous target search already checked range and obstruction.
+		# No physics step or inventory mutation occurs before the transfer.
+		if not loot.has(id):
+			return false
+	elif not loot.has(id) or not supply_accessible(actor, loot[id]):
 		return false
 	if SupplyRules.transfer(actor, loot[id]) <= 0:
 		return false
@@ -1541,10 +1856,33 @@ func pickup(actor, requested_id := -1) -> bool:
 		loot.erase(id)
 	return true
 
+func round_has_competition() -> bool:
+	# The per-tick end condition only needs two opponents, not a full count
+	# or a temporary list of living teams. HUD/standings still count all.
+	var first_team := 0
+	var found_actor := false
+	for id in actors:
+		var actor = actors[id]
+		if not actor.alive:
+			continue
+		if match_mode == "duo":
+			if actor.team_id <= 0:
+				continue
+			if first_team == 0:
+				first_team = actor.team_id
+			elif actor.team_id != first_team:
+				return true
+		elif found_actor:
+			return true
+		else:
+			found_actor = true
+	return false
+
 func alive_count() -> int:
 	var count := 0
-	for actor in actors.values():
-		if actor.alive:
+	# Both the HUD and round simulation call this; avoid a temporary values array.
+	for id in actors:
+		if actors[id].alive:
 			count += 1
 	return count
 
@@ -1618,24 +1956,40 @@ func add_event(message: String) -> void:
 func _process(dt: float) -> void:
 	if dedicated or not running or get_tree().paused:
 		return
+	android_section_started = 0
+	android_profile_section("begin")
 	if not online:
 		ui.tactical_map.shared_pings = team_pings.visible_for(local_id, elapsed, actors, teams)
 	else:
 		var now := Time.get_ticks_msec()
-		ui.tactical_map.shared_pings = ui.tactical_map.shared_pings.filter(func(ping): return ping.get("expires_at", 0) > now)
+		var ping_index: int = ui.tactical_map.shared_pings.size() - 1
+		while ping_index >= 0:
+			if ui.tactical_map.shared_pings[ping_index].get("expires_at", 0) <= now:
+				ui.tactical_map.shared_pings.remove_at(ping_index)
+			ping_index -= 1
 	update_network_status()
 	if online:
 		vehicle_replica.render(self, dt)
+	android_profile_section("network")
+	var frame_aim_pressed := Input.is_action_pressed("aim")
 	for id in actors:
-		actors[id].render_frame(dt, online, id == local_id, Input.is_action_pressed("aim"))
+		actors[id].render_frame(dt, online, id == local_id, frame_aim_pressed)
+	android_profile_section("actors")
 	spectator.update_view(actors, local_id, phase)
+	android_profile_section("spectator")
 	ui.update_team(actors, local_id)
+	android_profile_section("team")
 	sound.update_actors(actors, world, get_viewport().get_camera_3d())
 	sound.vehicle_audio.update(sound, vehicle_fleet, dt, phase == "live")
+	android_profile_section("sound")
 	update_smoke_visuals()
+	android_profile_section("smoke_visuals")
 	world.show_loot(loot)
+	android_profile_section("loot_visuals")
 	world.set_zone(zone, zone_center)
-	ui.update_scoreboard(actors.values(), Input.is_action_pressed("scoreboard") and not ui.pause_panel.visible and not ui.inventory.visible and not ui.tactical_map.visible)
+	android_profile_section("zone_visuals")
+	var scoreboard_enabled: bool = Input.is_action_pressed("scoreboard") and not ui.pause_panel.visible and not ui.inventory.visible and not ui.tactical_map.visible
+	ui.update_scoreboard(actors.values() if scoreboard_enabled else [], scoreboard_enabled)
 	if actors.has(local_id):
 		var actor = actors[local_id]
 		if not actor.alive or actor.downed or phase != "live":
@@ -1661,9 +2015,9 @@ func _process(dt: float) -> void:
 			ui.supply_prompt = ("%s  %s ×%s" % [Bindings.key_label("loot"), item_name, quantity_text]) if supply.usable else item_name + " / INVENTORY FULL"
 		var message := ""
 		if phase == "live" and actor.alive and not actor.downed and not actor.is_seated():
-			var seats: Array = vehicle_fleet.candidates(actor)
-			if not seats.is_empty():
-				ui.supply_prompt = Bindings.key_label("loot") + ("  DRIVE BUGGY" if seats[0].seat == 0 else "  ENTER PASSENGER SEAT")
+			var seat_index: int = vehicle_fleet.nearest_seat_index(actor)
+			if seat_index >= 0:
+				ui.supply_prompt = Bindings.key_label("loot") + ("  DRIVE BUGGY" if seat_index == 0 else "  ENTER PASSENGER SEAT")
 		if match_mode == "duo":
 			var rescue_target = rescue.target(self, actor)
 			if rescue_target != null:
@@ -1681,11 +2035,15 @@ func _process(dt: float) -> void:
 			message = "DEPLOYING IN %02d\nWaiting for operators…" % maxi(0, int(phase_time))
 		var viewed_actor = actors.get(spectator.target_id, actor) if spectator.active else actor
 		ui.sight_aiming = not spectator.active and actor.first_person.aim_blend > 0.5
-		ui.grenade_warning_distance = INF
-		for grenade in grenades.values():
+		var grenade_warning_distance_squared := INF
+		# This read-only pass runs every rendered frame; avoid copying the
+		# grenade roster just to find the nearest fragmentation grenade.
+		for grenade_id in grenades:
+			var grenade = grenades[grenade_id]
 			if grenade.kind != 0:
 				continue
-			ui.grenade_warning_distance = minf(ui.grenade_warning_distance, viewed_actor.position.distance_to(grenade.position))
+			grenade_warning_distance_squared = minf(grenade_warning_distance_squared, viewed_actor.position.distance_squared_to(grenade.position))
+		ui.grenade_warning_distance = sqrt(grenade_warning_distance_squared)
 		ui.update_hud(viewed_actor, alive_count(), phase, phase_time, zone, events, message, zone_state)
 		ui.training_label.visible = training != null
 		if training != null:
@@ -1694,11 +2052,14 @@ func _process(dt: float) -> void:
 			ui.stats.text = "PRACTICE / NO MATCH RESULTS"
 		ui.set_spectator(spectator.active, spectator.target_name, actor.rank, match_mode == "duo")
 		ui.recap_panel.visible = not actor.alive and not ui.death_recap.is_empty()
+	android_profile_section("hud_interactions")
+	flush_profile_sections()
 
 func update_network_status() -> void:
 	ui.network_label.visible = online
 	if not online:
 		network_status.reset()
+		network_display_due = 0
 		return
 	var now := Time.get_ticks_msec()
 	if now >= network_sample_due:
@@ -1707,9 +2068,17 @@ func update_network_status() -> void:
 			var peer: ENetPacketPeer = multiplayer.multiplayer_peer.get_peer(1)
 			if peer != null and peer.get_state() == ENetPacketPeer.STATE_CONNECTED:
 				network_status.sample(peer.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME), peer.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME_VARIANCE))
+	# The age counter changes every frame, otherwise forcing label reshaping
+	# at rendering frequency. Keep network sampling independent of HUD refresh.
+	if now < network_display_due:
+		return
+	network_display_due = now + 100
 	var status: Dictionary = network_status.describe(now)
-	ui.network_label.text = status.text
-	ui.network_label.modulate = [Color.WHITE, Color("f6c477"), Color("ff826c")][status.severity]
+	if ui.network_label.text != status.text:
+		ui.network_label.text = status.text
+	var color: Color = [Color.WHITE, Color("f6c477"), Color("ff826c")][status.severity]
+	if ui.network_label.modulate != color:
+		ui.network_label.modulate = color
 
 func peer_connected(id: int) -> void:
 	if dedicated:
@@ -1855,6 +2224,7 @@ func accepted(id: String, mode := "solo") -> void:
 	authenticated_at = Time.get_ticks_msec()
 	network_status.begin(authenticated_at)
 	network_sample_due = 0
+	network_display_due = 0
 	ui.show_game()
 
 func broadcast_snapshot() -> void:
@@ -1969,9 +2339,16 @@ func apply_network_pair() -> void:
 		if not actors.has(data.id):
 			spawn_actor(data.id, data.n, data.b, data.p)
 		actors[data.id].unpack(data, data.id == local_id)
-	for id in actors.keys():
+	# Stable client rosters need no temporary ID array.
+	var retired_actors: Array
+	for id in actors:
 		if not payload.roster.has(id):
 			actors[id].queue_free()
+			if retired_actors == null:
+				retired_actors = []
+			retired_actors.append(id)
+	if retired_actors != null:
+		for id in retired_actors:
 			actors.erase(id)
 	phase = payload.phase
 	match_mode = payload.get("mode", "solo")
@@ -2156,6 +2533,7 @@ func leave(message := "") -> void:
 		return
 	save_local_operation()
 	network_status.reset()
+	network_display_due = 0
 	ui.network_label.hide()
 	training = null
 	ui.training_label.hide()
@@ -2343,12 +2721,10 @@ func throw_grenade(actor, kind := 0) -> bool:
 	var origin: Vector3 = actor.eye_position()
 	var destination: Vector3 = origin + direction * 0.55
 	# Sweep the grenade volume, not just its center, to avoid starting through a wall.
-	var shape := SphereShape3D.new()
-	shape.radius = 0.13
-	var query := PhysicsShapeQueryParameters3D.new()
-	query.shape = shape
+	var query := grenade_spawn_query
 	query.transform = Transform3D(Basis.IDENTITY, origin)
-	query.collision_mask = 5
+	# Reset the previous sweep before the overlap check, including rejected throws.
+	query.motion = Vector3.ZERO
 	if not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty():
 		return false
 	query.motion = destination - origin
@@ -2370,22 +2746,65 @@ func throw_grenade(actor, kind := 0) -> bool:
 	return true
 
 func advance_grenades(dt: float) -> void:
-	for id in smoke_clouds.keys():
+	# Ages mutate values only. Allocate removal storage only on expiry, then
+	# erase after iteration so simultaneous cloud expiry remains safe.
+	var expired_clouds = null
+	for id in smoke_clouds:
 		smoke_clouds[id].age += dt
 		if smoke_clouds[id].age >= SmokeRules.LIFETIME:
+			if expired_clouds == null:
+				expired_clouds = []
+			expired_clouds.append(id)
+	if expired_clouds != null:
+		for id in expired_clouds:
 			smoke_clouds.erase(id)
-	for id in grenades.keys():
+	# Keep smoke expiry running, but avoid allocating an empty key snapshot
+	# every physics tick when no grenade is in flight.
+	if grenades.is_empty():
+		return
+	# Detonation erases membership; defer it until after ticking fuses so
+	# ordinary flight frames do not allocate a full key snapshot.
+	var expired_grenades = null
+	for id in grenades:
 		var grenade = grenades[id]
 		grenade.fuse -= dt
 		if grenade.fuse <= 0:
+			if expired_grenades == null:
+				expired_grenades = []
+			expired_grenades.append(id)
+	if expired_grenades != null:
+		for id in expired_grenades:
 			detonate_grenade(id)
+
+func explosion_visible(origin: Vector3, actor) -> bool:
+	# Hazard awareness needs any exposed sample, whereas damage below needs
+	# all three. Short-circuit without allocating a sample array per bot.
+	var space := get_world_3d().direct_space_state
+	explosion_query.from = origin
+	explosion_query.to = actor.position + Vector3.UP * 0.25
+	if space.intersect_ray(explosion_query).is_empty():
+		return true
+	explosion_query.to = actor.aim_position()
+	if space.intersect_ray(explosion_query).is_empty():
+		return true
+	explosion_query.to = actor.eye_position()
+	return space.intersect_ray(explosion_query).is_empty()
 
 func explosion_exposure(origin: Vector3, actor) -> float:
 	var visible := 0.0
-	for point in [actor.position + Vector3.UP * 0.25, actor.aim_position(), actor.eye_position()]:
-		var ray := PhysicsRayQueryParameters3D.create(origin, point, 5)
-		if get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
-			visible += 1
+	# Explosions trace synchronously, including across targets. Reuse the
+	# query and sample directly without a temporary point array per target.
+	var space := get_world_3d().direct_space_state
+	explosion_query.from = origin
+	explosion_query.to = actor.position + Vector3.UP * 0.25
+	if space.intersect_ray(explosion_query).is_empty():
+		visible += 1
+	explosion_query.to = actor.aim_position()
+	if space.intersect_ray(explosion_query).is_empty():
+		visible += 1
+	explosion_query.to = actor.eye_position()
+	if space.intersect_ray(explosion_query).is_empty():
+		visible += 1
 	return visible / 3.0
 
 func detonate_grenade(id: int) -> void:
@@ -2407,7 +2826,11 @@ func detonate_grenade(id: int) -> void:
 		for actor in actors.values():
 			if not actor.alive:
 				continue
-			var distance: float = actor.aim_position().distance_to(origin)
+			# Reject actors outside the blast before computing linear falloff.
+			var blast_offset: Vector3 = actor.aim_position() - origin
+			if blast_offset.length_squared() >= Grenade.RADIUS * Grenade.RADIUS:
+				continue
+			var distance: float = blast_offset.length()
 			if distance >= Grenade.RADIUS:
 				continue
 			var amount: float = Grenade.MAX_DAMAGE * (1 - distance / Grenade.RADIUS) * explosion_exposure(origin, actor)
@@ -2475,9 +2898,17 @@ func grenade_snapshot(packet: PackedByteArray) -> void:
 		grenades[state.id].target_position = state.p
 		grenades[state.id].fuse = state.f
 		grenades[state.id].owner_id = state.owner
-	for id in grenades.keys():
+	# Most snapshots retain all grenades. Only allocate cleanup storage when
+	# a grenade disappears; never erase while traversing the dictionary.
+	var retired_grenade_ids = null
+	for id in grenades:
 		if not data.ids.has(id):
 			grenades[id].queue_free()
+			if retired_grenade_ids == null:
+				retired_grenade_ids = []
+			retired_grenade_ids.append(id)
+	if retired_grenade_ids != null:
+		for id in retired_grenade_ids:
 			grenades.erase(id)
 
 @rpc("authority", "call_remote", "reliable")
@@ -2505,10 +2936,21 @@ func ticket_payload(value: String) -> Dictionary:
 	return payload
 
 func smoke_blocks(from: Vector3, to: Vector3) -> bool:
+	if smoke_clouds.is_empty():
+		return false
+	var delta := to - from
+	var length := delta.length()
+	if length < 0.001:
+		return false
+	var direction := delta / length
 	var depth := 0.0
-	for cloud in smoke_clouds.values():
-		depth += SmokeRules.optical_depth(from, to, cloud.p, cloud.age)
-	return depth >= 1.5
+	for id in smoke_clouds:
+		var cloud = smoke_clouds[id]
+		depth += SmokeRules.optical_depth_ray(from, direction, length, cloud.p, cloud.age)
+		# Optical depth is nonnegative, so later clouds cannot undo occlusion.
+		if depth >= 1.5:
+			return true
+	return false
 
 @rpc("authority", "call_remote", "unreliable_ordered", 5)
 func smoke_snapshot(round_id: String, states: Array, ids: Array) -> void:
@@ -2516,39 +2958,60 @@ func smoke_snapshot(round_id: String, states: Array, ids: Array) -> void:
 		return
 	for state in states:
 		smoke_clouds[state.id] = {"p": state.p, "age": state.age}
-	for id in smoke_clouds.keys():
+	# Stable snapshots need no copy of the cloud roster.
+	var retired_cloud_ids: Array
+	for id in smoke_clouds:
 		if not ids.has(id):
+			if retired_cloud_ids == null:
+				retired_cloud_ids = []
+			retired_cloud_ids.append(id)
+	if retired_cloud_ids != null:
+		for id in retired_cloud_ids:
 			smoke_clouds.erase(id)
 
 func update_smoke_visuals() -> void:
 	if dedicated:
 		return
-	for id in smoke_visuals.keys():
+	# Most gameplay frames have no smoke. Avoid allocating the cleanup key
+	# array then; retained visuals still need cleanup after the last cloud ends.
+	if smoke_clouds.is_empty() and smoke_visuals.is_empty():
+		return
+	# Smoke usually persists across many frames. Allocate removal storage only
+	# when a visual actually expires; erase after iterating the dictionary.
+	var retired_visual_ids: Array
+	for id in smoke_visuals:
 		if not smoke_clouds.has(id):
 			smoke_visuals[id].queue_free()
+			if retired_visual_ids == null:
+				retired_visual_ids = []
+			retired_visual_ids.append(id)
+	if retired_visual_ids != null:
+		for id in retired_visual_ids:
 			smoke_visuals.erase(id)
 	for id in smoke_clouds:
 		var cloud: Dictionary = smoke_clouds[id]
-		if not smoke_visuals.has(id):
-			var visual := MeshInstance3D.new()
-			var sphere := SphereMesh.new()
-			sphere.radius = 1
-			sphere.height = 2
-			sphere.radial_segments = 32
-			sphere.rings = 16
-			visual.mesh = sphere
-			visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			var material := ShaderMaterial.new()
-			material.shader = preload("res://shaders/smoke.gdshader")
-			visual.material_override = material
+		var created := not smoke_visuals.has(id)
+		if created:
+			var visual := preload("res://scripts/smoke_effect.gd").create()
 			add_child(visual)
 			smoke_visuals[id] = visual
 		var radius := maxf(0.001, SmokeRules.radius(cloud.age))
 		var visual: MeshInstance3D = smoke_visuals[id]
-		visual.position = cloud.p
-		visual.scale = Vector3.ONE * radius
-		visual.material_override.set_shader_parameter("radius", radius)
-		visual.material_override.set_shader_parameter("density", SmokeRules.density(cloud.age))
+		if visual.position != cloud.p:
+			visual.position = cloud.p
+		# Clouds stop growing after 1.5 seconds. Avoid submitting identical
+		# transforms and radius uniforms for the rest of their 20-second life.
+		var target_scale := Vector3.ONE * radius
+		if created or visual.scale != target_scale:
+			visual.scale = target_scale
+			visual.material_override.set_shader_parameter("radius", radius)
+		# Density stays at one for most of the cloud's lifetime. Cache on the
+		# retained visual, not the snapshot dictionary (replaced by networking),
+		# and compare values so restored/reordered ages also update correctly.
+		var density := SmokeRules.density(cloud.age)
+		if created or visual.get_meta(&"smoke_density", -1.0) != density:
+			visual.material_override.set_shader_parameter("density", density)
+			visual.set_meta(&"smoke_density", density)
 		visual.material_override.set_shader_parameter("age", cloud.age)
 
 func apply_landing(actor) -> void:

@@ -2,10 +2,17 @@ extends CharacterBody3D
 
 const CharacterAnimation = preload("res://scripts/character_animation.gd")
 const FirstPerson = preload("res://scripts/first_person.gd")
+const AnimationCadence = preload("res://scripts/animation_cadence.gd")
 var character_animation := CharacterAnimation.new()
 var first_person := FirstPerson.new()
+var animation_cadence := AnimationCadence.new()
+var mobile_animation := OS.has_feature("android")
 var gun_model: Node3D
 var third_person_gun: Node3D
+var weapon_bone := -1
+var weapon_rest_offset := Transform3D.IDENTITY
+var third_person_magazine: Node3D
+var third_person_magazine_rest := Transform3D.IDENTITY
 var visual_weapon := -1
 var visual_grip := -1
 var grips := 0
@@ -13,11 +20,13 @@ var grip_slots := PackedInt32Array([0, 0, 0])
 const GRIP_MODEL = preload("res://assets/foregrip.glb")
 var local_view := false
 const WEAPON_MODELS := ["res://assets/carbine.glb", "res://assets/shotgun.glb", "res://assets/marksman.glb"]
+const MOBILE_WEAPON_MODELS := ["res://assets/carbine_mobile.glb", "res://assets/shotgun_mobile.glb", "res://assets/marksman_mobile.glb"]
 const AIM_FOV := [48.0, 58.0, 24.0]
 const BARREL_ENDS := [Vector3(0, 0.01125, -0.43875), Vector3(0, 0.01875, -0.46875), Vector3(0, 0.01125, -0.66)]
 const OPTIC_HEIGHTS := [0.0975, 0.07875, 0.10875]
 var weapon_blocked := false
 var weapon_probe := SphereShape3D.new()
+var weapon_query := PhysicsShapeQueryParameters3D.new()
 var grounded := false
 const PREDICTION_LIMIT := 120
 var prediction_history: Array[Dictionary] = []
@@ -25,6 +34,7 @@ var pending_correction: Dictionary = {}
 var prediction_ack := -1
 var prediction_jump_held := false
 var camera_error := Vector3.ZERO
+var camera_correction_query := PhysicsRayQueryParameters3D.create(Vector3.ZERO, Vector3.ZERO, 5)
 var prediction_corrections := 0
 
 var actor_id: int
@@ -73,6 +83,10 @@ var aiming := false
 var recoil := 0.0
 var weapon_kick := 0.0
 var body_shape: CollisionShape3D
+var standing_probe: CapsuleShape3D
+var lean_probe: CapsuleShape3D
+var standing_query := PhysicsShapeQueryParameters3D.new()
+var lean_query := PhysicsShapeQueryParameters3D.new()
 const STANDING_HEIGHT := 1.8
 const CROUCH_HEIGHT := 1.15
 const RECOIL := [0.014, 0.05, 0.065]
@@ -113,6 +127,8 @@ func is_seated() -> bool:
 
 func _ready() -> void:
 	weapon_probe.radius = 0.055
+	weapon_query.shape = weapon_probe
+	weapon_query.collision_mask = 1 | 16 # Terrain and vehicle mesh, never movement hulls.
 	collision_layer = 2
 	collision_mask = 1 | 2 | 4
 	var shape := CollisionShape3D.new()
@@ -125,8 +141,9 @@ func _ready() -> void:
 	add_child(shape)
 	material = StandardMaterial3D.new()
 	material.albedo_color = Color("cb7852") if is_bot else Color("65bfb9")
-	if ResourceLoader.exists("res://assets/operator.glb"):
-		body_mesh = load("res://assets/operator.glb").instantiate()
+	var body_asset := "res://assets/operator_mobile.glb" if mobile_animation else "res://assets/operator.glb"
+	if ResourceLoader.exists(body_asset):
+		body_mesh = load(body_asset).instantiate()
 		load("res://scripts/world_visuals.gd").military_materials(body_mesh)
 	else:
 		var fallback := MeshInstance3D.new()
@@ -149,36 +166,34 @@ func _ready() -> void:
 	gun = Node3D.new()
 	gun.position = Vector3(0.26, -0.24, -0.48)
 	camera.add_child(gun)
-	muzzle = MeshInstance3D.new()
-	var flare := CylinderMesh.new()
-	flare.top_radius = 0.0
-	flare.bottom_radius = 0.035
-	flare.height = 0.12
-	flare.radial_segments = 6
-	muzzle.mesh = flare
-	muzzle.rotation.x = -PI / 2
-	var glow := StandardMaterial3D.new()
-	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	glow.albedo_color = Color("ffe7a0")
-	muzzle.material_override = glow
-	muzzle.position = Vector3(0, 0.012, -0.47)
-	muzzle.visible = false
+	muzzle = preload("res://scripts/muzzle_flash.gd").create()
 	gun.add_child(muzzle)
 	gun.visible = false
 	update_weapon_visuals()
 
 func update_weapon_visuals(force := false) -> void:
-	if visual_weapon == weapon and visual_grip == grip_slots[weapon] and not force:
+	var assembly_changed := visual_weapon != weapon or visual_grip != grip_slots[weapon] or force
+	# Entering local view needs a first-person model, but the existing world
+	# weapon and its socket binding are already ready for this loadout.
+	if not assembly_changed and (not local_view or gun_model != null):
 		return
 	visual_weapon = weapon
 	visual_grip = grip_slots[weapon]
-	if third_person_gun != null:
+	if assembly_changed and third_person_gun != null:
 		third_person_gun.get_parent().remove_child(third_person_gun)
 		third_person_gun.queue_free()
-	if character_animation.available:
-		third_person_gun = load(WEAPON_MODELS[weapon]).instantiate()
+	if assembly_changed and character_animation.available:
+		third_person_gun = load(MOBILE_WEAPON_MODELS[weapon] if mobile_animation else WEAPON_MODELS[weapon]).instantiate()
 		load("res://scripts/world_visuals.gd").weapon_finish(third_person_gun)
 		character_animation.skeleton.add_child(third_person_gun)
+		# The socket rest is immutable between weapon assemblies. Only its
+		# animated pose needs to be fetched on each presentation update.
+		weapon_bone = character_animation.skeleton.find_bone("Weapon")
+		var rest := character_animation.skeleton.get_bone_global_rest(weapon_bone)
+		weapon_rest_offset = rest.affine_inverse() * Transform3D(Basis.IDENTITY, rest.origin)
+		third_person_magazine = third_person_gun.find_child("*Magazine*", true, false)
+		if third_person_magazine != null:
+			third_person_magazine_rest = third_person_magazine.transform
 		add_grip_visual(third_person_gun)
 		update_weapon_attachment()
 	if local_view:
@@ -221,11 +236,40 @@ func change_grip(index: int, attach: bool) -> bool:
 func update_weapon_attachment() -> void:
 	if third_person_gun == null:
 		return
-	third_person_gun.visible = not is_seated() and not downed and character_animation.active_clip != "DownedDeath"
+	var show_weapon := not is_seated() and not downed and character_animation.active_clip != "DownedDeath"
+	if third_person_gun.visible != show_weapon:
+		third_person_gun.visible = show_weapon
+	# Hidden by the existing seated/downed presentation rules. Resolve the
+	# current socket and magazine again on the first visible update instead
+	# of forcing global bone evaluation for a weapon that cannot be drawn.
+	if not third_person_gun.visible:
+		return
 	var skeleton: Skeleton3D = character_animation.skeleton
-	var bone := skeleton.find_bone("Weapon")
-	var rest := skeleton.get_bone_global_rest(bone)
-	third_person_gun.transform = skeleton.get_bone_global_pose(bone) * rest.affine_inverse() * Transform3D(Basis.IDENTITY, rest.origin)
+	# Keep resolving the animated socket, but avoid propagating an unchanged
+	# transform through the weapon's mesh/attachment hierarchy.
+	var socket_transform := skeleton.get_bone_global_pose(weapon_bone) * weapon_rest_offset
+	if third_person_gun.transform != socket_transform:
+		third_person_gun.transform = socket_transform
+	update_third_person_magazine()
+
+func update_third_person_magazine() -> void:
+	if third_person_magazine == null:
+		return
+	# Compute the final socket pose before notifying the render hierarchy.
+	# Starting from rest also restores interrupted reloads and replicated state.
+	var next_transform := third_person_magazine_rest
+	if reload_left > 0 and character_animation.active_clip.ends_with("Reload"):
+		var progress := clampf(1.0 - reload_left / RELOAD[weapon], 0.0, 1.0)
+		# Match Hand.L's socket -> belt -> socket keys in build_operator.py.
+		# Blender (x, forward, up) is Godot (x, up, -forward).
+		var withdrawal := smoothstep(0.18, 0.40, progress) * (1.0 - smoothstep(0.55, 0.73, progress))
+		if withdrawal != 0:
+			var socket_to_belt := Vector3(-0.305, -0.23, 0.11)
+			# Convert model-space motion through the imported node's parent basis.
+			var parent := third_person_magazine.get_parent() as Node3D
+			next_transform.origin += parent.global_basis.inverse() * third_person_gun.global_basis * socket_to_belt * withdrawal
+	if third_person_magazine.transform != next_transform:
+		third_person_magazine.transform = next_transform
 
 func add_gun_box(size: Vector3, offset: Vector3, color: Color) -> void:
 	var m := MeshInstance3D.new()
@@ -245,20 +289,22 @@ func set_local() -> void:
 	camera.current = true
 	body_mesh.visible = false
 	gun.visible = true
-	first_person.setup(gun, gun_model)
-	update_weapon_visuals(true)
+	first_person.setup(gun, gun_model, mobile_animation)
+	update_weapon_visuals()
 
-func simulate(dt: float) -> void:
+func simulate(dt: float, profile: Callable = Callable()) -> void:
 	action_tokens = minf(10, action_tokens + dt * 10)
 	command_tokens = minf(60, command_tokens + dt * 40)
 	fire_left = maxf(0, fire_left - dt)
 	throw_left = maxf(0, throw_left - dt)
 	if not alive:
 		return
-	rotation.y = yaw
-	head.rotation.x = pitch
+	apply_view_rotation()
 	recoil = move_toward(recoil, 0, dt * 0.075)
+	var stance_started := Time.get_ticks_usec() if profile.is_valid() else 0
 	update_stance()
+	if profile.is_valid():
+		profile.call("actor_stance", stance_started)
 	if reload_left > 0:
 		reload_left -= dt
 		if reload_left <= 0:
@@ -270,10 +316,12 @@ func simulate(dt: float) -> void:
 		if heal_left <= 0:
 			health = minf(100, health + 65)
 			medkits -= 1
-	move_step(dt)
+	# Authority already refreshed stance before inventory timers, including
+	# seated/exit-guard actors. Do not repeat a blocked standing shape query.
+	move_step(dt, false, profile)
 
 # Shared by authority and prediction. Never changes inventory, damage or timers.
-func move_step(dt: float) -> void:
+func move_step(dt: float, refresh_stance: bool = true, profile: Callable = Callable()) -> void:
 	landing_speed = 0.0
 	if not alive or is_seated():
 		return
@@ -291,9 +339,17 @@ func move_step(dt: float) -> void:
 		aiming = false
 		sprint = false
 		lean_input = 0
-	update_stance()
+	if refresh_stance:
+		update_stance()
+	var lean_started := Time.get_ticks_usec() if profile.is_valid() else 0
 	update_lean(dt)
-	var direction := Basis(Vector3.UP, yaw) * Vector3(move_input.x, 0, move_input.y)
+	if profile.is_valid():
+		profile.call("actor_lean", lean_started)
+	# Idle actors need no yaw basis. Keep the original transform for every
+	# nonzero input, including analog input below the normal stick deadzone.
+	var direction := Vector3.ZERO
+	if move_input != Vector2.ZERO:
+		direction = Basis(Vector3.UP, yaw) * Vector3(move_input.x, 0, move_input.y)
 	var speed := 2.8 if crouched else (9.0 if sprint and not shooting and not aiming else 5.5)
 	if absf(lean) > 0.01:
 		speed = minf(speed, 2.8)
@@ -315,17 +371,28 @@ func move_step(dt: float) -> void:
 	jump_requested = false
 	var was_grounded := grounded
 	var impact_velocity := velocity
+	var slide_started := Time.get_ticks_usec() if profile.is_valid() else 0
 	move_and_slide()
+	if profile.is_valid():
+		profile.call("actor_slide", slide_started)
 	grounded = is_on_floor()
 	if grounded and not was_grounded:
 		landing_speed = maxf(0.0, -impact_velocity.dot(get_floor_normal()))
-	position.x = clampf(position.x, -115, 115)
-	position.z = clampf(position.z, -115, 115)
-	if position.y < -10:
-		position.y = 4
+	enforce_world_bounds()
+
+func enforce_world_bounds() -> void:
+	# Avoid invalidating physics/render transforms after every in-bounds move.
+	# Apply all corrections together, including the fall-recovery position.
+	var corrected_position := position
+	corrected_position.x = clampf(corrected_position.x, -115, 115)
+	corrected_position.z = clampf(corrected_position.z, -115, 115)
+	if corrected_position.y < -10:
+		corrected_position.y = 4
 		velocity = Vector3.ZERO
 		grounded = false
 		landing_speed = 0.0
+	if corrected_position != position:
+		position = corrected_position
 
 func predict_movement(cmd: Dictionary, dt: float, active: bool) -> void:
 	reconcile_movement()
@@ -373,17 +440,24 @@ func reconcile_movement() -> void:
 	var before := position
 	var view_yaw := yaw
 	var missing_history := not prediction_history.is_empty() and ack < int(prediction_history[0].cmd.seq) - 2
-	var teleport := position.distance_to(state.p) > 12
+	var teleport := position.distance_squared_to(state.p) > 144.0
 	position = state.p
 	velocity = state.vel
 	grounded = state.ground
 	lean = state.get("lean", 0.0)
 	set_stance(state.crouched)
-	while not prediction_history.is_empty() and int(prediction_history[0].cmd.seq) <= ack:
-		prediction_history.pop_front()
 	if not alive or missing_history or teleport:
 		prediction_history.clear()
 	else:
+		# A delayed snapshot can acknowledge many inputs at once. Remove the
+		# prefix in one copy instead of shifting the remaining queue per input.
+		var acknowledged := 0
+		while acknowledged < prediction_history.size() and int(prediction_history[acknowledged].cmd.seq) <= ack:
+			acknowledged += 1
+		if acknowledged == prediction_history.size():
+			prediction_history.clear()
+		elif acknowledged > 0:
+			prediction_history = prediction_history.slice(acknowledged)
 		for entry in prediction_history:
 			predict_step(entry.cmd, entry.dt)
 	yaw = view_yaw
@@ -463,7 +537,7 @@ func unpack(data: Dictionary, local: bool) -> void:
 	target_position = data.p
 	if local:
 		pending_correction = data.duplicate()
-	elif position.distance_to(target_position) > 12:
+	elif position.distance_squared_to(target_position) > 144.0:
 		position = target_position
 	if not local:
 		yaw = data.y
@@ -500,67 +574,141 @@ func unpack(data: Dictionary, local: bool) -> void:
 		apply_damage(10000)
 	alive = data.live
 
+func update_visual_animation(dt: float, local: bool) -> void:
+	var step := dt
+	if mobile_animation:
+		var interval := 0.0
+		# Full-rate actors do not need camera/frustum queries. For nearby actors
+		# distance alone also guarantees full rate, including behind the camera.
+		if not (local or local_view or is_seated()):
+			var view := get_viewport().get_camera_3d()
+			if view != null:
+				var center := global_position + Vector3.UP
+				var distance_squared := view.global_position.distance_squared_to(center)
+				if distance_squared >= 20.0 * 20.0:
+					interval = AnimationCadence.interval_for(
+						distance_squared, view.is_position_in_frustum(center), false)
+		var state := int(alive) | (int(downed) << 1) | (int(crouched) << 2) \
+			| (int(grounded) << 3) | (int(reload_left > 0) << 4) \
+			| (int(is_seated()) << 5) | (weapon << 6)
+		step = animation_cadence.advance(dt, interval, state)
+	if step > 0:
+		character_animation.update(self, step)
+		update_weapon_attachment()
+
+func apply_view_rotation() -> void:
+	# Compare Vector3 values at engine precision, preserving even small turns
+	# without dirtying the whole character hierarchy for an unchanged pose.
+	var next_rotation := rotation
+	next_rotation.y = yaw
+	if rotation != next_rotation:
+		rotation = next_rotation
+	var next_head_rotation := head.rotation
+	next_head_rotation.x = pitch
+	if head.rotation != next_head_rotation:
+		head.rotation = next_head_rotation
+
 func render_frame(dt: float, network_client: bool, local: bool, ads: bool) -> void:
 	if local and not is_seated():
 		vehicle_camera.end(self)
 	update_weapon_visuals()
-	gun.visible = local_view and alive and not downed and not is_seated()
-	character_animation.update(self, dt)
-	update_weapon_attachment()
+	var show_gun := local_view and alive and not downed and not is_seated()
+	if gun.visible != show_gun:
+		gun.visible = show_gun
+	update_visual_animation(dt, local)
 	if network_client and not local and not is_seated():
-		position = position.lerp(target_position, minf(1, dt * 20))
-	rotation.y = yaw
-	head.rotation.x = pitch
+		var next_position := position.lerp(target_position, minf(1, dt * 20))
+		if position != next_position:
+			position = next_position
+	apply_view_rotation()
 	apply_lean_pose()
 	flash_left = maxf(0, flash_left - dt)
-	muzzle.visible = flash_left > 0 and not is_seated()
+	var show_muzzle := flash_left > 0 and not is_seated()
+	if muzzle.visible != show_muzzle:
+		muzzle.visible = show_muzzle
 	weapon_kick = move_toward(weapon_kick, 0, dt * 8)
-	gun.rotation.x = weapon_kick * 0.06
+	var next_gun_rotation := gun.rotation
+	next_gun_rotation.x = weapon_kick * 0.06
+	if gun.rotation != next_gun_rotation:
+		gun.rotation = next_gun_rotation
 	if local:
 		if is_seated():
 			vehicle_camera.update(self, dt)
 			return
-		camera.position = Vector3.ZERO
 		if network_client:
 			camera_error = camera_error.lerp(Vector3.ZERO, minf(1, dt * 18))
-			var origin := camera.global_position
-			var desired := origin + camera_error
-			if camera_error.length_squared() > 0.000001:
-				var query := PhysicsRayQueryParameters3D.create(origin, desired, 5)
-				var hit := get_world_3d().direct_space_state.intersect_ray(query)
-				if not hit.is_empty():
-					var distance := maxf(0, origin.distance_to(hit.position) - 0.12)
-					desired = origin + camera_error.normalized() * distance
-			camera.global_position = desired
-		camera.rotation.x = clampf(pitch + recoil, -1.5, 1.5) - pitch
+			var next_camera_position := Vector3.ZERO
+			# No world transform or collision work is needed without correction.
+			# Use exact zero so small reconciliation offsets remain unchanged.
+			if camera_error != Vector3.ZERO:
+				var origin := head.global_position
+				var desired := origin + camera_error
+				if camera_error.length_squared() > 0.000001:
+					camera_correction_query.from = origin
+					camera_correction_query.to = desired
+					var hit := get_world_3d().direct_space_state.intersect_ray(camera_correction_query)
+					if not hit.is_empty():
+						var distance := maxf(0, origin.distance_to(hit.position) - 0.12)
+						desired = origin + camera_error.normalized() * distance
+				next_camera_position = head.to_local(desired)
+			if camera.position != next_camera_position:
+				camera.position = next_camera_position
+		elif camera.position != Vector3.ZERO:
+			camera.position = Vector3.ZERO
+		var next_camera_rotation := camera.rotation
+		next_camera_rotation.x = clampf(pitch + recoil, -1.5, 1.5) - pitch
+		if camera.rotation != next_camera_rotation:
+			camera.rotation = next_camera_rotation
 		weapon_blocked = weapon_obstructed(ads)
 		first_person.update(self, dt, ads)
 		var can_aim := ads and not weapon_blocked and reload_left <= 0 and heal_left <= 0 and throw_left <= 0
-		camera.fov = lerpf(camera.fov, AIM_FOV[weapon] if can_aim else 85.0, minf(1, dt * 12))
+		update_camera_fov(dt, can_aim)
+
+func update_camera_fov(dt: float, can_aim: bool) -> void:
+	var next_fov := lerpf(camera.fov, AIM_FOV[weapon] if can_aim else 85.0, minf(1, dt * 12))
+	# Preserve the complete ADS interpolation, including its last small steps.
+	# A settled view needs no Camera3D property submission.
+	if camera.fov != next_fov:
+		camera.fov = next_fov
 
 func eye_height() -> float:
 	return 0.98 if crouched else 1.6
 
 func weapon_obstructed(ads: bool) -> bool:
-	var facing := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, clampf(pitch + recoil, -1.5, 1.5)) * Basis(Vector3.BACK, -lean * LEAN_ANGLE)
+	# Eye and barrel share yaw and roll, but pitch only rotates the barrel.
+	var yaw_basis := Basis(Vector3.UP, yaw)
+	var facing := yaw_basis * Basis(Vector3.RIGHT, clampf(pitch + recoil, -1.5, 1.5))
+	var eye := position + Vector3.UP * eye_height()
+	# Upright yaw leaves the vertical eye offset unchanged. Avoid constructing
+	# and multiplying an identity roll on the usual unleaned frame.
+	if lean != 0.0:
+		var roll_basis := Basis(Vector3.BACK, -lean * LEAN_ANGLE)
+		facing = facing * roll_basis
+		var pivot := Vector3.UP * 0.38
+		eye = position + yaw_basis * (pivot + roll_basis * (Vector3.UP * eye_height() - pivot))
 	var offset := Vector3(0, -OPTIC_HEIGHTS[weapon], -0.40) if ads else Vector3(0.26, -0.24, -0.48)
-	var eye := eye_position()
 	var mount := eye + facing * offset
-	var tip: Vector3 = mount + facing * BARREL_ENDS[weapon]
-	return weapon_segment_blocked(eye, mount) or weapon_segment_blocked(mount, tip)
-
-func weapon_segment_blocked(from: Vector3, to: Vector3) -> bool:
-	var query := PhysicsShapeQueryParameters3D.new()
-	query.shape = weapon_probe
-	query.transform = Transform3D(Basis.IDENTITY, from)
-	query.collision_mask = 1 | 16 # Terrain and vehicle mesh, never movement hulls.
 	var space := get_world_3d().direct_space_state
-	if not space.intersect_shape(query, 1).is_empty():
+	if weapon_segment_blocked(eye, mount, space):
 		return true
+	var tip: Vector3 = mount + facing * BARREL_ENDS[weapon]
+	return weapon_segment_blocked(mount, tip, space)
+
+func weapon_segment_blocked(from: Vector3, to: Vector3, space: PhysicsDirectSpaceState3D) -> bool:
+	var query := weapon_query
+	query.transform = Transform3D(Basis.IDENTITY, from)
 	query.motion = to - from
-	return space.cast_motion(query)[0] < 0.999
+	# A blocked sweep needs no second query. intersect_shape ignores motion,
+	# but remains necessary on clear sweeps: cast_motion ignores initial overlap.
+	if space.cast_motion(query)[0] < 0.999:
+		return true
+	return not space.intersect_shape(query, 1).is_empty()
 
 func eye_position() -> Vector3:
+	# Upright offsets are vertical, so yaw cannot change them. These queries
+	# also run for remote actors and bot targets, without needing a basis.
+	if lean == 0.0:
+		return position + Vector3.UP * eye_height()
 	return position + Basis(Vector3.UP, yaw) * lean_point(Vector3.UP * eye_height())
 
 func aim_position() -> Vector3:
@@ -569,10 +717,16 @@ func aim_position() -> Vector3:
 		for box in pose.boxes:
 			if box.bone == "Hips":
 				return pose.p + pose.basis * (box.transform * box.bounds.get_center())
+	if lean == 0.0:
+		return position + Vector3.UP * (0.72 if crouched else 1.1)
 	return position + Basis(Vector3.UP, yaw) * lean_point(Vector3.UP * (0.72 if crouched else 1.1))
 
 func lean_basis() -> Basis:
-	return Basis(Vector3.UP, yaw) * Basis(Vector3.BACK, -lean * LEAN_ANGLE)
+	var facing := Basis(Vector3.UP, yaw)
+	# Upright actors need no roll basis or matrix multiplication.
+	if lean == 0.0:
+		return facing
+	return facing * Basis(Vector3.BACK, -lean * LEAN_ANGLE)
 
 func lean_point(point: Vector3, value := INF) -> Vector3:
 	var amount: float = lean if value == INF else value
@@ -580,21 +734,64 @@ func lean_point(point: Vector3, value := INF) -> Vector3:
 	return pivot + Basis(Vector3.BACK, -amount * LEAN_ANGLE) * (point - pivot)
 
 func hit_base() -> Vector3:
+	if lean == 0.0:
+		return position
 	return position + Basis(Vector3.UP, yaw) * lean_point(Vector3.ZERO)
 
 func is_headshot(point: Vector3) -> bool:
+	# Yaw preserves height, so upright hit tests need no inverse pose matrix.
+	if lean == 0.0:
+		return point.y - position.y > headshot_height()
 	return (lean_basis().inverse() * (point - hit_base())).y > headshot_height()
 
 func apply_lean_pose() -> void:
 	if not alive:
 		return
-	body_shape.position = lean_point(Vector3.UP * body_shape.shape.height / 2)
-	body_shape.rotation.z = -lean * LEAN_ANGLE
-	body_mesh.position = lean_point(Vector3.ZERO)
-	body_mesh.rotation.z = -lean * LEAN_ANGLE
-	head.position = lean_point(Vector3.UP * eye_height())
-	head.rotation.z = 0
-	camera.rotation.z = -lean * LEAN_ANGLE
+	# Render frames and stance ticks can request the same collision pose.
+	# Avoid notifying the physics server unless that pose actually changes.
+	var collision_roll := -lean * LEAN_ANGLE
+	# Upright actors need no rotation basis or pivot transforms.
+	var collision_center: Vector3 = Vector3.UP * body_shape.shape.height / 2
+	var visual_base := Vector3.ZERO
+	var visual_eye := Vector3.UP * eye_height()
+	if lean != 0.0:
+		# All three local pose points share the same pivot and roll.
+		var pose_basis := Basis(Vector3.BACK, collision_roll)
+		var pivot := Vector3.UP * 0.38
+		collision_center = pivot + pose_basis * (collision_center - pivot)
+		visual_base = pivot + pose_basis * -pivot
+		visual_eye = pivot + pose_basis * (visual_eye - pivot)
+	var collision_rotation := body_shape.rotation
+	var roll_changed := not is_equal_approx(collision_rotation.z, collision_roll)
+	if body_shape.position != collision_center or roll_changed:
+		# Submit center and roll together so a moving lean only notifies the
+		# physics server once. Keep external axes, scale and rotation order.
+		var collision_transform := body_shape.transform
+		collision_transform.origin = collision_center
+		if roll_changed:
+			collision_rotation.z = collision_roll
+			collision_transform.basis = Basis.from_euler(
+				collision_rotation, body_shape.rotation_order) * Basis.from_scale(body_shape.scale)
+		body_shape.transform = collision_transform
+	# Stable stance ticks also share the visual pose with render updates.
+	# Compare live transforms so animation/external changes are still repaired.
+	var visual_rotation := body_mesh.rotation
+	var visual_roll_changed := not is_equal_approx(visual_rotation.z, collision_roll)
+	if body_mesh.position != visual_base or visual_roll_changed:
+		# Submit one local transform when both the lean pivot and roll move.
+		var visual_transform := body_mesh.transform
+		visual_transform.origin = visual_base
+		if visual_roll_changed:
+			visual_rotation.z = collision_roll
+			visual_transform.basis = Basis.from_euler(
+				visual_rotation, body_mesh.rotation_order) * Basis.from_scale(body_mesh.scale)
+		body_mesh.transform = visual_transform
+	if head.position != visual_eye:
+		head.position = visual_eye
+	if head.rotation.z != 0:
+		head.rotation.z = 0
+	if not is_equal_approx(camera.rotation.z, collision_roll):
+		camera.rotation.z = collision_roll
 
 func update_lean(dt: float) -> void:
 	var wanted := 0.0 if sprint or not grounded else clampf(lean_input, -1, 1)
@@ -605,19 +802,32 @@ func update_lean(dt: float) -> void:
 	# Small angular increments prevent a head crossing a thin wall between poses.
 	var steps := maxi(1, ceili(absf(candidate - lean) / 0.025))
 	var initial := lean
-	var query := PhysicsShapeQueryParameters3D.new()
-	var probe := CapsuleShape3D.new()
-	probe.radius = 0.37
-	probe.height = body_shape.shape.height - 0.02
-	query.shape = probe
-	query.collision_mask = 7
-	query.exclude = [get_rid()]
+	var query := lean_query
+	if lean_probe == null:
+		lean_probe = CapsuleShape3D.new()
+		lean_probe.radius = 0.37
+		query.shape = lean_probe
+		query.collision_mask = 7
+		query.exclude = [get_rid()]
+	var probe_height: float = body_shape.shape.height - 0.02
+	if not is_equal_approx(lean_probe.height, probe_height):
+		lean_probe.height = probe_height
+	var space := get_world_3d().direct_space_state
+	# Yaw and capsule height stay fixed throughout this angular sweep.
+	# Keep every collision sample, but construct their shared inputs once.
+	var yaw_basis := Basis(Vector3.UP, yaw)
+	var capsule_center: Vector3 = Vector3.UP * body_shape.shape.height / 2
+	var pivot := Vector3.UP * 0.38
+	var center_offset := capsule_center - pivot
+	var world_pivot := position + yaw_basis * pivot
 	for i in range(1, steps + 1):
 		var amount := lerpf(initial, candidate, float(i) / steps)
-		var basis := Basis(Vector3.UP, yaw) * Basis(Vector3.BACK, -amount * LEAN_ANGLE)
-		var center := position + Basis(Vector3.UP, yaw) * lean_point(Vector3.UP * body_shape.shape.height / 2, amount)
+		# The capsule orientation and its pivoted center use the same rotation.
+		var roll_basis := Basis(Vector3.BACK, -amount * LEAN_ANGLE)
+		var basis := yaw_basis * roll_basis
+		var center := world_pivot + basis * center_offset
 		query.transform = Transform3D(basis, center)
-		if not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty():
+		if not space.intersect_shape(query, 1).is_empty():
 			break
 		lean = amount
 	apply_lean_pose()
@@ -632,25 +842,46 @@ func update_stance() -> void:
 		set_stance(false)
 
 func can_stand() -> bool:
-	var shape := CapsuleShape3D.new()
-	shape.radius = 0.38
-	shape.height = STANDING_HEIGHT
-	var query := PhysicsShapeQueryParameters3D.new()
-	query.shape = shape
+	# These query-only shapes belong to this actor, independently of its
+	# changing body capsule. Reuse the physics resource, never collision results.
+	if standing_probe == null:
+		standing_probe = CapsuleShape3D.new()
+		standing_probe.radius = 0.38
+		standing_probe.height = STANDING_HEIGHT
+		standing_query.shape = standing_probe
+		standing_query.collision_mask = 7
+		standing_query.exclude = [get_rid()]
+	var query := standing_query
+	var yaw_basis := Basis(Vector3.UP, yaw)
 	# A small floor clearance avoids mistaking the supporting floor for a ceiling.
-	query.transform = Transform3D(lean_basis(), global_position + Basis(Vector3.UP, yaw) * lean_point(Vector3.UP * (STANDING_HEIGHT / 2)) + Vector3.UP * 0.015)
-	query.collision_mask = 7
-	query.exclude = [get_rid()]
+	if lean == 0.0:
+		query.transform = Transform3D(yaw_basis,
+			global_position + Vector3.UP * (STANDING_HEIGHT / 2 + 0.015))
+	else:
+		var roll_basis := Basis(Vector3.BACK, -lean * LEAN_ANGLE)
+		var pivot := Vector3.UP * 0.38
+		var center := pivot + roll_basis * (Vector3.UP * (STANDING_HEIGHT / 2) - pivot)
+		query.transform = Transform3D(yaw_basis * roll_basis,
+			global_position + yaw_basis * center + Vector3.UP * 0.015)
 	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
 
 func set_stance(lowered: bool) -> void:
 	crouched = lowered
 	var height := CROUCH_HEIGHT if crouched else STANDING_HEIGHT
-	body_shape.shape.height = height
-	body_shape.position.y = height / 2
-	head.position.y = eye_height()
+	# Repeated crouch ticks and network snapshots must not invalidate the
+	# physics capsule when its dimensions are unchanged. Still refresh lean
+	# below: a snapshot can change it independently of stance.
+	if not is_equal_approx(body_shape.shape.height, height):
+		body_shape.shape.height = height
+	# Living actors get their final (possibly leaning) pose below, without
+	# first moving the capsule back to an unleaned position.
+	if not alive:
+		body_shape.position.y = height / 2
+		head.position.y = eye_height()
 	if not character_animation.available:
-		body_mesh.scale.y = height / STANDING_HEIGHT
+		var stance_scale := height / STANDING_HEIGHT
+		if body_mesh.scale.y != stance_scale:
+			body_mesh.scale.y = stance_scale
 	apply_lean_pose()
 
 func shot_spread() -> float:

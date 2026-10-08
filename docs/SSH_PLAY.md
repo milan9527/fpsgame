@@ -17,10 +17,12 @@ scp -i /path/to/key.pem ec2-user@54.172.49.143:/home/ec2-user/project/fpsgame/to
 然后在**玩家电脑**运行（不要在服务器终端内运行）：
 
 ```sh
-python3 ssh_game_tunnel.py ec2-user@54.172.49.143 -i /path/to/key.pem --api-port 18000
+python3 ssh_game_tunnel.py ec2-user@54.172.49.143 -i /path/to/key.pem --api-port 18000 --remote-api-port 8002
 ```
 
-Windows 安装 Python 后可将 `python3` 换成 `py`。如果已有 SSH Host 别名，也可用 `python3 ssh_game_tunnel.py 你的SSH别名 --api-port 18000`，它会使用本机 SSH 配置。
+Windows 安装 Python 后可将 `python3` 换成 `py`。如果已有 SSH Host 别名，也可用 `python3 ssh_game_tunnel.py 你的SSH别名 --api-port 18000 --remote-api-port 8002`，它会使用本机 SSH 配置。
+
+2026-09-16 修复端口冲突后，当前开发服务器 API 绑定在 `127.0.0.1:8002`。请重新复制最新隧道脚本并传入 `--remote-api-port 8002`；玩家电脑仍使用 18000。其他默认部署不传该参数时仍连接远端 8000。AWS 客户端继续使用原有 HTTPS API 地址。
 
 保持此终端开启，在游戏 API 地址栏填写：
 

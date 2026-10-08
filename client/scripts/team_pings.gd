@@ -28,11 +28,17 @@ func submit(id: int, sequence: int, point: Vector2, clear: bool, now: float, act
 
 func visible_for(id: int, now: float, actors: Dictionary, teams) -> Array:
 	var result: Array = []
-	for sender in markers.keys():
+	var expired: Array
+	for sender in markers:
 		var marker: Dictionary = markers[sender]
 		if marker.expires <= now or not actors.has(sender) or not actors[sender].alive:
-			markers.erase(sender)
+			if expired == null:
+				expired = []
+			expired.append(sender)
 			continue
 		if teams.mode == "duo" and (sender == id or teams.friendly(id, sender)):
 			result.append({"id": sender, "point": marker.point, "name": actors[sender].display_name, "remaining": marker.expires - now})
+	if expired != null:
+		for sender in expired:
+			markers.erase(sender)
 	return result

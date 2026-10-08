@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "artifacts/android-build"
+OUT = Path(os.environ.get("ANDROID_BUILD_DIR", str(ROOT / "artifacts/android-build"))).resolve()
 
 
 def main():
@@ -19,8 +19,7 @@ def main():
     for script, evidence, marker, mobile in checks:
         with tempfile.TemporaryDirectory(prefix="android-input-test-") as profile:
             env = dict(os.environ, XDG_DATA_HOME=profile, CAPTURE_ARTIFACT_DIR=str(OUT))
-            command = (["xvfb-run", "-a", str(ROOT / "tools/godot"), "--audio-driver", "Dummy"]
-                       if script == "gyro_aim" else [str(ROOT / "tools/godot"), "--headless"])
+            command = [str(ROOT / "tools/godot"), "--headless"]
             command += ["--path", str(OUT / "source/client"), "--script", str(ROOT / "tests" / (script + ".gd"))]
             if mobile:
                 command += ["--", "--mobile-test"]

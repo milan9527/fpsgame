@@ -27,11 +27,15 @@ var save_button: Button
 var previous_mouse_emulation := true
 var last_alive := true
 var voice_requested := false
+var microphone_permission_granted := false
+const MICROPHONE_PERMISSION := "android.permission.RECORD_AUDIO"
 const TOGGLES := ["aim", "crouch", "sprint", "lean_left", "lean_right"]
 const SPECIAL := ["pause", "inventory", "map", "spectate_next", "spectate_previous"]
 
 func bind(target) -> void:
 	game = target
+	refresh_microphone_permission()
+	get_tree().on_request_permissions_result.connect(microphone_permission_result)
 	previous_mouse_emulation = Input.emulate_mouse_from_touch
 	name = "MobileControls"
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -47,7 +51,8 @@ func bind(target) -> void:
 	get_tree().quit_on_go_back = false
 	for action in ["left", "right", "forward", "back"]:
 		InputMap.action_set_deadzone(action, 0.12)
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func panel() -> PanelContainer:
 	var result := PanelContainer.new()
@@ -177,7 +182,8 @@ func build_pause() -> void:
 		voice_requested = enabled
 		game.ui.voice_listen = enabled
 		if enabled and OS.has_feature("android"):
-			OS.request_permission("android.permission.RECORD_AUDIO")
+			OS.request_permission(MICROPHONE_PERMISSION)
+		refresh_microphone_permission()
 		game.ui.save_settings())
 	box.add_child(voice)
 	label(box, "Hold TALK in a duo match to speak.\nOnline matches continue while this menu is open.", 24)
@@ -188,31 +194,57 @@ func modal() -> bool:
 func playing() -> bool:
 	return game != null and game.running and not game.ui.menu.visible and not modal()
 
+func refresh_microphone_permission() -> void:
+	# Query the platform only at permission/lifecycle boundaries, not each frame.
+	microphone_permission_granted = not OS.has_feature("android") or MICROPHONE_PERMISSION in OS.get_granted_permissions()
+
+func microphone_permission_result(permission: String, granted: bool) -> void:
+	if permission == MICROPHONE_PERMISSION:
+		microphone_permission_granted = granted
+
 func _process(delta: float) -> void:
 	if game == null:
 		return
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	game.ui.voice_microphone = voice_requested and (not OS.has_feature("android") or "android.permission.RECORD_AUDIO" in OS.get_granted_permissions())
-	menu_panel.visible = game.ui.menu.visible and not game.ui.party_lobby.visible
+	if Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	game.ui.voice_microphone = voice_requested and microphone_permission_granted
+	var show_menu: bool = game.ui.menu.visible and not game.ui.party_lobby.visible
+	if menu_panel.visible != show_menu:
+		menu_panel.visible = show_menu
 	if menu_panel.visible and not menu_was_visible:
 		restore_login()
-	menu_was_visible = menu_panel.visible
-	if not menu_panel.visible:
+	if not menu_panel.visible and not password.text.is_empty():
 		password.text = ""
-	pause_panel.visible = game.ui.pause_panel.visible
-	status.text = game.ui.status.text
-	for item in login_buttons:
-		item.disabled = game.ui.busy
-	save_button.visible = game.can_suspend_operation()
+	menu_was_visible = menu_panel.visible
+	if pause_panel.visible != game.ui.pause_panel.visible:
+		pause_panel.visible = game.ui.pause_panel.visible
+	# Refresh hidden menu content when it becomes visible. In duo matches the
+	# save eligibility check scans living teams; gameplay never uses that button.
+	if menu_panel.visible:
+		if status.text != game.ui.status.text:
+			status.text = game.ui.status.text
+		for item in login_buttons:
+			if item.disabled != game.ui.busy:
+				item.disabled = game.ui.busy
+	if pause_panel.visible:
+		var show_save: bool = game.can_suspend_operation()
+		if save_button.visible != show_save:
+			save_button.visible = show_save
 	var active := playing()
 	var alive: bool = not game.actors.has(game.local_id) or game.actors[game.local_id].alive
 	# GUI widgets need mouse emulation, but gameplay does not: an emulated left
 	# mouse button would otherwise fire the weapon when touching the movement stick.
-	Input.emulate_mouse_from_touch = not active
+	if Input.emulate_mouse_from_touch != not active:
+		Input.emulate_mouse_from_touch = not active
 	if not active and last_playing:
 		release_all()
-	if last_size != size or last_playing != active or last_alive != alive:
+	# State changes affect drawing and hit eligibility, not button geometry.
+	# Avoid theme invalidation and rebuilding the button dictionary on pause,
+	# resume or death when the viewport dimensions have not changed.
+	var layout_changed := last_size != size or buttons.is_empty()
+	if layout_changed:
 		layout_buttons()
+	if layout_changed or last_playing != active or last_alive != alive:
 		queue_redraw()
 	last_size = size
 	last_playing = active
@@ -299,16 +331,22 @@ func _input(event: InputEvent) -> void:
 				Input.action_release(action)
 		elif action != "look":
 			Input.action_press(action)
+		if action != "look":
+			queue_redraw()
 	else:
 		if not fingers.has(event.index):
 			return
 		var action: String = fingers[event.index]
 		if action == "stick":
+			var previous_stick := stick
 			move_stick(event.position)
+			if stick != previous_stick:
+				queue_redraw()
 		elif action in ["look", "fire"]:
 			look(event.relative)
+		# Looking changes the camera, not the touch overlay. Keep its retained
+		# draw commands until a button or the stick actually changes.
 	get_viewport().set_input_as_handled()
-	queue_redraw()
 
 func special(action: String) -> void:
 	var event := InputEventAction.new()
@@ -317,15 +355,27 @@ func special(action: String) -> void:
 	game._unhandled_input(event)
 
 func move_stick(point: Vector2) -> void:
-	stick = ((point - stick_center) / 105.0).limit_length()
-	for action in ["left", "right", "forward", "back"]:
-		Input.action_release(action)
-	if stick.length() < 0.12:
+	var next_stick := ((point - stick_center) / 105.0).limit_length()
+	if next_stick == stick:
 		return
-	Input.action_press("left", maxf(0, -stick.x))
-	Input.action_press("right", maxf(0, stick.x))
-	Input.action_press("forward", maxf(0, -stick.y))
-	Input.action_press("back", maxf(0, stick.y))
+	stick = next_stick
+	if stick.length() < 0.12:
+		for action in ["left", "right", "forward", "back"]:
+			Input.action_release(action)
+		return
+	update_stick_action("left", maxf(0, -stick.x))
+	update_stick_action("right", maxf(0, stick.x))
+	update_stick_action("forward", maxf(0, -stick.y))
+	update_stick_action("back", maxf(0, stick.y))
+
+func update_stick_action(action: StringName, strength: float) -> void:
+	# Zero-strength action_press still marks an action pressed. Release inactive
+	# directions, and leave unchanged strengths alone to avoid redundant writes.
+	if strength == 0.0:
+		if Input.is_action_pressed(action):
+			Input.action_release(action)
+	elif Input.get_action_strength(action) != strength:
+		Input.action_press(action, strength)
 
 func look(relative: Vector2) -> void:
 	if not game.actors.has(game.local_id):
@@ -350,7 +400,8 @@ func release_finger(index: int) -> void:
 			Input.action_release(key)
 	elif action not in TOGGLES and action not in SPECIAL and action != "look" and action not in fingers.values():
 		Input.action_release(action)
-	queue_redraw()
+	if action != "look":
+		queue_redraw()
 
 func release_all() -> void:
 	for index in fingers.keys():
@@ -368,6 +419,7 @@ func _notification(what: int) -> void:
 	elif what in [NOTIFICATION_APPLICATION_FOCUS_IN, NOTIFICATION_APPLICATION_RESUMED]:
 		app_focused = true
 		gyro.reset()
+		refresh_microphone_permission()
 	elif what == NOTIFICATION_WM_GO_BACK_REQUEST and game != null:
 		if gyro_panel != null and gyro_panel.visible:
 			show_gyro_settings(false)
@@ -384,17 +436,19 @@ func _draw() -> void:
 	if game == null or game.ui.menu.visible or game.ui.pause_panel.visible:
 		return
 	var font := ThemeDB.fallback_font
+	# Modal visibility is constant throughout this synchronous draw.
+	var modal_visible := modal()
 	for action in buttons:
 		if action == "spectate_next" and game.actors.has(game.local_id) and game.actors[game.local_id].alive:
 			continue
-		if modal() and action != "pause":
+		if modal_visible and action != "pause":
 			continue
 		var box: Rect2 = buttons[action][0]
 		var active := Input.is_action_pressed(action)
 		draw_rect(box, Color(0.15, 0.25, 0.3, 0.85) if active else Color(0.05, 0.1, 0.14, 0.65))
 		draw_rect(box, Color("d2c59c") if active else Color(0.75, 0.85, 0.86, 0.65), false, 2)
 		draw_string(font, box.position + Vector2(8, box.size.y / 2 + 8), buttons[action][1], HORIZONTAL_ALIGNMENT_CENTER, box.size.x - 16, 22, Color.WHITE)
-	if not modal():
+	if not modal_visible:
 		draw_circle(stick_center, 115, Color(0.04, 0.08, 0.12, 0.55))
 		draw_arc(stick_center, 115, 0, TAU, 48, Color(0.8, 0.9, 0.9, 0.7), 3)
 		draw_circle(stick_center + stick * 72, 44, Color(0.7, 0.8, 0.8, 0.7))
@@ -458,19 +512,32 @@ func build_gyro_settings() -> void:
 			save_gyro_settings())
 		box.add_child(inverse)
 	gyro_status = label(box, "", 22)
+	update_gyro_status()
 	gyro_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	gyro_status.custom_minimum_size = Vector2(720, 100)
 	button(box, "BACK", func(): show_gyro_settings(false))
 	gyro_panel.hide()
 
-func apply_gyro(rate: Vector3, delta: float) -> void:
-	gyro_readings_seen = gyro_readings_seen or (rate.is_finite() and rate.length_squared() > 0.000001)
+func update_gyro_status() -> void:
 	gyro_status.text = "Sensor readings received. Tilt the phone to aim.
 Touch aiming remains available." if gyro_readings_seen else "Move the phone to check sensor readings.
 A hardware gyroscope is required; touch aiming remains available."
+
+func apply_gyro(rate: Vector3, delta: float) -> void:
+	# Sensor availability only changes once; avoid dispatching a Label setter
+	# every rendered frame, including while the settings panel is hidden.
+	if not gyro_readings_seen and rate.is_finite() and rate.length_squared() > 0.000001:
+		gyro_readings_seen = true
+		update_gyro_status()
+	var aiming := Input.is_action_pressed("aim")
+	# Keep sensor detection above, but skip actor/UI eligibility queries when
+	# this mode cannot move the camera. Clear smoothing before reactivation.
+	if gyro.mode == gyro.Mode.OFF or (gyro.mode == gyro.Mode.ADS and not aiming):
+		gyro.reset()
+		return
 	var actor = game.actors.get(game.local_id)
 	var active: bool = app_focused and playing() and actor != null and actor.alive and not actor.downed and not actor.is_seated()
-	var angle := gyro.step(rate, delta, active, Input.is_action_pressed("aim"))
+	var angle := gyro.step(rate, delta, active, aiming)
 	if active:
 		actor.yaw = wrapf(actor.yaw + angle.x, -PI, PI)
 		actor.pitch = clampf(actor.pitch + angle.y, -1.45, 1.45)

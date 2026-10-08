@@ -70,7 +70,10 @@ func run() -> void:
 	assert(await walk(Vector3(0, 0.02, -8)))
 	# When a vehicle moves away, abandon the detour immediately.
 	car.rotation.y = 0
-	reset_actor()
+	# The navmesh has a waypoint just outside the hull (z ~= 2.345).
+	# Start within waypoint tolerance so the current segment crosses the
+	# vehicle; at z=6 the first segment is clear and avoidance stays inactive.
+	reset_actor(Vector3(0, 0.02, 2.7))
 	await sync_physics()
 	var direction: Vector3 = actor.navigator.steer(actor, game.world, Vector3(0, 0.02, -8), 1.0 / 60)
 	assert(actor.navigator.vehicle_avoidance.active)
@@ -82,7 +85,7 @@ func run() -> void:
 	car.position.x = 0
 	var left = game.world.block(Vector3(-2.2, 1.5, 0), Vector3(0.3, 3, 12), "465a61")
 	var right = game.world.block(Vector3(2.2, 1.5, 0), Vector3(0.3, 3, 12), "465a61")
-	reset_actor()
+	reset_actor(Vector3(0, 0.02, 2.7))
 	await sync_physics()
 	for _step in range(120):
 		direction = actor.navigator.steer(actor, game.world, Vector3(0, 0.02, -8), 1.0 / 60)

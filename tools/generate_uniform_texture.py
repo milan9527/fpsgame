@@ -6,9 +6,11 @@ from PIL import Image, ImageDraw, ImageFilter
 
 rng = random.Random(39412)
 size = 512
-image = Image.new('RGB', (size, size), '#68664b')
+# Weathered cloth retains its midtones in open shade. Keep the deterministic
+# pattern and weave unchanged so comparisons isolate albedo, not UV placement.
+image = Image.new('RGB', (size, size), '#8b8765')
 draw = ImageDraw.Draw(image)
-for color in ['#454c36', '#807356', '#393d30']:
+for color in ['#737957', '#948269', '#696a52']:
     for _ in range(34):
         x, y = rng.randrange(size), rng.randrange(size)
         width, height = rng.randrange(18, 52), rng.randrange(9, 25)
